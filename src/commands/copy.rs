@@ -61,11 +61,18 @@ mod test {
     }
 
     #[test]
-    fn test_copy_command()
+    fn it_fails_when_src_dir_is_empty()
     {
-        // let file = assert_fs::NamedTempFile::new("example.txt")?;
+        let src_dir = tempdir().unwrap();
+        let src = src_dir.path().to_str().unwrap();
 
-        // let result = copy_dir("tests/test_files/test_src_dir/", "tests/test_files/test_dest_dir/").unwrap();
+        let dest_dir = tempdir().unwrap();
+        let dest = dest_dir.path().to_str().unwrap();
+
+        assert!(copy_dir(src, dest).unwrap_err().contains("Source directory is empty"));
+
+        src_dir.close().unwrap();
+        dest_dir.close().unwrap();
     }
 }
 
