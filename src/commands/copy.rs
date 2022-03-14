@@ -19,15 +19,15 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
         return Err(format!("Source directory is empty: {}", source));
     }
 
-    let mut destination_files = fs::read_dir(destination).map_err(|e| format!("Failed to read destination directory: {}", e))?;
-    if destination_files.next().is_some() {
-        return Err(format!("Destination directory is not empty: {}", destination));
-    }
-
     for source_file in source_files {
         let source_file = source_file.map_err(|e| format!("Failed to read source file: {}", e))?;
         let source_path = source_file.path();
         let destination_path = destination.to_owned() + &source_path.to_str().unwrap().split(source).last().unwrap();
+
+        if Path::new(&destination_path).exists() {
+            return Err(format!("Destination file already exists: {}", destination_path));
+        }
+
         fs::copy(source_path, destination_path).map_err(|e| format!("Failed to copy file: {}", e))?;
     }
 
@@ -73,6 +73,29 @@ mod test {
 
         src_dir.close().unwrap();
         dest_dir.close().unwrap();
+    }
+
+    #[test]
+    fn it_fails_when_dest_file_exists()
+    {
+        let src_dir = tempdir().unwrap();
+        let src = src_dir.path().to_str().unwrap();
+        let src_path = src_dir.path().join("example.txt");
+        let src_file = File::create(&src_path).unwrap();
+
+        let dest_dir = tempdir().unwrap();
+        let dest = dest_dir.path().to_str().unwrap();
+
+        let dest_path = dest_dir.path().join("example.txt");
+        let dest_file = File::create(&dest_path).unwrap();
+
+        assert!(copy_dir(src, dest).unwrap_err().contains("Destination file already exists"));
+
+        src_dir.close().unwrap();
+        drop(src_file);
+
+        dest_dir.close().unwrap();
+        drop(dest_file);
     }
 }
 
