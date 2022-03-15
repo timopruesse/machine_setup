@@ -17,8 +17,6 @@ fn main() {
         "test.yml"
     ));
 
-    println!("{:?}", result);
-
     // let home = home_dir().unwrap();
     // let home_path = home.to_str().unwrap();
     // let src_path = format!("{}/install-wsl", home_path);

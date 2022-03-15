@@ -1,0 +1,5 @@
+tasks:
+  copy-test:
+    - copy:
+      src: "$HOME/github/Chroma91/machine_setup/test_files"
+      target: "$HOME/github/Chroma91/machine_setup/test_target"

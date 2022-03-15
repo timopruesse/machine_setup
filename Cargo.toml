@@ -10,4 +10,5 @@ tempfile = "3.2.0"
 
 [dependencies]
 home = "0.5.3"
+yaml-rust = "0.4"
 

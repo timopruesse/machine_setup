@@ -1,13 +1,35 @@
-use std::path::Path;
+extern crate yaml_rust;
+
+use yaml_rust::{Yaml, YamlLoader};
 
 use crate::config::base_config::*;
+use std::{io::Read, path::Path};
 
+#[derive(Debug)]
 pub struct YamlConfig {}
 
 static ALLOWED_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
 
+fn parse_yaml(path: &Path) -> Result<YamlConfig, String> {
+    let mut file = std::fs::File::open(path).unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+
+    let config = YamlLoader::load_from_str(&contents).unwrap();
+
+    let entries = &config[0];
+
+    if entries["tasks"] == Yaml::BadValue {
+        return Err(String::from("no tasks found"));
+    }
+
+    //println!("{}", entries["tasks"]);
+
+    return Ok(YamlConfig {});
+}
+
 impl BaseConfig for YamlConfig {
-    fn read(&self, path: &str) -> Result<(), String> {
+    fn read(&self, path: &str) -> Result<TaskList, String> {
         let yaml_path = Path::new(path);
 
         if !yaml_path.exists() {
@@ -20,7 +42,14 @@ impl BaseConfig for YamlConfig {
 
         println!("Reading yaml config from {}", path);
 
-        return Ok(());
+        let test = parse_yaml(yaml_path);
+
+        // if test has error return error
+        if test.is_err() {
+            return Err(test.unwrap_err());
+        }
+
+        return Ok(TaskList { tasks: vec![] });
     }
 
     fn next_task(&self) -> Option<Task> {
@@ -37,6 +66,9 @@ impl BaseConfig for YamlConfig {
 
 #[cfg(test)]
 mod test {
+    use std::{fs::File, io::Write};
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
@@ -51,5 +83,19 @@ mod test {
         let config = YamlConfig {};
         let result = config.read("/tmp/test.txt");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn it_fails_when_tasks_are_not_defined() {
+        let dir = tempdir().unwrap();
+        let src_path = dir.path().join("example.yaml");
+        let mut src_file = File::create(&src_path).unwrap();
+        // write string to src_file
+        src_file.write_all(b"text: hello world").unwrap();
+
+        let config = YamlConfig {};
+        let result = config.read(src_path.to_str().unwrap());
+
+        assert!(result.unwrap_err().contains("no tasks found"));
     }
 }
