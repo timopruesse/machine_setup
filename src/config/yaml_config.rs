@@ -4,14 +4,21 @@ use crate::config::base_config::*;
 
 pub struct YamlConfig {}
 
+static ALLOWED_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
+
 impl BaseConfig for YamlConfig {
     fn read(&self, path: &str) -> Result<(), String> {
-        println!("Reading yaml config from {}", path);
+        let yaml_path = Path::new(path);
 
-        // check if file exists
-        if !Path::new(path).exists() {
+        if !yaml_path.exists() {
             return Err(format!("File {} does not exist", path));
         }
+
+        if !ALLOWED_EXTENSIONS.contains(&yaml_path.extension().unwrap().to_str().unwrap()) {
+            return Err(format!("File {} is not a yaml file", path));
+        }
+
+        println!("Reading yaml config from {}", path);
 
         return Ok(());
     }
@@ -36,6 +43,13 @@ mod test {
     fn it_fails_when_config_file_is_missing() {
         let config = YamlConfig {};
         let result = config.read("/tmp/missing.yaml");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn it_fails_when_config_file_is_not_yaml() {
+        let config = YamlConfig {};
+        let result = config.read("/tmp/test.txt");
         assert!(result.is_err());
     }
 }
