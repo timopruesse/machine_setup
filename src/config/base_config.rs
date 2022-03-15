@@ -1,7 +1,18 @@
 #[derive(Debug)]
-pub struct Task {
+pub struct Command {
     pub name: String,
     pub args: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct CommandList {
+    pub commands: Vec<Command>,
+}
+
+#[derive(Debug)]
+pub struct Task {
+    pub name: String,
+    pub commands: CommandList,
 }
 
 #[derive(Debug)]

@@ -23,7 +23,10 @@ fn parse_yaml(path: &Path) -> Result<YamlConfig, String> {
         return Err(String::from("no tasks found"));
     }
 
-    //println!("{}", entries["tasks"]);
+    for task in entries["tasks"].as_hash().unwrap().iter() {
+        let (key, value) = task;
+        println!("key: {:?} |  value: {:?}", key, value);
+    }
 
     return Ok(YamlConfig {});
 }
@@ -57,7 +60,7 @@ impl BaseConfig for YamlConfig {
 
         Some(Task {
             name: "Test task".to_string(),
-            args: vec!["test".to_string()],
+            commands: CommandList { commands: vec![] },
         })
     }
 }
