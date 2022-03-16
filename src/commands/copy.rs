@@ -1,5 +1,30 @@
 use std::fs;
 use std::path::Path;
+use yaml_rust::{yaml::Hash, Yaml};
+
+use crate::command::{validate_args, CommandInterface};
+
+pub struct CopyDirCommand {}
+
+impl CommandInterface for CopyDirCommand {
+    fn execute(&self, args: Hash) -> Result<(), String> {
+        let validation = validate_args(
+            args.to_owned(),
+            vec![String::from("src"), String::from("target")],
+        );
+        if validation.is_err() {
+            return Err(validation.unwrap_err());
+        }
+
+        print!("src: {:?}", args.get(&Yaml::String(String::from("source"))));
+        print!(
+            "target: {:?}",
+            args.get(&Yaml::String(String::from("target")))
+        );
+
+        return Ok(());
+    }
+}
 
 pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
     if !Path::new(source).exists() {

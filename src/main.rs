@@ -1,3 +1,4 @@
+pub mod command;
 pub mod commands;
 pub mod config;
 
@@ -17,7 +18,9 @@ fn main() {
         "test.yml"
     ));
 
-    print!("{:?}", result.unwrap().tasks);
+    for task in result.unwrap().tasks {
+        println!("t = {:?}", task);
+    }
 
     // let home = home_dir().unwrap();
     // let home_path = home.to_str().unwrap();
