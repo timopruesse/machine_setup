@@ -10,7 +10,7 @@ pub struct YamlConfig {}
 
 static ALLOWED_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
 
-fn parse_yaml(path: &Path) -> Result<YamlConfig, String> {
+fn parse_yaml(path: &Path) -> Result<TaskList, String> {
     let mut file = std::fs::File::open(path).unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
@@ -23,12 +23,28 @@ fn parse_yaml(path: &Path) -> Result<YamlConfig, String> {
         return Err(String::from("no tasks found"));
     }
 
+    let mut tasks: Vec<Task> = vec![];
     for task in entries["tasks"].as_hash().unwrap().iter() {
         let (key, value) = task;
-        println!("key: {:?} |  value: {:?}", key, value);
+
+        let mut commands: Vec<Command> = vec![];
+        for command in value.as_hash().unwrap().iter() {
+            let (name, args) = command;
+
+            commands.push(Command {
+                name: name.as_str().unwrap().to_string(),
+                args: args.as_hash().unwrap().to_owned(),
+            });
+        }
+
+        let task = Task {
+            name: key.as_str().unwrap().to_string(),
+            commands,
+        };
+        tasks.push(task);
     }
 
-    return Ok(YamlConfig {});
+    return Ok(TaskList { tasks });
 }
 
 impl BaseConfig for YamlConfig {
@@ -43,16 +59,9 @@ impl BaseConfig for YamlConfig {
             return Err(format!("File {} is not a yaml file", path));
         }
 
-        println!("Reading yaml config from {}", path);
+        println!("Reading config from {}", path);
 
-        let test = parse_yaml(yaml_path);
-
-        // if test has error return error
-        if test.is_err() {
-            return Err(test.unwrap_err());
-        }
-
-        return Ok(TaskList { tasks: vec![] });
+        return parse_yaml(yaml_path);
     }
 
     fn next_task(&self) -> Option<Task> {
@@ -60,7 +69,7 @@ impl BaseConfig for YamlConfig {
 
         Some(Task {
             name: "Test task".to_string(),
-            commands: CommandList { commands: vec![] },
+            commands: vec![],
         })
     }
 }
