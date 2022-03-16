@@ -63,15 +63,6 @@ impl BaseConfig for YamlConfig {
 
         return parse_yaml(yaml_path);
     }
-
-    fn next_task(&self) -> Option<Task> {
-        println!("Getting next task from yaml config");
-
-        Some(Task {
-            name: "Test task".to_string(),
-            commands: vec![],
-        })
-    }
 }
 
 // -- tests --
