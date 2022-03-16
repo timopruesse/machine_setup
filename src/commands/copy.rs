@@ -6,21 +6,33 @@ use crate::command::{validate_args, CommandInterface};
 
 pub struct CopyDirCommand {}
 
+static COPY_DIR_SRC: &str = "src";
+static COPY_DIR_TARGET: &str = "target";
+
 impl CommandInterface for CopyDirCommand {
     fn execute(&self, args: Hash) -> Result<(), String> {
         let validation = validate_args(
             args.to_owned(),
-            vec![String::from("src"), String::from("target")],
+            vec![String::from(COPY_DIR_SRC), String::from(COPY_DIR_TARGET)],
         );
         if validation.is_err() {
             return Err(validation.unwrap_err());
         }
 
-        print!("src: {:?}", args.get(&Yaml::String(String::from("source"))));
-        print!(
-            "target: {:?}",
-            args.get(&Yaml::String(String::from("target")))
+        let result = copy_dir(
+            args.get(&Yaml::String(String::from(COPY_DIR_SRC)))
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            args.get(&Yaml::String(String::from(COPY_DIR_TARGET)))
+                .unwrap()
+                .as_str()
+                .unwrap(),
         );
+
+        if result.is_err() {
+            return Err(result.unwrap_err());
+        }
 
         return Ok(());
     }

@@ -1,5 +1,7 @@
 use yaml_rust::{yaml::Hash, Yaml};
 
+use crate::commands::copy::CopyDirCommand;
+
 pub trait CommandInterface {
     fn execute(&self, args: Hash) -> Result<(), String>;
 }
@@ -12,6 +14,13 @@ pub fn validate_args(args: Hash, required: Vec<String>) -> Result<(), String> {
     }
 
     return Ok(());
+}
+
+pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {
+    match name {
+        "copy" => Ok(Box::new(CopyDirCommand {})),
+        _ => Err(format!("Unknown command: {}", name)),
+    }
 }
 
 // --- tests ---
