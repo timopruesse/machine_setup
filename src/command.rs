@@ -1,9 +1,11 @@
 use yaml_rust::{yaml::Hash, Yaml};
 
-use crate::commands::copy::CopyDirCommand;
+use crate::commands::{copy::CopyDirCommand, symlink::SymlinkCommand};
 
 pub trait CommandInterface {
-    fn execute(&self, args: Hash) -> Result<(), String>;
+    fn install(&self, args: Hash) -> Result<(), String>;
+    fn uninstall(&self, args: Hash) -> Result<(), String>;
+    fn update(&self, args: Hash) -> Result<(), String>;
 }
 
 pub fn validate_args(args: Hash, required: Vec<String>) -> Result<(), String> {
@@ -19,6 +21,7 @@ pub fn validate_args(args: Hash, required: Vec<String>) -> Result<(), String> {
 pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {
     match name {
         "copy" => Ok(Box::new(CopyDirCommand {})),
+        "symlink" => Ok(Box::new(SymlinkCommand {})),
         _ => Err(format!("Unknown command: {}", name)),
     }
 }

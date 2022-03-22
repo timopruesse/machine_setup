@@ -1,5 +1,4 @@
-use ergo_fs::WalkDir;
-use std::fs;
+use symlink::symlink_dir;
 use yaml_rust::{yaml::Hash, Yaml};
 
 use crate::{
@@ -7,33 +6,32 @@ use crate::{
     utils::directory::expand_dir,
 };
 
-pub struct CopyDirCommand {}
+pub struct SymlinkCommand {}
 
-static COPY_DIR_SRC: &str = "src";
-static COPY_DIR_TARGET: &str = "target";
+static SYMLINK_DIR_SRC: &str = "src";
+static SYMLINK_DIR_TARGET: &str = "target";
 
-impl CommandInterface for CopyDirCommand {
+impl CommandInterface for SymlinkCommand {
     fn install(&self, args: Hash) -> Result<(), String> {
         let validation = validate_args(
             args.to_owned(),
-            vec![String::from(COPY_DIR_SRC), String::from(COPY_DIR_TARGET)],
+            vec![
+                String::from(SYMLINK_DIR_SRC),
+                String::from(SYMLINK_DIR_TARGET),
+            ],
         );
         if validation.is_err() {
             return Err(validation.unwrap_err());
         }
 
         let src_dir = args
-            .get(&Yaml::String(String::from(COPY_DIR_SRC)))
+            .get(&Yaml::String(String::from(SYMLINK_DIR_SRC)))
             .unwrap()
             .as_str()
             .unwrap();
 
-        if src_dir.is_empty() {
-            return Err(String::from("Source directory cannot be empty"));
-        }
-
         let target_dir = args
-            .get(&Yaml::String(String::from(COPY_DIR_TARGET)))
+            .get(&Yaml::String(String::from(SYMLINK_DIR_TARGET)))
             .unwrap()
             .as_str()
             .unwrap();
@@ -42,7 +40,7 @@ impl CommandInterface for CopyDirCommand {
             return Err(String::from("Target directory cannot be empty"));
         }
 
-        let result = copy_dir(src_dir, target_dir);
+        let result = create_symlink(src_dir, target_dir);
 
         if result.is_err() {
             return Err(result.unwrap_err());
@@ -62,7 +60,7 @@ impl CommandInterface for CopyDirCommand {
     }
 }
 
-pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
+pub fn create_symlink(source: &str, destination: &str) -> Result<(), String> {
     let expanded_source = expand_dir(source, false);
     if expanded_source.is_err() {
         return Err(expanded_source.unwrap_err().to_string());
@@ -86,29 +84,12 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
         ));
     }
 
-    println!("Copying files from {} to {}", source, destination);
+    println!("Symlinking {} to {}", source, destination);
 
-    for sub_dir in WalkDir::new(&source_dir).min_depth(1) {
-        let sub_path = sub_dir.unwrap();
-        let destination_path = sub_path.path().strip_prefix(&source_dir).unwrap();
+    let result = symlink_dir(destination_dir, source_dir);
 
-        let files = fs::read_dir(source_dir.to_string()).unwrap();
-        for file in files {
-            let file = file.unwrap();
-            let file_name = file.file_name();
-
-            let destination_file = destination_dir.join(destination_path);
-            let source_file = source_dir.join(file_name.to_str().unwrap());
-
-            // TODO: Add overwrite flag...
-            if destination_file.exists() {
-                println!("File already exists: {}", destination_file.to_string());
-                continue;
-            }
-
-            fs::copy(source_file.to_string(), destination_file.to_string())
-                .map_err(|e| format!("Failed to copy file: {}", e))?;
-        }
+    if result.is_err() {
+        return Err(result.unwrap_err().to_string());
     }
 
     return Ok(());
@@ -124,7 +105,7 @@ mod test {
 
     #[test]
     fn it_fails_when_src_dir_doesnt_exist() {
-        assert!(copy_dir("invalid", "invalid")
+        assert!(create_symlink("invalid", "invalid")
             .unwrap_err()
             .contains("Source directory does not exist"));
     }
@@ -136,7 +117,7 @@ mod test {
         let src_file = File::create(&src_path).unwrap();
         let src = src_path.to_str().unwrap();
 
-        assert!(copy_dir(src, src)
+        assert!(create_symlink(src, src)
             .unwrap_err()
             .contains("Source and destination directories are the same"));
 
@@ -152,7 +133,7 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(copy_dir(src, dest)
+        assert!(create_symlink(src, dest)
             .unwrap_err()
             .contains("Source directory is empty"));
 
@@ -160,34 +141,9 @@ mod test {
         dest_dir.close().unwrap();
     }
 
-    // FIXME: this test fails for some reason (error is thrown outside of tests correctly)
-    #[test]
-    fn it_fails_when_dest_file_exists() {
-        let src_dir = tempdir().unwrap();
-        let src = src_dir.path().to_str().unwrap();
-        let src_path = src_dir.path().join("example.txt");
-        let src_file = File::create(&src_path).unwrap();
-
-        let dest_dir = tempdir().unwrap();
-        let dest = dest_dir.path().to_str().unwrap();
-
-        let dest_path = dest_dir.path().join("example.txt");
-        let dest_file = File::create(&dest_path).unwrap();
-
-        assert!(copy_dir(src, dest)
-            .unwrap_err()
-            .contains("Destination file already exists"));
-
-        src_dir.close().unwrap();
-        drop(src_file);
-
-        dest_dir.close().unwrap();
-        drop(dest_file);
-    }
-
     // FIXME: this test also fails but the method is functioning correctly
     #[test]
-    fn it_copies_files() {
+    fn it_symlinks_files() {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
@@ -196,7 +152,7 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(copy_dir(src, dest).is_ok());
+        assert!(create_symlink(src, dest).is_ok());
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());

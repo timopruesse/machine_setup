@@ -1,5 +1,8 @@
 tasks:
-  copy-test:
+  test:
     copy:
       src: "~/github/Chroma91/machine_setup/test_files"
       target: "~/github/Chroma91/machine_setup/test_target"
+    symlink:
+      src: "~/github/Chroma91/machine_setup/test_files"
+      target: "~/github/Chroma91/machine_setup/symlink_target"

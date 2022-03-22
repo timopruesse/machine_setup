@@ -11,4 +11,5 @@ tempfile = "3.3"
 [dependencies]
 ergo_fs = "0.2"
 yaml-rust = "0.4"
+symlink = "0.1"
 

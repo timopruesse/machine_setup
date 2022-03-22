@@ -1,6 +1,7 @@
 pub mod command;
 pub mod commands;
 pub mod config;
+pub mod utils;
 
 use std::env;
 
@@ -21,7 +22,7 @@ fn main() {
         let commands = task.commands;
         for command in commands {
             let resolved_command = get_command(&command.name).unwrap();
-            let result = resolved_command.execute(command.args);
+            let result = resolved_command.install(command.args);
 
             println!("{} {:?}", command.name, result);
         }
