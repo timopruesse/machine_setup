@@ -1,5 +1,5 @@
+use ergo_fs::{expand, PathDir, WalkDir};
 use std::fs;
-use std::path::Path;
 use yaml_rust::{yaml::Hash, Yaml};
 
 use crate::command::{validate_args, CommandInterface};
@@ -19,16 +19,27 @@ impl CommandInterface for CopyDirCommand {
             return Err(validation.unwrap_err());
         }
 
-        let result = copy_dir(
-            args.get(&Yaml::String(String::from(COPY_DIR_SRC)))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            args.get(&Yaml::String(String::from(COPY_DIR_TARGET)))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-        );
+        let src_dir = args
+            .get(&Yaml::String(String::from(COPY_DIR_SRC)))
+            .unwrap()
+            .as_str()
+            .unwrap();
+
+        if src_dir.is_empty() {
+            return Err(String::from("Source directory cannot be empty"));
+        }
+
+        let target_dir = args
+            .get(&Yaml::String(String::from(COPY_DIR_TARGET)))
+            .unwrap()
+            .as_str()
+            .unwrap();
+
+        if target_dir.is_empty() {
+            return Err(String::from("Target directory cannot be empty"));
+        }
+
+        let result = copy_dir(src_dir, target_dir);
 
         if result.is_err() {
             return Err(result.unwrap_err());
@@ -38,44 +49,77 @@ impl CommandInterface for CopyDirCommand {
     }
 }
 
+fn expand_dir(dir: &str, create: bool) -> Result<PathDir, String> {
+    let expanded_dir = expand(dir);
+
+    if expanded_dir.is_err() {
+        return Err(expanded_dir.unwrap_err().to_string());
+    }
+
+    let expanded_dir = expanded_dir.unwrap();
+    if create {
+        let create_result = fs::create_dir_all(expanded_dir.to_string());
+        if create_result.is_err() {
+            return Err(create_result.unwrap_err().to_string());
+        }
+    }
+
+    let path = PathDir::new(expanded_dir.to_string());
+
+    if path.is_err() {
+        return Err(path.unwrap_err().to_string());
+    }
+
+    return Ok(path.unwrap());
+}
+
 pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
-    if !Path::new(source).exists() {
+    let expanded_source = expand_dir(source, false);
+    if expanded_source.is_err() {
+        return Err(expanded_source.unwrap_err().to_string());
+    }
+    let source_dir = expanded_source.to_owned().unwrap();
+
+    let expanded_destination = expand_dir(destination, true);
+    if expanded_destination.is_err() {
+        return Err(expanded_destination.unwrap_err().to_string());
+    }
+    let destination_dir = expanded_destination.to_owned().unwrap();
+
+    if !source_dir.exists() {
         return Err(format!("Source directory does not exist: {}", source));
     }
 
-    if !Path::new(destination).exists() {
-        fs::create_dir_all(destination)
-            .map_err(|e| format!("Failed to create destination directory: {}", e))?;
-    }
-
-    if source == destination {
+    if source_dir.to_string() == destination_dir.to_string() {
         return Err(format!(
             "Source and destination directories are the same: {}",
             source
         ));
     }
 
-    let mut source_files =
-        fs::read_dir(source).map_err(|e| format!("Failed to read source directory: {}", e))?;
-    if source_files.next().is_none() {
-        return Err(format!("Source directory is empty: {}", source));
-    }
+    println!("Copying files from {} to {}", source, destination);
 
-    for source_file in source_files {
-        let source_file = source_file.map_err(|e| format!("Failed to read source file: {}", e))?;
-        let source_path = source_file.path();
-        let destination_path =
-            destination.to_owned() + &source_path.to_str().unwrap().split(source).last().unwrap();
+    for sub_dir in WalkDir::new(&source_dir).min_depth(1) {
+        let sub_path = sub_dir.unwrap();
+        let destination_path = sub_path.path().strip_prefix(&source_dir).unwrap();
 
-        if Path::new(&destination_path).exists() {
-            return Err(format!(
-                "Destination file already exists: {}",
-                destination_path
-            ));
+        let files = fs::read_dir(source_dir.to_string()).unwrap();
+        for file in files {
+            let file = file.unwrap();
+            let file_name = file.file_name();
+
+            let destination_file = destination_dir.join(destination_path);
+            let source_file = source_dir.join(file_name.to_str().unwrap());
+
+            // TODO: Add overwrite flag...
+            if destination_file.exists() {
+                println!("File already exists: {}", destination_file.to_string());
+                continue;
+            }
+
+            fs::copy(source_file.to_string(), destination_file.to_string())
+                .map_err(|e| format!("Failed to copy file: {}", e))?;
         }
-
-        fs::copy(source_path, destination_path)
-            .map_err(|e| format!("Failed to copy file: {}", e))?;
     }
 
     Ok(())

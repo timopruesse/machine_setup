@@ -9,6 +9,6 @@ edition = "2021"
 tempfile = "3.3"
 
 [dependencies]
-home = "0.5"
+ergo_fs = "0.2"
 yaml-rust = "0.4"
 
