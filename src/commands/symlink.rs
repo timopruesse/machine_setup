@@ -86,7 +86,7 @@ pub fn create_symlink(source: &str, destination: &str) -> Result<(), String> {
 }
 
 pub fn remove_symlink(destination: &str) -> Result<(), String> {
-    let expanded_destination = expand_dir(destination, true);
+    let expanded_destination = expand_dir(destination, false);
     if expanded_destination.is_err() {
         return Err(expanded_destination.unwrap_err().to_string());
     }
