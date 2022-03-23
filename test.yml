@@ -6,3 +6,6 @@ tasks:
     symlink:
       src: "~/github/Chroma91/machine_setup/test_files"
       target: "~/github/Chroma91/machine_setup/symlink_target"
+    clone:
+      url: "git@github.com:Chroma91/timo-pruesse.git"
+      target: "~/github/Chroma91/machine_setup/repo_test"

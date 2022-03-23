@@ -42,8 +42,7 @@ impl CommandInterface for SymlinkCommand {
     }
 
     fn update(&self, args: Hash) -> Result<(), String> {
-        // TODO
-        return Ok(());
+        unimplemented!()
     }
 }
 
@@ -58,7 +57,7 @@ pub fn create_symlink(source: &str, destination: &str) -> Result<(), String> {
         return Err(format!("Source directory does not exist: {}", source));
     }
 
-    let expanded_destination = expand_dir(destination, true);
+    let expanded_destination = expand_dir(destination, false);
     if expanded_destination.is_err() {
         return Err(expanded_destination.unwrap_err().to_string());
     }
@@ -72,7 +71,7 @@ pub fn create_symlink(source: &str, destination: &str) -> Result<(), String> {
     }
 
     println!(
-        "Symlinking {} to {}",
+        "Symlinking {} to {} ...",
         source_dir.to_string(),
         destination_dir.to_string()
     );
@@ -93,7 +92,7 @@ pub fn remove_symlink(destination: &str) -> Result<(), String> {
     }
     let destination_dir = expanded_destination.to_owned().unwrap();
 
-    println!("Removing symlink to {}", destination_dir.to_string());
+    println!("Removing symlink to {} ...", destination_dir.to_string());
 
     let result = remove_symlink_dir(destination_dir);
 
@@ -187,7 +186,7 @@ mod test {
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());
 
-        assert!(remove_symlink(src, dest).is_ok());
+        assert!(remove_symlink(dest).is_ok());
 
         assert!(!dest_path.exists());
 

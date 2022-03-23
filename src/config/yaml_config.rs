@@ -59,7 +59,7 @@ impl BaseConfig for YamlConfig {
             return Err(format!("File {} is not a yaml file", path));
         }
 
-        println!("Reading config from {}", path);
+        println!("Reading config from {} ...", path);
 
         return parse_yaml(yaml_path);
     }

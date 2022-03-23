@@ -27,13 +27,11 @@ impl CommandInterface for CopyDirCommand {
     }
 
     fn uninstall(&self, args: Hash) -> Result<(), String> {
-        // TODO
-        return Ok(());
+        unimplemented!()
     }
 
     fn update(&self, args: Hash) -> Result<(), String> {
-        // TODO
-        return Ok(());
+        unimplemented!()
     }
 }
 
@@ -62,7 +60,7 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
     }
 
     println!(
-        "Copying files from {} to {}",
+        "Copying files from {} to {} ...",
         source_dir.to_string(),
         destination_dir.to_string()
     );
