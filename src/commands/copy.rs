@@ -1,48 +1,23 @@
 use ergo_fs::WalkDir;
 use std::fs;
-use yaml_rust::{yaml::Hash, Yaml};
+use yaml_rust::yaml::Hash;
 
 use crate::{
-    command::{validate_args, CommandInterface},
-    utils::directory::expand_dir,
+    command::CommandInterface,
+    utils::directory::{expand_dir, get_source_and_target},
 };
 
 pub struct CopyDirCommand {}
 
-static COPY_DIR_SRC: &str = "src";
-static COPY_DIR_TARGET: &str = "target";
-
 impl CommandInterface for CopyDirCommand {
     fn install(&self, args: Hash) -> Result<(), String> {
-        let validation = validate_args(
-            args.to_owned(),
-            vec![String::from(COPY_DIR_SRC), String::from(COPY_DIR_TARGET)],
-        );
-        if validation.is_err() {
-            return Err(validation.unwrap_err());
+        let dirs = get_source_and_target(args);
+        if dirs.is_err() {
+            return Err(dirs.err().unwrap());
         }
+        let dirs = dirs.unwrap();
 
-        let src_dir = args
-            .get(&Yaml::String(String::from(COPY_DIR_SRC)))
-            .unwrap()
-            .as_str()
-            .unwrap();
-
-        if src_dir.is_empty() {
-            return Err(String::from("Source directory cannot be empty"));
-        }
-
-        let target_dir = args
-            .get(&Yaml::String(String::from(COPY_DIR_TARGET)))
-            .unwrap()
-            .as_str()
-            .unwrap();
-
-        if target_dir.is_empty() {
-            return Err(String::from("Target directory cannot be empty"));
-        }
-
-        let result = copy_dir(src_dir, target_dir);
+        let result = copy_dir(&dirs.src, &dirs.target);
 
         if result.is_err() {
             return Err(result.unwrap_err());
@@ -69,15 +44,15 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
     }
     let source_dir = expanded_source.to_owned().unwrap();
 
+    if !source_dir.exists() {
+        return Err(format!("Source directory does not exist: {}", source));
+    }
+
     let expanded_destination = expand_dir(destination, true);
     if expanded_destination.is_err() {
         return Err(expanded_destination.unwrap_err().to_string());
     }
     let destination_dir = expanded_destination.to_owned().unwrap();
-
-    if !source_dir.exists() {
-        return Err(format!("Source directory does not exist: {}", source));
-    }
 
     if source_dir.to_string() == destination_dir.to_string() {
         return Err(format!(
@@ -86,7 +61,11 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
         ));
     }
 
-    println!("Copying files from {} to {}", source, destination);
+    println!(
+        "Copying files from {} to {}",
+        source_dir.to_string(),
+        destination_dir.to_string()
+    );
 
     for sub_dir in WalkDir::new(&source_dir).min_depth(1) {
         let sub_path = sub_dir.unwrap();
