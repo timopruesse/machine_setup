@@ -28,8 +28,8 @@ pub fn expand_dir(dir: &str, create: bool) -> Result<PathDir, String> {
     return Ok(path.unwrap());
 }
 
-static DIR_SRC: &str = "src";
-static DIR_TARGET: &str = "target";
+pub static DIR_SRC: &str = "src";
+pub static DIR_TARGET: &str = "target";
 
 pub struct Dirs {
     pub src: String,

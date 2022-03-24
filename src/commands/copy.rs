@@ -1,10 +1,10 @@
 use ergo_fs::WalkDir;
 use std::fs;
-use yaml_rust::yaml::Hash;
+use yaml_rust::{yaml::Hash, Yaml};
 
 use crate::{
-    command::CommandInterface,
-    utils::directory::{expand_dir, get_source_and_target},
+    command::{validate_args, CommandInterface},
+    utils::directory::{expand_dir, get_source_and_target, DIR_TARGET},
 };
 
 pub struct CopyDirCommand {}
@@ -18,7 +18,6 @@ impl CommandInterface for CopyDirCommand {
         let dirs = dirs.unwrap();
 
         let result = copy_dir(&dirs.src, &dirs.target);
-
         if result.is_err() {
             return Err(result.unwrap_err());
         }
@@ -27,7 +26,23 @@ impl CommandInterface for CopyDirCommand {
     }
 
     fn uninstall(&self, args: Hash) -> Result<(), String> {
-        unimplemented!()
+        let validation = validate_args(args.to_owned(), vec![String::from(DIR_TARGET)]);
+        if validation.is_err() {
+            return Err(validation.unwrap_err());
+        }
+
+        let target_dir = args
+            .get(&Yaml::String(String::from(DIR_TARGET)))
+            .unwrap()
+            .as_str()
+            .unwrap();
+
+        let result = remove_dir(&target_dir);
+        if result.is_err() {
+            return Err(result.unwrap_err());
+        }
+
+        return Ok(());
     }
 
     fn update(&self, args: Hash) -> Result<(), String> {
@@ -86,6 +101,22 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
             fs::copy(source_file.to_string(), destination_file.to_string())
                 .map_err(|e| format!("Failed to copy file: {}", e))?;
         }
+    }
+
+    return Ok(());
+}
+
+pub fn remove_dir(target: &str) -> Result<(), String> {
+    let expanded_target_dir = expand_dir(target, false);
+    if expanded_target_dir.is_err() {
+        return Err(expanded_target_dir.err().unwrap());
+    }
+    let expanded_target_dir = expanded_target_dir.unwrap();
+
+    let result = fs::remove_dir_all(expanded_target_dir);
+
+    if result.is_err() {
+        return Err(result.err().unwrap().to_string());
     }
 
     return Ok(());
@@ -182,5 +213,16 @@ mod test {
         drop(src_file);
 
         dest_dir.close().unwrap();
+    }
+
+    #[test]
+    fn it_removes_dir() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        assert!(remove_dir(path).is_ok());
+        assert!(!dir.path().exists());
+
+        dir.close().unwrap();
     }
 }
