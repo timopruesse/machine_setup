@@ -1,4 +1,4 @@
-use ergo_fs::{Path, PathDir};
+use ergo_fs::PathDir;
 use git_commands::git;
 use yaml_rust::Yaml;
 
