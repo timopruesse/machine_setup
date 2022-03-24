@@ -1,5 +1,7 @@
+use yaml_rust::yaml::Hash;
+
 use crate::{
-    command::get_command,
+    command::{get_command, CommandInterface},
     config::{base_config::BaseConfig, yaml_config::YamlConfig},
 };
 
@@ -15,6 +17,18 @@ fn get_config_handler(config_path: &str) -> Result<Box<dyn BaseConfig>, String> 
     return match file_ending {
         file_ending if file_ending == "yml" || file_ending == "yaml" => Ok(Box::new(YamlConfig {})),
         _ => Err(String::from("Unsupported config file format")),
+    };
+}
+
+fn run_command(
+    command: Box<dyn CommandInterface>,
+    args: Hash,
+    mode: &TaskRunnerMode,
+) -> Result<(), String> {
+    return match mode {
+        TaskRunnerMode::Install => command.install(args),
+        TaskRunnerMode::Update => command.update(args),
+        TaskRunnerMode::Uninstall => command.uninstall(args),
     };
 }
 
@@ -37,13 +51,13 @@ fn run(config_path: &str, mode: TaskRunnerMode) -> Result<(), String> {
         let commands = task.commands;
         for command in commands {
             let resolved_command = get_command(&command.name).unwrap();
-            let result = resolved_command.install(command.args);
+            let result = run_command(resolved_command, command.args, &mode);
 
-            if result.is_ok() {
-                println!("OK: {}", command.name);
-            } else {
+            if result.is_err() {
                 println!("ERR: {}", command.name);
-                println!("{:?}", result);
+                println!("{:?}", result.unwrap_err());
+            } else {
+                println!("OK: {}", command.name);
             }
         }
     }

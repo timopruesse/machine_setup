@@ -1,4 +1,4 @@
-use ergo_fs::WalkDir;
+use ergo_fs::{Path, PathDir, WalkDir};
 use std::fs;
 use yaml_rust::{yaml::Hash, Yaml};
 
@@ -50,6 +50,39 @@ impl CommandInterface for CopyDirCommand {
     }
 }
 
+fn copy_files(source_dir: &PathDir, destination_dir: &Path) -> Result<(), String> {
+    println!(
+        "Copying files from {} to {} ...",
+        source_dir.to_string(),
+        destination_dir.to_str().unwrap()
+    );
+
+    for dir_entry in WalkDir::new(&source_dir).min_depth(1) {
+        let dir_entry = dir_entry.unwrap();
+        let source_path = dir_entry.path();
+        let destination_path = destination_dir.join(source_path.strip_prefix(&source_dir).unwrap());
+
+        if source_path.is_dir() {
+            let create_result = fs::create_dir_all(&destination_path);
+            if create_result.is_err() {
+                return Err(create_result.unwrap_err().to_string());
+            }
+            continue;
+        }
+
+        println!(
+            "Copying {} to {} ...",
+            source_path.to_str().unwrap(),
+            destination_path.to_str().unwrap()
+        );
+
+        fs::copy(source_path, destination_path)
+            .map_err(|e| format!("Failed to copy file: {}", e))?;
+    }
+
+    return Ok(());
+}
+
 pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
     let expanded_source = expand_dir(source, false);
     if expanded_source.is_err() {
@@ -74,36 +107,7 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
         ));
     }
 
-    println!(
-        "Copying files from {} to {} ...",
-        source_dir.to_string(),
-        destination_dir.to_string()
-    );
-
-    for sub_dir in WalkDir::new(&source_dir).min_depth(1) {
-        let sub_path = sub_dir.unwrap();
-        let destination_path = sub_path.path().strip_prefix(&source_dir).unwrap();
-
-        let files = fs::read_dir(source_dir.to_string()).unwrap();
-        for file in files {
-            let file = file.unwrap();
-            let file_name = file.file_name();
-
-            let destination_file = destination_dir.join(destination_path);
-            let source_file = source_dir.join(file_name.to_str().unwrap());
-
-            // TODO: Add overwrite flag...
-            if destination_file.exists() {
-                println!("File already exists: {}", destination_file.to_string());
-                continue;
-            }
-
-            fs::copy(source_file.to_string(), destination_file.to_string())
-                .map_err(|e| format!("Failed to copy file: {}", e))?;
-        }
-    }
-
-    return Ok(());
+    return copy_files(&source_dir, &destination_dir);
 }
 
 pub fn remove_dir(target: &str) -> Result<(), String> {
@@ -213,6 +217,11 @@ mod test {
         drop(src_file);
 
         dest_dir.close().unwrap();
+    }
+
+    #[test]
+    fn it_copies_files_recursively() {
+        unimplemented!()
     }
 
     #[test]
