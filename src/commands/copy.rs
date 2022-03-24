@@ -1,10 +1,10 @@
-use ergo_fs::{Path, PathDir, WalkDir};
+use ergo_fs::{Path, PathDir};
 use std::fs;
 use yaml_rust::{yaml::Hash, Yaml};
 
 use crate::{
     command::{validate_args, CommandInterface},
-    utils::directory::{expand_dir, get_source_and_target, DIR_TARGET},
+    utils::directory::{expand_dir, get_source_and_target, walk_files, DIR_TARGET},
 };
 
 pub struct CopyDirCommand {}
@@ -17,7 +17,7 @@ impl CommandInterface for CopyDirCommand {
         }
         let dirs = dirs.unwrap();
 
-        let result = copy_dir(&dirs.src, &dirs.target);
+        let result = copy_dir(&dirs.src, &dirs.target, dirs.ignore);
         if result.is_err() {
             return Err(result.unwrap_err());
         }
@@ -50,40 +50,36 @@ impl CommandInterface for CopyDirCommand {
     }
 }
 
-fn copy_files(source_dir: &PathDir, destination_dir: &Path) -> Result<(), String> {
+fn copy_files(
+    source_dir: &PathDir,
+    destination_dir: &Path,
+    ignore: Vec<Yaml>,
+) -> Result<(), String> {
     println!(
         "Copying files from {} to {} ...",
         source_dir.to_string(),
         destination_dir.to_str().unwrap()
     );
 
-    for dir_entry in WalkDir::new(&source_dir).min_depth(1) {
-        let dir_entry = dir_entry.unwrap();
-        let source_path = dir_entry.path();
-        let destination_path = destination_dir.join(source_path.strip_prefix(&source_dir).unwrap());
-
-        if source_path.is_dir() {
-            let create_result = fs::create_dir_all(&destination_path);
-            if create_result.is_err() {
-                return Err(create_result.unwrap_err().to_string());
-            }
-            continue;
-        }
-
+    let result = walk_files(&source_dir, &destination_dir, ignore, |src, target| {
         println!(
             "Copying {} to {} ...",
-            source_path.to_str().unwrap(),
-            destination_path.to_str().unwrap()
+            src.to_str().unwrap(),
+            target.to_str().unwrap()
         );
+        fs::copy(src, target)
+            .map_err(|e| format!("Failed to copy file: {}", e))
+            .ok();
+    });
 
-        fs::copy(source_path, destination_path)
-            .map_err(|e| format!("Failed to copy file: {}", e))?;
+    if result.is_err() {
+        return Err(result.unwrap_err());
     }
 
     return Ok(());
 }
 
-pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
+pub fn copy_dir(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<(), String> {
     let expanded_source = expand_dir(source, false);
     if expanded_source.is_err() {
         return Err(expanded_source.unwrap_err().to_string());
@@ -107,7 +103,7 @@ pub fn copy_dir(source: &str, destination: &str) -> Result<(), String> {
         ));
     }
 
-    return copy_files(&source_dir, &destination_dir);
+    return copy_files(&source_dir, &destination_dir, ignore);
 }
 
 pub fn remove_dir(target: &str) -> Result<(), String> {

@@ -9,3 +9,4 @@ tasks:
     symlink:
       src: "~/github/Chroma91/machine_setup/repo_test"
       target: "~/github/Chroma91/machine_setup/symlink_target"
+      ignore: ["src", "package.json"]
