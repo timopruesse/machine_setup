@@ -5,7 +5,10 @@ use yaml_rust::yaml::Hash;
 
 use crate::{
     command::{get_command, CommandInterface},
-    config::{base_config::BaseConfig, yaml_config::YamlConfig},
+    config::{
+        base_config::{BaseConfig, Task},
+        yaml_config::YamlConfig,
+    },
 };
 
 #[derive(Subcommand, Debug)]
@@ -60,7 +63,28 @@ fn run_command(
     };
 }
 
-pub fn run(config_path: &str, mode: TaskRunnerMode) -> Result<(), String> {
+fn run_task(task: &Task, mode: &TaskRunnerMode) {
+    println!("Running task \"{}\" ...", task.name);
+
+    let commands = &task.commands;
+    for command in commands {
+        let resolved_command = get_command(&command.name).unwrap();
+        let result = run_command(resolved_command, command.args.clone(), &mode);
+
+        if result.is_err() {
+            eprintln!("ERR: {}", command.name);
+            eprintln!("{:?}", result.unwrap_err());
+        } else {
+            println!("OK: {}", command.name);
+        }
+    }
+}
+
+pub fn run(
+    config_path: &str,
+    mode: TaskRunnerMode,
+    task_name: Option<String>,
+) -> Result<(), String> {
     let config = get_config_handler(config_path);
     if config.is_err() {
         return Err(config.err().unwrap());
@@ -79,21 +103,22 @@ pub fn run(config_path: &str, mode: TaskRunnerMode) -> Result<(), String> {
         TaskRunnerMode::Uninstall => println!("Uninstalling..."),
     }
 
-    for task in result.unwrap().tasks {
-        println!("Running task \"{}\" ...", task.name);
+    let task_list = result.unwrap().tasks;
 
-        let commands = task.commands;
-        for command in commands {
-            let resolved_command = get_command(&command.name).unwrap();
-            let result = run_command(resolved_command, command.args, &mode);
-
-            if result.is_err() {
-                eprintln!("ERR: {}", command.name);
-                eprintln!("{:?}", result.unwrap_err());
-            } else {
-                println!("OK: {}", command.name);
-            }
+    if task_name.is_some() {
+        let task_name = task_name.unwrap();
+        let task = task_list.iter().find(|t| t.name == task_name);
+        if task.is_none() {
+            return Err(format!("Task \"{}\" not found", task_name));
         }
+
+        run_task(task.unwrap(), &mode);
+
+        return Ok(());
+    }
+
+    for task in task_list {
+        run_task(&task, &mode);
     }
 
     return Ok(());

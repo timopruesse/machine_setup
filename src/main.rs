@@ -4,8 +4,8 @@ pub mod config;
 pub mod task_runner;
 pub mod utils;
 
-use clap::{Parser, Subcommand};
-use ergo_fs::{expand, PathBuf};
+use clap::Parser;
+use ergo_fs::expand;
 
 use crate::task_runner::TaskRunnerMode;
 
@@ -22,6 +22,11 @@ struct Args {
     #[clap(short, long, default_value = "./machine_setup.yaml")]
     #[clap(global = true)]
     file: String,
+
+    /// run a single task
+    #[clap(short, long)]
+    #[clap(global = true)]
+    task: Option<String>,
 }
 
 fn main() {
@@ -33,9 +38,11 @@ fn main() {
         std::process::exit(1);
     }
 
-    let mode = &args.mode.unwrap_or(TaskRunnerMode::Install);
-
-    let run = task_runner::run(&config_path.unwrap(), TaskRunnerMode::Install);
+    let run = task_runner::run(
+        &config_path.unwrap(),
+        args.mode.unwrap_or(TaskRunnerMode::Install),
+        args.task,
+    );
 
     if run.is_err() {
         eprintln!("{}", run.unwrap_err());
