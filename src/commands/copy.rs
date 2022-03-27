@@ -4,7 +4,7 @@ use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
-    config::{validation_rules::required::Required, validator::validate_args},
+    config::{validation_rules::required::Required, validator::validate_named_args},
     utils::directory::{expand_dir, get_source_and_target, walk_files, DIR_TARGET},
 };
 
@@ -27,7 +27,7 @@ impl CommandInterface for CopyDirCommand {
     }
 
     fn uninstall(&self, args: Yaml) -> Result<(), String> {
-        let validation = validate_args(
+        let validation = validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from(DIR_TARGET), vec![&Required {}])]),
         );

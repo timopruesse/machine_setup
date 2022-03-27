@@ -2,7 +2,7 @@ use ergo_fs::{expand, Path, PathDir, WalkDir};
 use std::{collections::HashMap, fs};
 use yaml_rust::Yaml;
 
-use crate::config::{validation_rules::required::Required, validator::validate_args};
+use crate::config::{validation_rules::required::Required, validator::validate_named_args};
 
 pub fn expand_dir(dir: &str, create: bool) -> Result<PathDir, String> {
     let expanded_dir = expand(dir);
@@ -41,7 +41,7 @@ pub struct Dirs {
 pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
     let rules = vec![&Required {}];
 
-    let validation = validate_args(
+    let validation = validate_named_args(
         args.to_owned(),
         HashMap::from([
             (String::from(DIR_SRC), rules.clone()),

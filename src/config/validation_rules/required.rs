@@ -20,7 +20,7 @@ impl ValidationRule for Required {
     }
 
     fn to_string(&self) -> String {
-        return String::from("The argument is required");
+        return String::from("argument is required");
     }
 }
 

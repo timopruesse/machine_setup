@@ -10,7 +10,7 @@ impl ValidationRule for IsArray {
     }
 
     fn to_string(&self) -> String {
-        return String::from("The argument must be an array");
+        return String::from("argument must be an array");
     }
 }
 

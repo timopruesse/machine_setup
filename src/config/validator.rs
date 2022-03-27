@@ -6,22 +6,42 @@ pub trait ValidationRule {
     fn to_string(&self) -> String;
 }
 
-pub fn validate_args(
+pub fn validate_args(args: Option<&Yaml>, rules: Vec<&impl ValidationRule>) -> Result<(), String> {
+    let is_named = !args.unwrap_or(&Yaml::BadValue).as_hash().is_none();
+    if is_named {
+        return Err(format!(
+            "Expected positional arguments, got named arguments"
+        ));
+    }
+
+    for rule in rules {
+        if !rule.validate(args) {
+            return Err(format!("{}", rule.to_string()));
+        }
+    }
+
+    return Ok(());
+}
+
+pub fn validate_named_args(
     args: Yaml,
     rules: HashMap<String, Vec<&impl ValidationRule>>,
 ) -> Result<(), String> {
-    if args.is_array() {
-        println!("Not validating array: {:?}", args);
-        return Ok(());
+    let named_args = args.as_hash();
+    if named_args.is_none() {
+        return Err(format!(
+            "Expected named arguments, got positional arguments"
+        ));
     }
 
-    for (arg_name, rule_list) in rules {
-        let input = args.as_hash().unwrap().get(&Yaml::String(arg_name.clone()));
+    let named_args = named_args.unwrap();
 
-        for rule in rule_list {
-            if !rule.validate(input) {
-                return Err(format!("{}: {}", arg_name, rule.to_string()));
-            }
+    for (arg_name, rule_list) in rules {
+        let input = named_args.get(&Yaml::String(arg_name.clone()));
+
+        let result = validate_args(input, rule_list);
+        if result.is_err() {
+            return Err(format!("{}: {}", arg_name, result.unwrap_err()));
         }
     }
 
@@ -39,22 +59,29 @@ mod test {
 
     #[test]
     fn it_returns_ok_when_all_rules_pass() {
-        let mut args = Yaml::Hash(LinkedHashMap::new());
-        args.as_hash().insert("arg1".to_string());
+        let mut rules = HashMap::new();
+        rules.insert("foo".to_string(), vec![&Required {}]);
 
-        let rules = HashMap::new();
-        rules.insert(String::from("arg1"), vec![Box::new(Required {})]);
+        let args = Hash::new();
+        args.insert(
+            Yaml::String("foo".to_string()),
+            Yaml::String("bar".to_string()),
+        );
 
-        assert!(validate_args(args, rules).is_ok());
+        assert!(validate_named_args(args, rules).is_ok());
     }
 
     #[test]
     fn it_returns_an_error_when_a_rule_is_failing() {
-        let args = Yaml::Hash(LinkedHashMap::new());
+        let mut rules = HashMap::new();
+        rules.insert("foo".to_string(), vec![&Required {}]);
 
-        let rules = HashMap::new();
-        rules.insert(String::from("arg1"), vec![Box::new(Required {})]);
+        let args = Hash::new();
+        args.insert(
+            Yaml::String("foo".to_string()),
+            Yaml::String("".to_string()),
+        );
 
-        assert!(validate_args(args, rules).is_err());
+        assert!(validate_named_args(args, rules).is_err());
     }
 }

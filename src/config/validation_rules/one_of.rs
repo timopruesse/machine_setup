@@ -18,13 +18,13 @@ impl ValidationRule for OneOf {
     }
 
     fn to_string(&self) -> String {
-        return String::from("The argument has to satisfy one of the following rules: ")
+        return String::from("OneOf: ")
             + &self
                 .rules
                 .iter()
                 .map(|rule| rule.to_string())
                 .collect::<Vec<String>>()
-                .join(", ");
+                .join(" | ");
     }
 }
 
