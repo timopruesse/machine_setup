@@ -1,31 +1,43 @@
+use std::collections::HashMap;
+
 use ergo_fs::PathDir;
 use git_commands::git;
 use yaml_rust::Yaml;
 
 use crate::{
-    command::{validate_args, CommandInterface},
+    command::CommandInterface,
+    config::{validation_rules::required::Required, validator::validate_args},
     utils::directory::expand_dir,
 };
 
 pub struct CloneCommand {}
 
 impl CommandInterface for CloneCommand {
-    fn install(&self, args: yaml_rust::yaml::Hash) -> Result<(), String> {
+    fn install(&self, args: Yaml) -> Result<(), String> {
+        let rules = vec![&Required {}];
+
         let validation = validate_args(
             args.to_owned(),
-            vec![String::from("url"), String::from("target")],
+            HashMap::from([
+                (String::from("url"), rules.clone()),
+                (String::from("target"), rules.clone()),
+            ]),
         );
         if validation.is_err() {
             return Err(validation.unwrap_err());
         }
 
         let url = args
+            .as_hash()
+            .unwrap()
             .get(&Yaml::String(String::from("url")))
             .unwrap()
             .as_str()
             .unwrap();
 
         let target = args
+            .as_hash()
+            .unwrap()
             .get(&Yaml::String(String::from("target")))
             .unwrap()
             .as_str()
@@ -45,14 +57,19 @@ impl CommandInterface for CloneCommand {
         return Ok(());
     }
 
-    fn uninstall(&self, args: yaml_rust::yaml::Hash) -> Result<(), String> {
-        let validation = validate_args(args.to_owned(), vec![String::from("target")]);
+    fn uninstall(&self, args: Yaml) -> Result<(), String> {
+        let validation = validate_args(
+            args.to_owned(),
+            HashMap::from([(String::from("target"), vec![&Required {}])]),
+        );
 
         if validation.is_err() {
             return Err(validation.unwrap_err());
         }
 
         let target = args
+            .as_hash()
+            .unwrap()
             .get(&Yaml::String(String::from("target")))
             .unwrap()
             .as_str()
@@ -72,14 +89,19 @@ impl CommandInterface for CloneCommand {
         return Ok(());
     }
 
-    fn update(&self, args: yaml_rust::yaml::Hash) -> Result<(), String> {
-        let validation = validate_args(args.to_owned(), vec![String::from("target")]);
+    fn update(&self, args: Yaml) -> Result<(), String> {
+        let validation = validate_args(
+            args.to_owned(),
+            HashMap::from([(String::from("target"), vec![&Required {}])]),
+        );
 
         if validation.is_err() {
             return Err(validation.unwrap_err());
         }
 
         let target = args
+            .as_hash()
+            .unwrap()
             .get(&Yaml::String(String::from("target")))
             .unwrap()
             .as_str()

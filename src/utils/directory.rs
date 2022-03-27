@@ -1,8 +1,8 @@
 use ergo_fs::{expand, Path, PathDir, WalkDir};
-use std::fs;
-use yaml_rust::{yaml::Hash, Yaml};
+use std::{collections::HashMap, fs};
+use yaml_rust::Yaml;
 
-use crate::command::validate_args;
+use crate::config::{validation_rules::required::Required, validator::validate_args};
 
 pub fn expand_dir(dir: &str, create: bool) -> Result<PathDir, String> {
     let expanded_dir = expand(dir);
@@ -38,22 +38,31 @@ pub struct Dirs {
     pub ignore: Vec<Yaml>,
 }
 
-pub fn get_source_and_target(args: Hash) -> Result<Dirs, String> {
+pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
+    let rules = vec![&Required {}];
+
     let validation = validate_args(
         args.to_owned(),
-        vec![String::from(DIR_SRC), String::from(DIR_TARGET)],
+        HashMap::from([
+            (String::from(DIR_SRC), rules.clone()),
+            (String::from(DIR_TARGET), rules.clone()),
+        ]),
     );
     if validation.is_err() {
         return Err(validation.unwrap_err());
     }
 
     let src_dir = args
+        .as_hash()
+        .unwrap()
         .get(&Yaml::String(String::from(DIR_SRC)))
         .unwrap()
         .as_str()
         .unwrap();
 
     let target_dir = args
+        .as_hash()
+        .unwrap()
         .get(&Yaml::String(String::from(DIR_TARGET)))
         .unwrap()
         .as_str()
@@ -64,6 +73,8 @@ pub fn get_source_and_target(args: Hash) -> Result<Dirs, String> {
     }
 
     let ignore = args
+        .as_hash()
+        .unwrap()
         .get(&Yaml::String(String::from(DIR_IGNORE)))
         .unwrap_or(&Yaml::Array(vec![]))
         .as_vec()

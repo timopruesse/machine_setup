@@ -33,7 +33,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
 
             commands.push(Command {
                 name: name.as_str().unwrap().to_string(),
-                args: args.as_hash().unwrap().to_owned(),
+                args: args.to_owned(),
             });
         }
 

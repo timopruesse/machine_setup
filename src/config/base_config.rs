@@ -1,9 +1,9 @@
-use yaml_rust::yaml::Hash;
+use yaml_rust::Yaml;
 
 #[derive(Debug)]
 pub struct Command {
     pub name: String,
-    pub args: Hash,
+    pub args: Yaml,
 }
 
 #[derive(Debug)]

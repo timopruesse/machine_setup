@@ -1,6 +1,6 @@
 use ergo_fs::{Path, PathDir};
 use symlink::{remove_symlink_file, symlink_file};
-use yaml_rust::{yaml::Hash, Yaml};
+use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
@@ -10,7 +10,7 @@ use crate::{
 pub struct SymlinkCommand {}
 
 impl CommandInterface for SymlinkCommand {
-    fn install(&self, args: Hash) -> Result<(), String> {
+    fn install(&self, args: Yaml) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if dirs.is_err() {
             return Err(dirs.err().unwrap());
@@ -26,7 +26,7 @@ impl CommandInterface for SymlinkCommand {
         return Ok(());
     }
 
-    fn uninstall(&self, args: Hash) -> Result<(), String> {
+    fn uninstall(&self, args: Yaml) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if dirs.is_err() {
             return Err(dirs.err().unwrap());
@@ -42,7 +42,7 @@ impl CommandInterface for SymlinkCommand {
         return Ok(());
     }
 
-    fn update(&self, args: Hash) -> Result<(), String> {
+    fn update(&self, args: Yaml) -> Result<(), String> {
         unimplemented!()
     }
 }

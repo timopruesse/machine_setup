@@ -1,16 +1,17 @@
 use ergo_fs::{Path, PathDir};
-use std::fs;
-use yaml_rust::{yaml::Hash, Yaml};
+use std::{collections::HashMap, fs};
+use yaml_rust::Yaml;
 
 use crate::{
-    command::{validate_args, CommandInterface},
+    command::CommandInterface,
+    config::{validation_rules::required::Required, validator::validate_args},
     utils::directory::{expand_dir, get_source_and_target, walk_files, DIR_TARGET},
 };
 
 pub struct CopyDirCommand {}
 
 impl CommandInterface for CopyDirCommand {
-    fn install(&self, args: Hash) -> Result<(), String> {
+    fn install(&self, args: Yaml) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if dirs.is_err() {
             return Err(dirs.err().unwrap());
@@ -25,13 +26,19 @@ impl CommandInterface for CopyDirCommand {
         return Ok(());
     }
 
-    fn uninstall(&self, args: Hash) -> Result<(), String> {
-        let validation = validate_args(args.to_owned(), vec![String::from(DIR_TARGET)]);
+    fn uninstall(&self, args: Yaml) -> Result<(), String> {
+        let validation = validate_args(
+            args.to_owned(),
+            HashMap::from([(String::from(DIR_TARGET), vec![&Required {}])]),
+        );
+
         if validation.is_err() {
             return Err(validation.unwrap_err());
         }
 
         let target_dir = args
+            .as_hash()
+            .unwrap()
             .get(&Yaml::String(String::from(DIR_TARGET)))
             .unwrap()
             .as_str()
@@ -45,7 +52,7 @@ impl CommandInterface for CopyDirCommand {
         return Ok(());
     }
 
-    fn update(&self, args: Hash) -> Result<(), String> {
+    fn update(&self, args: Yaml) -> Result<(), String> {
         unimplemented!()
     }
 }

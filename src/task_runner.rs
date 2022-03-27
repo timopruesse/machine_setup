@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use core::fmt;
 use std::str::FromStr;
-use yaml_rust::yaml::Hash;
+use yaml_rust::Yaml;
 
 use crate::{
     command::{get_command, CommandInterface},
@@ -53,7 +53,7 @@ fn get_config_handler(config_path: &str) -> Result<Box<dyn BaseConfig>, String> 
 
 fn run_command(
     command: Box<dyn CommandInterface>,
-    args: Hash,
+    args: Yaml,
     mode: &TaskRunnerMode,
 ) -> Result<(), String> {
     return match mode {
@@ -68,8 +68,13 @@ fn run_task(task: &Task, mode: &TaskRunnerMode) {
 
     let commands = &task.commands;
     for command in commands {
-        let resolved_command = get_command(&command.name).unwrap();
-        let result = run_command(resolved_command, command.args.clone(), &mode);
+        let resolved_command = get_command(&command.name);
+        if resolved_command.is_err() {
+            eprintln!("Command \"{}\" not found", command.name);
+            continue;
+        }
+
+        let result = run_command(resolved_command.unwrap(), command.args.clone(), &mode);
 
         if result.is_err() {
             eprintln!("ERR: {}", command.name);

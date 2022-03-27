@@ -11,4 +11,11 @@ tasks:
     symlink:
       src: "~/github/Chroma91/machine_setup/repo_test"
       target: "~/github/Chroma91/machine_setup/symlink_target"
-      ignore: ["src", "package.json"]
+      ignore: ["src"]
+
+  install_packages:
+    shell: "apt update"
+  
+    shell:
+      - "apt update"
+      - "apt install -y git"
