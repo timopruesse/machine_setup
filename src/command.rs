@@ -1,6 +1,8 @@
 use yaml_rust::Yaml;
 
-use crate::commands::{clone::CloneCommand, copy::CopyDirCommand, symlink::SymlinkCommand};
+use crate::commands::{
+    clone::CloneCommand, copy::CopyDirCommand, shell::ShellCommand, symlink::SymlinkCommand,
+};
 
 pub trait CommandInterface {
     fn install(&self, args: Yaml) -> Result<(), String>;
@@ -13,6 +15,7 @@ pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {
         "copy" => Ok(Box::new(CopyDirCommand {})),
         "symlink" => Ok(Box::new(SymlinkCommand {})),
         "clone" => Ok(Box::new(CloneCommand {})),
+        "shell" => Ok(Box::new(ShellCommand {})),
         _ => Err(format!("Unknown command: {}", name)),
     }
 }

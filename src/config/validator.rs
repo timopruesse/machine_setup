@@ -15,10 +15,10 @@ pub fn validate_args(
         return Ok(());
     }
 
-    for (arg_name, ruleList) in rules {
+    for (arg_name, rule_list) in rules {
         let input = args.as_hash().unwrap().get(&Yaml::String(arg_name.clone()));
 
-        for rule in ruleList {
+        for rule in rule_list {
             if !rule.validate(input) {
                 return Err(format!("{}: {}", arg_name, rule.to_string()));
             }
