@@ -4,19 +4,24 @@ tasks:
   #     src: "~/github/Chroma91/machine_setup/test_files"
   #     target: "~/github/Chroma91/machine_setup/test_target"
 
-  dotfiles:
-    clone:
-      url: "git@github.com:Chroma91/timo-pruesse.git"
-      target: "~/github/Chroma91/machine_setup/repo_test"
-    symlink:
-      src: "~/github/Chroma91/machine_setup/repo_test"
-      target: "~/github/Chroma91/machine_setup/symlink_target"
-      ignore: ["src"]
+  # dotfiles:
+  #   clone:
+  #     url: "git@github.com:Chroma91/timo-pruesse.git"
+  #     target: "~/github/Chroma91/machine_setup/repo_test"
+  #   symlink:
+  #     src: "~/github/Chroma91/machine_setup/repo_test"
+  #     target: "~/github/Chroma91/machine_setup/symlink_target"
+  #     ignore: ["src"]
 
   install_packages:
     shell:
-      - "sudo apt-get update"
-      - "sudo apt-get upgrade -y"
+      install: "echo INSTALL"
+      update: "echo UPDATE"
+      uninstall: "echo REMOVE"
+
+    # shell:
+    # - "sudo apt-get update"
+    # - "sudo apt-get upgrade -y"
 
     # TODO: Change structure to support running the same command multiple times inside of one task
     #       Currently, it gets overwritten because keys have to be unique.

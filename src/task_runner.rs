@@ -77,10 +77,10 @@ fn run_task(task: &Task, mode: &TaskRunnerMode) {
         let result = run_command(resolved_command.unwrap(), command.args.clone(), &mode);
 
         if result.is_err() {
-            eprintln!("ERR: {}", command.name);
+            eprintln!("{}: ERROR", command.name);
             eprintln!("{:?}", result.unwrap_err());
         } else {
-            println!("OK: {}", command.name);
+            println!("{}: OK", command.name);
         }
     }
 }

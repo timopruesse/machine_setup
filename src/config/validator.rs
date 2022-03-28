@@ -6,9 +6,12 @@ pub trait ValidationRule {
     fn to_string(&self) -> String;
 }
 
+pub fn arguments_are_named(args: Option<&Yaml>) -> bool {
+    return !args.unwrap_or(&Yaml::BadValue).as_hash().is_none();
+}
+
 pub fn validate_args(args: Option<&Yaml>, rules: Vec<&impl ValidationRule>) -> Result<(), String> {
-    let is_named = !args.unwrap_or(&Yaml::BadValue).as_hash().is_none();
-    if is_named {
+    if arguments_are_named(args) {
         return Err(format!(
             "Expected positional arguments, got named arguments"
         ));
@@ -28,6 +31,7 @@ pub fn validate_named_args(
     rules: HashMap<String, Vec<&impl ValidationRule>>,
 ) -> Result<(), String> {
     let named_args = args.as_hash();
+
     if named_args.is_none() {
         return Err(format!(
             "Expected named arguments, got positional arguments"
