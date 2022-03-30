@@ -5,7 +5,7 @@
 Tasks can be defined under the `tasks` root key.  
 Every task can contain an arbitrary number of commands.
 
-> _Hint_  
+> **Hint**  
 > Currently, there can only be one command of the same type per task.  
 > The last command in a task will take precedence.  
 > This is an open bug and will be fixed in a future release.
@@ -31,10 +31,10 @@ tasks:
 
 By default, `machine_setup` will look for a file called `machine_setup.yaml`.
 
-| flag             | value                                       | example                                           |
-| ---------------- | ------------------------------------------- | ------------------------------------------------- |
-| `-c`, `--config` | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
-| `-t`, `--task`   | only run the specified task                 | `machine_setup install -t my_task2`               |
+| flag            | value                                       | example                                           |
+| --------------- | ------------------------------------------- | ------------------------------------------------- |
+| -c<br> --config | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
+| -t<br> --task   | only run the specified task                 | `machine_setup install -t my_task2`               |
 
 ### Install
 
@@ -66,7 +66,7 @@ This command copies the contents of a directory to another directory.
 | -------- | ----------------------------------- | :------: | ----------------------------- |
 | src      | source directory                    |    ✅    | "./src/files"                 |
 | target   | target directory                    |    ✅    | "/tmp/target"                 |
-| ignore   | list of files/directories to ignore |          | ["dist", "package-lock.json"] |
+| ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"] |
 
 #### example
 
@@ -102,7 +102,7 @@ This command symlinks all the files from the source directory to the target dire
 | -------- | ----------------------------------- | :------: | ----------------------------- |
 | src      | source directory                    |    ✅    | "./src/files"                 |
 | target   | target directory                    |    ✅    | "/tmp/target"                 |
-| ignore   | list of files/directories to ignore |          | ["dist", "package-lock.json"] |
+| ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"] |
 
 #### example
 
@@ -121,9 +121,9 @@ This command executes a shell command.
 
 | argument  | value                    | required | example                         |
 | --------- | ------------------------ | :------: | ------------------------------- |
-| install   | command for installing   |          | "sudo apt-get -y install git"   |
-| update    | command for updating     |          | "sudo apt-get -y upgrade git"   |
-| uninstall | command for uninstalling |          | "sudo apt-get -y uninstall git" |
+| install   | command for installing   |    ➖    | "sudo apt-get -y install git"   |
+| update    | command for updating     |    ➖    | "sudo apt-get -y upgrade git"   |
+| uninstall | command for uninstalling |    ➖    | "sudo apt-get -y uninstall git" |
 
 #### example
 
