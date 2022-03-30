@@ -5,9 +5,9 @@
 Tasks can be defined under the `tasks` root key.  
 Every task can contain an arbitrary number of commands.
 
-> _Hint_
-> Currently, there can only be one command of the same type per task.
-> The last command in a task will take precedence.
+> _Hint_  
+> Currently, there can only be one command of the same type per task.  
+> The last command in a task will take precedence.  
 > This is an open bug and will be fixed in a future release.
 
 Check out the example configuration below:
