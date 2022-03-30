@@ -32,7 +32,7 @@ tasks:
 By default, `machine_setup` will look for a file called `machine_setup.yaml`.  
 You can provide the path to another file via the `-c` flag (or `--config`).
 
-If you only want to run a single command, `-t` (or `--task`) and the name of the task can be set for any of the commands.
+If you only want to run a single command, `-t` (or `--task`) and the name of the task can be set for any of the terminal commands.
 
 ### Install
 
