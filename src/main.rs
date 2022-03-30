@@ -21,7 +21,7 @@ struct Args {
     /// path to the config file
     #[clap(short, long, default_value = "./machine_setup.yaml")]
     #[clap(global = true)]
-    file: String,
+    config: String,
 
     /// run a single task
     #[clap(short, long)]
@@ -32,7 +32,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let config_path = expand(&args.file);
+    let config_path = expand(&args.config);
     if config_path.is_err() {
         eprintln!("{}", config_path.err().unwrap());
         std::process::exit(1);
