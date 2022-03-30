@@ -31,10 +31,10 @@ tasks:
 
 By default, `machine_setup` will look for a file called `machine_setup.yaml`.
 
-|       flag       |                    value                    |                      example                      |
-| :--------------: | :-----------------------------------------: | :-----------------------------------------------: |
-| `-c`, `--config` | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
-|  `-t`, `--task`  |         only run the specified task         |        `machine_setup install -t my_task2`        |
+| flag             | value                                       | example                                           |
+| ---------------- | ------------------------------------------- | ------------------------------------------------- |
+| `--config`, `-c` | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
+| `-t`, `--task`   | only run the specified task                 | `machine_setup install -t my_task2`               |
 
 ### Install
 
