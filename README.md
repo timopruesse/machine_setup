@@ -29,10 +29,12 @@ tasks:
 
 ## Run
 
-By default, `machine_setup` will look for a file called `machine_setup.yaml`.  
-You can provide the path to another file via the `-c` flag (or `--config`).
+By default, `machine_setup` will look for a file called `machine_setup.yaml`.
 
-If you only want to run a single command, `-t` (or `--task`) and the name of the task can be set for any of the terminal commands.
+|       flag       |                    value                    |                      example                      |
+| :--------------: | :-----------------------------------------: | :-----------------------------------------------: |
+| `-c`, `--config` | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
+|  `-t`, `--task`  |         only run the specified task         |        `machine_setup install -t my_task2`        |
 
 ### Install
 
@@ -56,11 +58,46 @@ machine_setup uninstall
 
 ### copy
 
+This command copies the contents of a directory to another directory.
+
+> Hint: `.git`, `.gitignore`, and `.gitmodules` is automatically ignored. You should consider `clone` when working with git repositories.
+
+| argument |                value                | required |            example            |
+| :------: | :---------------------------------: | :------: | :---------------------------: |
+|   src    |          source directory           |    ✅    |         "./src/files"         |
+|  target  |          target directory           |    ✅    |         "/tmp/target"         |
+|  ignore  | list of files/directories to ignore |          | ["dist", "package-lock.json"] |
+
 ### clone
+
+This command clones a git repository to the specified destination.
+
+| argument |          value          | required |                   example                   |
+| :------: | :---------------------: | :------: | :-----------------------------------------: |
+|   url    | URL to a git repository |    ✅    | "git@github.com:Chroma91/machine_setup.git" |
+|  target  |    target directory     |    ✅    |              "~/machine_setup"              |
 
 ### symlink
 
+This command symlinks all the files from the source directory to the target directory.
+
+| argument |                value                | required |            example            |
+| :------: | :---------------------------------: | :------: | :---------------------------: |
+|   src    |          source directory           |    ✅    |         "./src/files"         |
+|  target  |          target directory           |    ✅    |         "/tmp/target"         |
+|  ignore  | list of files/directories to ignore |          | ["dist", "package-lock.json"] |
+
 ### shell
+
+This command executes a shell command.
+
+> Hint: Avoid the usage of interactive commands when possible.
+
+| argument  |          value           | required |             example             |
+| :-------: | :----------------------: | :------: | :-----------------------------: |
+|  install  |  command for installing  |          |  "sudo apt-get -y install git"  |
+|  update   |   command for updating   |          |  "sudo apt-get -y upgrade git"  |
+| uninstall | command for uninstalling |          | "sudo apt-get -y uninstall git" |
 
 ---
 
