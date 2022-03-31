@@ -6,11 +6,11 @@ pub struct IsArray {}
 
 impl ValidationRule for IsArray {
     fn validate(&self, input: Option<&Yaml>) -> bool {
-        return input.unwrap_or(&Yaml::BadValue).is_array();
+        input.unwrap_or(&Yaml::BadValue).is_array()
     }
 
     fn to_string(&self) -> String {
-        return String::from("argument must be an array");
+        String::from("argument must be an array")
     }
 }
 

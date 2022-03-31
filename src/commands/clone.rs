@@ -23,8 +23,9 @@ impl CommandInterface for CloneCommand {
                 (String::from("target"), rules.clone()),
             ]),
         );
-        if validation.is_err() {
-            return Err(validation.unwrap_err());
+
+        if let Err(err_validation) = validation {
+            return Err(err_validation);
         }
 
         let url = args
@@ -44,17 +45,17 @@ impl CommandInterface for CloneCommand {
             .unwrap();
 
         let expanded_target_dir = expand_dir(target, true);
-        if expanded_target_dir.is_err() {
-            return Err(expanded_target_dir.unwrap_err());
+        if let Err(err_expand_dir) = expanded_target_dir {
+            return Err(err_expand_dir);
         }
         let expanded_target_dir = expanded_target_dir.unwrap();
 
         let result = clone_repository(url, &expanded_target_dir);
-        if result.is_err() {
-            return Err(result.unwrap_err());
+        if let Err(err_result) = result {
+            return Err(err_result);
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn uninstall(&self, args: Yaml) -> Result<(), String> {
@@ -63,8 +64,8 @@ impl CommandInterface for CloneCommand {
             HashMap::from([(String::from("target"), vec![&Required {}])]),
         );
 
-        if validation.is_err() {
-            return Err(validation.unwrap_err());
+        if let Err(err_validation) = validation {
+            return Err(err_validation);
         }
 
         let target = args
@@ -76,17 +77,17 @@ impl CommandInterface for CloneCommand {
             .unwrap();
 
         let expanded_target_dir = expand_dir(target, false);
-        if expanded_target_dir.is_err() {
-            return Err(expanded_target_dir.unwrap_err());
+        if let Err(err_expand_target) = expanded_target_dir {
+            return Err(err_expand_target);
         }
         let expanded_target_dir = expanded_target_dir.unwrap();
 
         let result = remove_repository(&expanded_target_dir);
-        if result.is_err() {
-            return Err(result.unwrap_err());
+        if let Err(err_result) = result {
+            return Err(err_result);
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn update(&self, args: Yaml) -> Result<(), String> {
@@ -95,8 +96,8 @@ impl CommandInterface for CloneCommand {
             HashMap::from([(String::from("target"), vec![&Required {}])]),
         );
 
-        if validation.is_err() {
-            return Err(validation.unwrap_err());
+        if let Err(err_validation) = validation {
+            return Err(err_validation);
         }
 
         let target = args
@@ -108,17 +109,17 @@ impl CommandInterface for CloneCommand {
             .unwrap();
 
         let expanded_target_dir = expand_dir(target, false);
-        if expanded_target_dir.is_err() {
-            return Err(expanded_target_dir.unwrap_err());
+        if let Err(err_expand_dir) = expanded_target_dir {
+            return Err(err_expand_dir);
         }
         let expanded_target_dir = expanded_target_dir.unwrap();
 
         let result = update_repository(&expanded_target_dir);
-        if result.is_err() {
-            return Err(result.unwrap_err());
+        if let Err(err_result) = result {
+            return Err(err_result);
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -126,33 +127,33 @@ pub fn clone_repository(url: &str, target: &PathDir) -> Result<(), String> {
     println!("Cloning {} into {} ...", url, target.to_str().unwrap());
 
     let clone_result = git(&["clone", url, "."], target);
-    if clone_result.is_err() {
-        return Err(clone_result.unwrap_err().to_string());
+    if let Err(err_clone) = clone_result {
+        return Err(err_clone.to_string());
     }
 
-    return Ok(());
+    Ok(())
 }
 
 pub fn remove_repository(target: &PathDir) -> Result<(), String> {
     println!("Removing {} ...", target.to_str().unwrap());
 
     let remove_result = std::fs::remove_dir_all(target);
-    if remove_result.is_err() {
-        return Err(remove_result.unwrap_err().to_string());
+    if let Err(err_remove) = remove_result {
+        return Err(err_remove.to_string());
     }
 
-    return Ok(());
+    Ok(())
 }
 
 pub fn update_repository(target: &PathDir) -> Result<(), String> {
     println!("Updating {} ...", target.to_str().unwrap());
 
     let update_result = git(&["pull"], target);
-    if update_result.is_err() {
-        return Err(update_result.unwrap_err().to_string());
+    if let Err(err_update) = update_result {
+        return Err(err_update.to_string());
     }
 
-    return Ok(());
+    Ok(())
 }
 
 // -- tests --

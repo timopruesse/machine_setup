@@ -7,25 +7,25 @@ use crate::config::{validation_rules::required::Required, validator::validate_na
 pub fn expand_dir(dir: &str, create: bool) -> Result<PathDir, String> {
     let expanded_dir = expand(dir);
 
-    if expanded_dir.is_err() {
-        return Err(expanded_dir.unwrap_err().to_string());
+    if let Err(err_expand_dir) = expanded_dir {
+        return Err(err_expand_dir.to_string());
     }
 
     let expanded_dir = expanded_dir.unwrap();
     if create {
         let create_result = fs::create_dir_all(expanded_dir.to_string());
-        if create_result.is_err() {
-            return Err(create_result.unwrap_err().to_string());
+        if let Err(err_create) = create_result {
+            return Err(err_create.to_string());
         }
     }
 
     let path = PathDir::new(expanded_dir.to_string());
 
-    if path.is_err() {
-        return Err(path.unwrap_err().to_string());
+    if let Err(err_path) = path {
+        return Err(err_path.to_string());
     }
 
-    return Ok(path.unwrap());
+    Ok(path.unwrap())
 }
 
 pub static DIR_SRC: &str = "src";
@@ -48,8 +48,8 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
             (String::from(DIR_TARGET), rules.clone()),
         ]),
     );
-    if validation.is_err() {
-        return Err(validation.unwrap_err());
+    if let Err(err_validation) = validation {
+        return Err(err_validation);
     }
 
     let src_dir = args
@@ -81,11 +81,11 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
         .unwrap()
         .to_owned();
 
-    return Ok(Dirs {
+    Ok(Dirs {
         src: src_dir.to_string(),
         target: target_dir.to_string(),
         ignore,
-    });
+    })
 }
 
 static DEFAULT_IGNORE: [&str; 3] = [".git", ".gitignore", ".gitmodules"];
@@ -103,7 +103,7 @@ fn is_ignored(path: &Path, source: &PathDir, ignore: &Vec<Yaml>) -> bool {
         }
     }
 
-    return false;
+    false
 }
 
 pub fn walk_files<O: Fn(&Path, &Path)>(
@@ -116,7 +116,7 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
         let dir_entry = dir_entry.unwrap();
         let source_path = dir_entry.path();
 
-        if is_ignored(source_path, &source, &ignore) {
+        if is_ignored(source_path, source, &ignore) {
             println!("Skipping {} ...", source_path.to_string_lossy());
             continue;
         }
@@ -125,16 +125,16 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
 
         if source_path.is_dir() {
             let create_result = fs::create_dir_all(&destination_path);
-            if create_result.is_err() {
-                return Err(create_result.unwrap_err().to_string());
+            if let Err(err_create) = create_result {
+                return Err(err_create.to_string());
             }
             continue;
         }
 
-        op(&source_path, &destination_path);
+        op(source_path, &destination_path);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 // -- tests --

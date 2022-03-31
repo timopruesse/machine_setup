@@ -13,17 +13,17 @@ pub struct CopyDirCommand {}
 impl CommandInterface for CopyDirCommand {
     fn install(&self, args: Yaml) -> Result<(), String> {
         let dirs = get_source_and_target(args);
-        if dirs.is_err() {
-            return Err(dirs.err().unwrap());
+        if let Err(err_dirs) = dirs {
+            return Err(err_dirs);
         }
         let dirs = dirs.unwrap();
 
         let result = copy_dir(&dirs.src, &dirs.target, dirs.ignore);
-        if result.is_err() {
-            return Err(result.unwrap_err());
+        if let Err(err_result) = result {
+            return Err(err_result);
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn uninstall(&self, args: Yaml) -> Result<(), String> {
@@ -32,8 +32,8 @@ impl CommandInterface for CopyDirCommand {
             HashMap::from([(String::from(DIR_TARGET), vec![&Required {}])]),
         );
 
-        if validation.is_err() {
-            return Err(validation.unwrap_err());
+        if let Err(err_validation) = validation {
+            return Err(err_validation);
         }
 
         let target_dir = args
@@ -44,15 +44,15 @@ impl CommandInterface for CopyDirCommand {
             .as_str()
             .unwrap();
 
-        let result = remove_dir(&target_dir);
-        if result.is_err() {
-            return Err(result.unwrap_err());
+        let result = remove_dir(target_dir);
+        if let Err(err_result) = result {
+            return Err(err_result);
         }
 
-        return Ok(());
+        Ok(())
     }
 
-    fn update(&self, args: Yaml) -> Result<(), String> {
+    fn update(&self, _args: Yaml) -> Result<(), String> {
         unimplemented!()
     }
 }
@@ -65,7 +65,7 @@ fn target_file_is_newer(file_src: &Path, file_target: &Path) -> bool {
     let file_src_meta = file_src.metadata().unwrap();
     let file_target_meta = file_target.metadata().unwrap();
 
-    return file_target_meta.modified().unwrap() > file_src_meta.modified().unwrap();
+    file_target_meta.modified().unwrap() > file_src_meta.modified().unwrap()
 }
 
 fn copy_files(
@@ -79,7 +79,7 @@ fn copy_files(
         destination_dir.to_str().unwrap()
     );
 
-    let result = walk_files(&source_dir, &destination_dir, ignore, |src, target| {
+    let result = walk_files(source_dir, destination_dir, ignore, |src, target| {
         if target_file_is_newer(src, target) {
             eprintln!(
                 "Skipping: {}: {}",
@@ -100,23 +100,23 @@ fn copy_files(
             .ok();
     });
 
-    if result.is_err() {
-        return Err(result.unwrap_err());
+    if let Err(err_result) = result {
+        return Err(err_result);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 pub fn copy_dir(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<(), String> {
     let expanded_source = expand_dir(source, false);
-    if expanded_source.is_err() {
-        return Err(expanded_source.unwrap_err().to_string());
+    if let Err(err_expand_src) = expanded_source {
+        return Err(err_expand_src);
     }
     let source_dir = expanded_source.to_owned().unwrap();
 
     let expanded_destination = expand_dir(destination, true);
-    if expanded_destination.is_err() {
-        return Err(expanded_destination.unwrap_err().to_string());
+    if let Err(err_expand_dest) = expanded_destination {
+        return Err(err_expand_dest);
     }
     let destination_dir = expanded_destination.to_owned().unwrap();
 
@@ -127,7 +127,7 @@ pub fn copy_dir(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<()
         ));
     }
 
-    return copy_files(&source_dir, &destination_dir, ignore);
+    copy_files(&source_dir, &destination_dir, ignore)
 }
 
 pub fn remove_dir(target: &str) -> Result<(), String> {
@@ -143,7 +143,7 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
         return Err(result.err().unwrap().to_string());
     }
 
-    return Ok(());
+    Ok(())
 }
 
 // -- tests --

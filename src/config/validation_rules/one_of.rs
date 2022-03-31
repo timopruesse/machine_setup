@@ -14,7 +14,7 @@ impl ValidationRule for OneOf {
             }
         }
 
-        return false;
+        false
     }
 
     fn to_string(&self) -> String {

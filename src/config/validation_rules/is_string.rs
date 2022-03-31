@@ -12,11 +12,11 @@ impl ValidationRule for IsString {
             return true;
         }
 
-        return false;
+        false
     }
 
     fn to_string(&self) -> String {
-        return String::from("argument must be a string");
+        String::from("argument must be a string")
     }
 }
 

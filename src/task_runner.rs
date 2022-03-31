@@ -56,11 +56,11 @@ fn run_command(
     args: Yaml,
     mode: &TaskRunnerMode,
 ) -> Result<(), String> {
-    return match mode {
+    match mode {
         TaskRunnerMode::Install => command.install(args),
         TaskRunnerMode::Update => command.update(args),
         TaskRunnerMode::Uninstall => command.uninstall(args),
-    };
+    }
 }
 
 fn run_task(task: &Task, mode: &TaskRunnerMode) {
@@ -74,7 +74,7 @@ fn run_task(task: &Task, mode: &TaskRunnerMode) {
             continue;
         }
 
-        let result = run_command(resolved_command.unwrap(), command.args.clone(), &mode);
+        let result = run_command(resolved_command.unwrap(), command.args.clone(), mode);
 
         if result.is_err() {
             eprintln!("{}: ERROR", command.name);
@@ -110,8 +110,7 @@ pub fn run(
 
     let task_list = result.unwrap().tasks;
 
-    if task_name.is_some() {
-        let task_name = task_name.unwrap();
+    if let Some(task_name) = task_name {
         let task = task_list.iter().find(|t| t.name == task_name);
         if task.is_none() {
             return Err(format!("Task \"{}\" not found", task_name));
@@ -126,5 +125,5 @@ pub fn run(
         run_task(&task, &mode);
     }
 
-    return Ok(());
+    Ok(())
 }

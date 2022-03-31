@@ -44,7 +44,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
         tasks.push(task);
     }
 
-    return Ok(TaskList { tasks });
+    Ok(TaskList { tasks })
 }
 
 impl BaseConfig for YamlConfig {
@@ -61,7 +61,7 @@ impl BaseConfig for YamlConfig {
 
         println!("Reading config from {} ...", path);
 
-        return parse_yaml(yaml_path);
+        parse_yaml(yaml_path)
     }
 }
 

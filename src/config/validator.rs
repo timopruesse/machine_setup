@@ -7,23 +7,21 @@ pub trait ValidationRule {
 }
 
 pub fn arguments_are_named(args: Option<&Yaml>) -> bool {
-    return !args.unwrap_or(&Yaml::BadValue).as_hash().is_none();
+    return args.unwrap_or(&Yaml::BadValue).as_hash().is_some();
 }
 
 pub fn validate_args(args: Option<&Yaml>, rules: Vec<&impl ValidationRule>) -> Result<(), String> {
     if arguments_are_named(args) {
-        return Err(format!(
-            "Expected positional arguments, got named arguments"
-        ));
+        return Err("Expected positional arguments, got named arguments".to_string());
     }
 
     for rule in rules {
         if !rule.validate(args) {
-            return Err(format!("{}", rule.to_string()));
+            return Err(rule.to_string());
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 pub fn validate_named_args(
@@ -33,9 +31,7 @@ pub fn validate_named_args(
     let named_args = args.as_hash();
 
     if named_args.is_none() {
-        return Err(format!(
-            "Expected named arguments, got positional arguments"
-        ));
+        return Err("Expected named arguments, got positional arguments".to_string());
     }
 
     let named_args = named_args.unwrap();
@@ -49,7 +45,7 @@ pub fn validate_named_args(
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 // --- tests ---

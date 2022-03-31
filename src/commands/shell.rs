@@ -24,7 +24,7 @@ fn run_shell_command(command_name: &str) -> Result<(), String> {
     let output = command.unwrap();
 
     if !output.status.success() {
-        let error_msg = String::from_utf8(output.stderr).unwrap_or(String::from("Error"));
+        let error_msg = String::from_utf8(output.stderr).unwrap_or_else(|_| String::from("Error"));
 
         return Err(format!(
             "{}: {}",
@@ -37,7 +37,7 @@ fn run_shell_command(command_name: &str) -> Result<(), String> {
         ));
     }
 
-    let stdout = String::from_utf8(output.stdout).unwrap_or(String::from("OK"));
+    let stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
 
     println!(
         "{}: {}",
@@ -49,7 +49,7 @@ fn run_shell_command(command_name: &str) -> Result<(), String> {
         }
     );
 
-    return Ok(());
+    Ok(())
 }
 
 fn get_commands_from_yaml(args: Yaml) -> Vec<String> {
@@ -94,13 +94,12 @@ fn get_commands(args: Yaml, method: ShellMethod) -> Result<Vec<String>, String> 
     if arguments_are_named(Some(&args)) {
         let validation =
             validate_named_args(args.clone(), HashMap::from([(method_name.clone(), rules)]));
-        if validation.is_err() {
-            return Err(format!("ERR: {}", validation.unwrap_err()));
+        if let Err(err_validation) = validation {
+            return Err(format!("ERR: {}", err_validation));
         }
 
         return Ok(get_commands_from_yaml(
-            args.clone()
-                .as_hash()
+            args.as_hash()
                 .unwrap()
                 .get(&Yaml::String(method_name))
                 .unwrap()
@@ -109,62 +108,62 @@ fn get_commands(args: Yaml, method: ShellMethod) -> Result<Vec<String>, String> 
     }
 
     let validation = validate_args(Some(&args), rules);
-    if validation.is_err() {
-        return Err(format!("ERR: {}", validation.unwrap_err()));
+    if let Err(err_validation) = validation {
+        return Err(err_validation);
     }
 
-    return Ok(get_commands_from_yaml(args.clone()));
+    Ok(get_commands_from_yaml(args))
 }
 
 impl CommandInterface for ShellCommand {
     fn install(&self, args: Yaml) -> Result<(), String> {
         let commands = get_commands(args, ShellMethod::Install);
 
-        if commands.is_err() {
-            return Err(commands.unwrap_err());
+        if let Err(err_commands) = commands {
+            return Err(err_commands);
         }
 
         for command in commands.unwrap() {
             let result = run_shell_command(&command);
-            if result.is_err() {
-                return Err(format!("{}", result.unwrap_err()));
+            if let Err(err_result) = result {
+                return Err(err_result);
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn uninstall(&self, args: Yaml) -> Result<(), String> {
         let commands = get_commands(args, ShellMethod::Uninstall);
 
-        if commands.is_err() {
-            return Err(commands.unwrap_err());
+        if let Err(err_commands) = commands {
+            return Err(err_commands);
         }
 
         for command in commands.unwrap() {
             let result = run_shell_command(&command);
-            if result.is_err() {
-                return Err(format!("{}", result.unwrap_err()));
+            if let Err(err_result) = result {
+                return Err(err_result);
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn update(&self, args: Yaml) -> Result<(), String> {
         let commands = get_commands(args, ShellMethod::Update);
 
-        if commands.is_err() {
-            return Err(commands.unwrap_err());
+        if let Err(err_commands) = commands {
+            return Err(err_commands);
         }
 
         for command in commands.unwrap() {
             let result = run_shell_command(&command);
-            if result.is_err() {
-                return Err(format!("{}", result.unwrap_err()));
+            if let Err(err_result) = result {
+                return Err(err_result);
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 }
