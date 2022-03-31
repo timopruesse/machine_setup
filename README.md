@@ -8,6 +8,14 @@ So, it will help with managing dotfiles, symlinks, etc.
 
 It can also be used for other usecases, e.g. to ease the onboarding process of a new colleague by providing a config that installs certain dependencies and checks out important repositories.
 
+## Installation
+
+For now, only `cargo install` is supported.
+
+```bash
+cargo install machine_setup
+```
+
 ## Configure
 
 Tasks can be defined under the `tasks` root key.  
