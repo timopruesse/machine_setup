@@ -1,7 +1,7 @@
 # Machine Setup
 
-The idea is to be able to replicate a certain setup when reseting your machine or using a completely new machine.  
-Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim setup files.  
+The idea is to be able to replicate a certain setup (when reseting your machine or using a completely new machine).  
+Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.  
 So, it will help with managing dotfiles, symlinks, etc.
 
 It can also be used for other usecases, e.g. to ease the onboarding process of a new colleague by providing a config that installs certain dependencies and checks out important repositories.
