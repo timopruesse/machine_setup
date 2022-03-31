@@ -150,15 +150,11 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod test {
-    use std::{fs::File, os::unix::prelude::PermissionsExt};
-
     use super::*;
     use tempfile::{tempdir, tempfile_in, NamedTempFile};
 
     #[test]
     fn it_fails_when_src_dir_doesnt_exist() {
-        let test = copy_dir("invalid", "invalid", vec![]);
-
         assert!(copy_dir("invalid", "invalid", vec![])
             .unwrap_err()
             .contains("path is not a dir when resolving"));
@@ -168,7 +164,7 @@ mod test {
     fn it_fails_when_dirs_are_the_same() {
         let dir = tempdir().unwrap();
         let src_path = dir.path();
-        let src_file = tempfile_in(&src_path).unwrap();
+        tempfile_in(&src_path).unwrap();
         let src = src_path.to_str().unwrap();
 
         assert!(copy_dir(src, src, vec![])

@@ -165,31 +165,30 @@ mod test {
     fn it_fails_when_src_dir_doesnt_exist() {
         assert!(create_symlink("invalid", "invalid", vec![])
             .unwrap_err()
-            .contains("Source directory does not exist"));
+            .contains("path is not a dir when resolving"));
     }
 
     #[test]
     fn it_fails_when_dirs_are_the_same() {
         let dir = tempdir().unwrap();
-        let src_path = dir.path().join("example.txt");
-        let src_file = File::create(&src_path).unwrap();
+        let src_path = dir.path();
+        File::create(&src_path.join("example.txt")).unwrap();
+
         let src = src_path.to_str().unwrap();
+
+        println!("{:?}", create_symlink(src, src, vec![]));
 
         assert!(create_symlink(src, src, vec![])
             .unwrap_err()
             .contains("Source and destination directories are the same"));
-
-        drop(src_file);
-        dir.close().unwrap();
     }
 
-    // FIXME: this test also fails but the method is functioning correctly
     #[test]
     fn it_symlinks_files() {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
-        let src_file = File::create(&src_path).unwrap();
+        File::create(&src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
@@ -198,19 +197,14 @@ mod test {
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());
-
-        src_dir.close().unwrap();
-        drop(src_file);
-
-        dest_dir.close().unwrap();
     }
 
-    // FIXME: this test also fails but the method is functioning correctly
+    #[test]
     fn it_removes_symlink() {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
-        let src_file = File::create(&src_path).unwrap();
+        File::create(&src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
@@ -223,10 +217,5 @@ mod test {
         assert!(remove_symlink(src, dest).is_ok());
 
         assert!(!dest_path.exists());
-
-        src_dir.close().unwrap();
-        drop(src_file);
-
-        dest_dir.close().unwrap();
     }
 }
