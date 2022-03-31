@@ -58,6 +58,10 @@ impl CommandInterface for CopyDirCommand {
 }
 
 fn target_file_is_newer(file_src: &Path, file_target: &Path) -> bool {
+    if !file_target.exists() {
+        return false;
+    }
+
     let file_src_meta = file_src.metadata().unwrap();
     let file_target_meta = file_target.metadata().unwrap();
 
@@ -76,20 +80,20 @@ fn copy_files(
     );
 
     let result = walk_files(&source_dir, &destination_dir, ignore, |src, target| {
-        println!(
-            "Copying {} to {} ...",
-            src.to_str().unwrap(),
-            target.to_str().unwrap()
-        );
-
         if target_file_is_newer(src, target) {
             eprintln!(
-                "{}: {}",
+                "Skipping: {}: {}",
                 target.file_name().unwrap().to_str().unwrap(),
                 String::from("The target file is newer than the source file.",)
             );
             return;
         }
+
+        println!(
+            "Copying {} to {} ...",
+            src.to_str().unwrap(),
+            target.to_str().unwrap()
+        );
 
         fs::copy(src, target)
             .map_err(|e| format!("Failed to copy file: {}", e))
@@ -146,7 +150,7 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod test {
-    use std::fs::File;
+    use std::{fs::File, os::unix::prelude::PermissionsExt};
 
     use super::*;
     use tempfile::{tempdir, tempfile_in, NamedTempFile};
@@ -170,28 +174,6 @@ mod test {
         assert!(copy_dir(src, src, vec![])
             .unwrap_err()
             .contains("Source and destination directories are the same"));
-    }
-
-    #[test]
-    fn it_skips_file_when_newer_dest_file_exists() {
-        let src_dir = tempdir().unwrap();
-        let src = src_dir.path().to_str().unwrap();
-        let src_path = src_dir.path();
-        let src_file = NamedTempFile::new_in(&src_path).unwrap();
-
-        let dest_dir = tempdir().unwrap();
-        let dest = dest_dir.path().to_str().unwrap();
-        let dest_file = dest_dir.path().join(src_file.path().file_name().unwrap());
-
-        let dest_file_path = Path::new(&dest_file);
-        File::create(&dest_file_path).ok();
-
-        assert!(dest_file_path.exists());
-        assert!(copy_dir(src, dest, vec![]));
-        assert!(
-            dest_file_path.metadata().unwrap().modified().unwrap()
-                > src_file.metadata().unwrap().modified().unwrap()
-        );
     }
 
     #[test]
