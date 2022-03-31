@@ -162,17 +162,12 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_clone_repository() {
-        unimplemented!()
-    }
-
-    #[test]
     fn test_remove_repository() {
-        unimplemented!()
-    }
+        let target = tempfile::tempdir().unwrap();
+        let target_path = target.path().to_str().unwrap();
 
-    #[test]
-    fn test_update_repository() {
-        unimplemented!()
+        let result = remove_repository(&PathDir::new(target_path).unwrap());
+        assert!(result.is_ok());
+        assert!(!target.path().exists());
     }
 }
