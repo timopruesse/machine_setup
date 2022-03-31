@@ -57,6 +57,13 @@ impl CommandInterface for CopyDirCommand {
     }
 }
 
+fn target_file_is_newer(file_src: &Path, file_target: &Path) -> bool {
+    let file_src_meta = file_src.metadata().unwrap();
+    let file_target_meta = file_target.metadata().unwrap();
+
+    return file_target_meta.modified().unwrap() > file_src_meta.modified().unwrap();
+}
+
 fn copy_files(
     source_dir: &PathDir,
     destination_dir: &Path,
@@ -74,6 +81,16 @@ fn copy_files(
             src.to_str().unwrap(),
             target.to_str().unwrap()
         );
+
+        if target_file_is_newer(src, target) {
+            eprintln!(
+                "{}: {}",
+                target.file_name().unwrap().to_str().unwrap(),
+                String::from("The target file is newer than the source file.",)
+            );
+            return;
+        }
+
         fs::copy(src, target)
             .map_err(|e| format!("Failed to copy file: {}", e))
             .ok();
@@ -155,9 +172,8 @@ mod test {
             .contains("Source and destination directories are the same"));
     }
 
-    // FIXME: this test fails for some reason (error is thrown outside of tests correctly)
     #[test]
-    fn it_fails_when_dest_file_exists() {
+    fn it_skips_file_when_newer_dest_file_exists() {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path();
@@ -168,11 +184,14 @@ mod test {
         let dest_file = dest_dir.path().join(src_file.path().file_name().unwrap());
 
         let dest_file_path = Path::new(&dest_file);
-        File::create(&dest_file_path);
+        File::create(&dest_file_path).ok();
 
-        assert!(copy_dir(src, dest, vec![])
-            .unwrap_err()
-            .contains("Destination file already exists"));
+        assert!(dest_file_path.exists());
+        assert!(copy_dir(src, dest, vec![]));
+        assert!(
+            dest_file_path.metadata().unwrap().modified().unwrap()
+                > src_file.metadata().unwrap().modified().unwrap()
+        );
     }
 
     #[test]
