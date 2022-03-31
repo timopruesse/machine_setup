@@ -32,7 +32,7 @@ mod test {
         let rule = IsString {};
         let input = Yaml::Array(vec![Yaml::Integer(1)]);
 
-        assert_eq!(false, rule.validate(Some(&input)));
+        assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
@@ -40,6 +40,6 @@ mod test {
         let rule = IsString {};
         let input = Yaml::String(String::from("test"));
 
-        assert_eq!(true, rule.validate(Some(&input)));
+        assert!(rule.validate(Some(&input)));
     }
 }
