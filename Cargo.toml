@@ -2,6 +2,14 @@
 name = "machine_setup"
 version = "0.1.0"
 edition = "2021"
+authors = ["Timo Prüße <chroma91@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "A tool for configuring and setting up your machine."
+readme = "README.md"
+homepage = "https://github.com/Chroma91/machine-setup"
+repository = "https://github.com/Chroma91/machine-setup"
+keywords = ["cli", "machine", "setup", "configure"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
