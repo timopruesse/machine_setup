@@ -93,10 +93,6 @@ pub fn copy_dir(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<()
     }
     let source_dir = expanded_source.to_owned().unwrap();
 
-    if !source_dir.exists() {
-        return Err(format!("Source directory does not exist: {}", source));
-    }
-
     let expanded_destination = expand_dir(destination, true);
     if expanded_destination.is_err() {
         return Err(expanded_destination.unwrap_err().to_string());
@@ -133,15 +129,18 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod test {
+    use std::fs::File;
+
     use super::*;
-    use std::vec;
-    use tempfile::{tempdir, tempfile, tempfile_in};
+    use tempfile::{tempdir, tempfile_in, NamedTempFile};
 
     #[test]
     fn it_fails_when_src_dir_doesnt_exist() {
+        let test = copy_dir("invalid", "invalid", vec![]);
+
         assert!(copy_dir("invalid", "invalid", vec![])
             .unwrap_err()
-            .contains("Source directory does not exist"));
+            .contains("path is not a dir when resolving"));
     }
 
     #[test]
@@ -162,43 +161,35 @@ mod test {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path();
-        let src_file = tempfile_in(&src_path).unwrap();
+        let src_file = NamedTempFile::new_in(&src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
+        let dest_file = dest_dir.path().join(src_file.path().file_name().unwrap());
 
-        assert!(copy_dir(src, dest, vec![]).is_ok());
+        let dest_file_path = Path::new(&dest_file);
+        File::create(&dest_file_path);
 
         assert!(copy_dir(src, dest, vec![])
             .unwrap_err()
             .contains("Destination file already exists"));
     }
 
-    // FIXME: this test also fails but the method is functioning correctly
     #[test]
     fn it_copies_files() {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path();
-        let src_file = tempfile_in(&src_path).unwrap();
+        let src_file = NamedTempFile::new_in(&src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
         assert!(copy_dir(src, dest, vec![]).is_ok());
 
-        println!("{:?}", src_file);
+        let dest_file = dest_dir.path().join(src_file.path().file_name().unwrap());
 
-        assert!(false);
-
-        // let dest_file = dest_dir.path().join(src_file_name);
-
-        // assert!(dest_file.exists());
-    }
-
-    #[test]
-    fn it_copies_files_recursively() {
-        unimplemented!()
+        assert!(dest_file.exists());
     }
 
     #[test]
