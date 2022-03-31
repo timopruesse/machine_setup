@@ -134,7 +134,7 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{fs::File, vec};
+    use std::vec;
     use tempfile::{tempdir, tempfile, tempfile_in};
 
     #[test]
@@ -147,16 +147,13 @@ mod test {
     #[test]
     fn it_fails_when_dirs_are_the_same() {
         let dir = tempdir().unwrap();
-        let src_path = dir.path().join("example.txt");
-        let src_file = File::create(&src_path).unwrap();
+        let src_path = dir.path();
+        let src_file = tempfile_in(&src_path).unwrap();
         let src = src_path.to_str().unwrap();
 
         assert!(copy_dir(src, src, vec![])
             .unwrap_err()
             .contains("Source and destination directories are the same"));
-
-        drop(src_file);
-        dir.close().unwrap();
     }
 
     // FIXME: this test fails for some reason (error is thrown outside of tests correctly)
@@ -164,32 +161,7 @@ mod test {
     fn it_fails_when_dest_file_exists() {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
-        let src_path = src_dir.path().join("example.txt");
-        let src_file = tempfile_in(&src_path).unwrap();
-
-        let dest_dir = tempdir().unwrap();
-        let dest = dest_dir.path().to_str().unwrap();
-
-        let dest_path = dest_dir.path().join("example.txt");
-        let dest_file = tempfile_in(&dest_path).unwrap();
-
-        assert!(copy_dir(src, dest, vec![])
-            .unwrap_err()
-            .contains("Destination file already exists"));
-
-        src_dir.close().unwrap();
-        drop(src_file);
-
-        dest_dir.close().unwrap();
-        drop(dest_file);
-    }
-
-    // FIXME: this test also fails but the method is functioning correctly
-    #[test]
-    fn it_copies_files() {
-        let src_dir = tempdir().unwrap();
-        let src = src_dir.path().to_str().unwrap();
-        let src_path = src_dir.path().join("example.txt");
+        let src_path = src_dir.path();
         let src_file = tempfile_in(&src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
@@ -197,13 +169,31 @@ mod test {
 
         assert!(copy_dir(src, dest, vec![]).is_ok());
 
-        let dest_path = dest_dir.path().join("example.txt");
-        assert!(dest_path.exists());
+        assert!(copy_dir(src, dest, vec![])
+            .unwrap_err()
+            .contains("Destination file already exists"));
+    }
 
-        src_dir.close().unwrap();
-        drop(src_file);
+    // FIXME: this test also fails but the method is functioning correctly
+    #[test]
+    fn it_copies_files() {
+        let src_dir = tempdir().unwrap();
+        let src = src_dir.path().to_str().unwrap();
+        let src_path = src_dir.path();
+        let src_file = tempfile_in(&src_path).unwrap();
 
-        dest_dir.close().unwrap();
+        let dest_dir = tempdir().unwrap();
+        let dest = dest_dir.path().to_str().unwrap();
+
+        assert!(copy_dir(src, dest, vec![]).is_ok());
+
+        println!("{:?}", src_file);
+
+        assert!(false);
+
+        // let dest_file = dest_dir.path().join(src_file_name);
+
+        // assert!(dest_file.exists());
     }
 
     #[test]
@@ -218,7 +208,5 @@ mod test {
 
         assert!(remove_dir(path).is_ok());
         assert!(!dir.path().exists());
-
-        dir.close().unwrap();
     }
 }
