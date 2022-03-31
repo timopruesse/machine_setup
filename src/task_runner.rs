@@ -64,7 +64,7 @@ fn run_command(
 }
 
 fn run_task(task: &Task, mode: &TaskRunnerMode) {
-    println!("Running task \"{}\" ...", task.name);
+    println!("\nRunning task \"{}\" ...", task.name);
 
     let commands = &task.commands;
     for command in commands {
@@ -103,9 +103,9 @@ pub fn run(
     }
 
     match mode {
-        TaskRunnerMode::Install => println!("Installing..."),
-        TaskRunnerMode::Update => println!("Updating..."),
-        TaskRunnerMode::Uninstall => println!("Uninstalling..."),
+        TaskRunnerMode::Install => println!("\nInstalling..."),
+        TaskRunnerMode::Update => println!("\nUpdating..."),
+        TaskRunnerMode::Uninstall => println!("\nUninstalling..."),
     }
 
     let task_list = result.unwrap().tasks;

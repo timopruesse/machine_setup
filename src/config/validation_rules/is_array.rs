@@ -25,13 +25,13 @@ mod test {
     fn it_fails_when_required_arg_is_not_an_array() {
         let rule = IsArray {};
         let input = Yaml::String("foo".to_string());
-        assert!(!rule.validate(&input));
+        assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_returns_ok_when_required_arg_is_an_array() {
         let rule = IsArray {};
         let input = Yaml::Array(vec![Yaml::String("foo".to_string())]);
-        assert!(rule.validate(&input));
+        assert!(rule.validate(Some(&input)));
     }
 }

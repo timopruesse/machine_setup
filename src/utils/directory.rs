@@ -136,3 +136,37 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
 
     return Ok(());
 }
+
+// -- tests --
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn it_expands_str_to_path() {
+        let expanded_dir = expand_dir("~/test", false);
+
+        assert!(expanded_dir.is_ok());
+        assert_eq!(
+            expanded_dir.unwrap().to_string_lossy(),
+            dirs::home_dir().unwrap().join("test").to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn it_creates_intermediate_dirs_when_needed() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir_path = temp_dir.path();
+        let temp_dir_path_complete = temp_dir_path.join("test");
+
+        let expanded_dir = expand_dir(temp_dir_path_complete.to_str().unwrap(), true);
+
+        assert!(expanded_dir.is_ok());
+        assert_eq!(
+            expanded_dir.unwrap().to_string_lossy(),
+            temp_dir_path_complete.to_string_lossy()
+        );
+        assert!(temp_dir_path_complete.exists());
+    }
+}

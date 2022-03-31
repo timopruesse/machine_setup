@@ -104,6 +104,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirs"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca3aa72a6f96ea37bbc5aa912f6788242832f75369bdfdadcb0e38423f100059"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
 name = "dirs-sys"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -246,6 +255,7 @@ name = "machine_setup"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "dirs 4.0.0",
  "ergo_fs",
  "git_commands",
  "symlink",
@@ -437,7 +447,7 @@ version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c7e79eddc7b411f9beeaaf2d421de7e7cb3b1ab9eaf1b79704c0e4130cba6b5"
 dependencies = [
- "dirs",
+ "dirs 2.0.2",
 ]
 
 [[package]]

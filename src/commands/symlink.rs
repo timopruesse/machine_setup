@@ -158,12 +158,12 @@ pub fn remove_symlink(source: &str, destination: &str) -> Result<(), String> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::fs::File;
+    use std::{fs::File, vec};
     use tempfile::tempdir;
 
     #[test]
     fn it_fails_when_src_dir_doesnt_exist() {
-        assert!(create_symlink("invalid", "invalid")
+        assert!(create_symlink("invalid", "invalid", vec![])
             .unwrap_err()
             .contains("Source directory does not exist"));
     }
@@ -175,7 +175,7 @@ mod test {
         let src_file = File::create(&src_path).unwrap();
         let src = src_path.to_str().unwrap();
 
-        assert!(create_symlink(src, src)
+        assert!(create_symlink(src, src, vec![])
             .unwrap_err()
             .contains("Source and destination directories are the same"));
 
@@ -191,7 +191,7 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(create_symlink(src, dest)
+        assert!(create_symlink(src, dest, vec![])
             .unwrap_err()
             .contains("Source directory is empty"));
 
@@ -210,7 +210,7 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(create_symlink(src, dest).is_ok());
+        assert!(create_symlink(src, dest, vec![]).is_ok());
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());
@@ -231,12 +231,12 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(create_symlink(src, dest).is_ok());
+        assert!(create_symlink(src, dest, vec![]).is_ok());
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());
 
-        assert!(remove_symlink(dest).is_ok());
+        assert!(remove_symlink(src, dest).is_ok());
 
         assert!(!dest_path.exists());
 

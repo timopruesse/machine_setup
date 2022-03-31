@@ -33,6 +33,8 @@ impl ValidationRule for OneOf {
 #[cfg(test)]
 
 mod test {
+    use crate::config::validation_rules::{is_array::IsArray, required::Required};
+
     use super::*;
 
     #[test]
@@ -41,7 +43,7 @@ mod test {
             rules: vec![Box::new(Required {}), Box::new(IsArray {})],
         };
 
-        assert!(rule.validate(&Yaml::from_str("foo")));
+        assert!(rule.validate(Some(&Yaml::from_str("foo"))));
     }
 
     #[test]
@@ -50,6 +52,6 @@ mod test {
             rules: vec![Box::new(Required {}), Box::new(IsArray {})],
         };
 
-        assert!(!rule.validate(&Yaml::from_str("")));
+        assert!(!rule.validate(Some(&Yaml::from_str(""))));
     }
 }

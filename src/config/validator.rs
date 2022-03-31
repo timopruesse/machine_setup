@@ -57,6 +57,8 @@ pub fn validate_named_args(
 #[cfg(test)]
 
 mod test {
+    use yaml_rust::yaml::Hash;
+
     use crate::config::validation_rules::required::Required;
 
     use super::*;
@@ -66,11 +68,13 @@ mod test {
         let mut rules = HashMap::new();
         rules.insert("foo".to_string(), vec![&Required {}]);
 
-        let args = Hash::new();
-        args.insert(
+        let mut hash = Hash::new();
+        hash.insert(
             Yaml::String("foo".to_string()),
             Yaml::String("bar".to_string()),
         );
+
+        let args = Yaml::Hash(hash);
 
         assert!(validate_named_args(args, rules).is_ok());
     }
@@ -80,11 +84,10 @@ mod test {
         let mut rules = HashMap::new();
         rules.insert("foo".to_string(), vec![&Required {}]);
 
-        let args = Hash::new();
-        args.insert(
-            Yaml::String("foo".to_string()),
-            Yaml::String("".to_string()),
-        );
+        let mut hash = Hash::new();
+        hash.insert(Yaml::String("foo".to_string()), Yaml::Null);
+
+        let args = Yaml::Hash(hash);
 
         assert!(validate_named_args(args, rules).is_err());
     }

@@ -49,5 +49,5 @@ fn main() {
         std::process::exit(1);
     }
 
-    println!("... DONE ...");
+    println!("\n... DONE ...");
 }

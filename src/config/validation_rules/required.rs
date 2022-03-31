@@ -35,27 +35,27 @@ mod test {
     fn it_fails_when_required_arg_is_a_bad_value() {
         let rule = Required {};
         let input = Yaml::BadValue;
-        assert!(!rule.validate(&input));
+        assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_fails_when_required_arg_is_empty() {
         let rule = Required {};
         let input = Yaml::String(String::from(""));
-        assert!(!rule.validate(&input));
+        assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_fails_when_required_arg_is_null() {
         let rule = Required {};
         let input = Yaml::Null;
-        assert!(!rule.validate(&input));
+        assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_returns_ok_when_required_arg_is_present() {
         let rule = Required {};
         let input = Yaml::String(String::from("hello"));
-        assert!(rule.validate(&input));
+        assert!(rule.validate(Some(&input)));
     }
 }
