@@ -119,6 +119,9 @@ This command executes a shell command.
 
 > Hint: Avoid the usage of interactive commands when possible.
 
+By default, shell commands will be skipped when updating or uninstalling.  
+You can change that by prodiving the following arguments:
+
 | argument  | value                    | required | example                         |
 | --------- | ------------------------ | :------: | ------------------------------- |
 | install   | command for installing   |    ➖    | "sudo apt-get -y install git"   |
@@ -141,6 +144,18 @@ updatable_command:
     install: "sudo apt-get -y install git"
     update: "sudo apt-get -y upgrade git"
     uninstall: "sudo apt-get -y uninstall git"
+
+updatable_multiline_command:
+  shell:
+    install:
+      - "sudo apt update"
+      - "sudo apt-get -y install git"
+    update:
+      - "sudo apt-get -y upgrade git"
+      - ...
+    uninstall:
+      - "sudo apt-get -y uninstall git"
+      - ...
 ```
 
 ---
