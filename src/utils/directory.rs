@@ -90,7 +90,7 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
 
 static DEFAULT_IGNORE: [&str; 3] = [".git", ".gitignore", ".gitmodules"];
 
-fn is_ignored(path: &Path, source: &PathDir, ignore: &Vec<Yaml>) -> bool {
+fn is_ignored(path: &Path, source: &PathDir, ignore: &[Yaml]) -> bool {
     let path_str = path.strip_prefix(source).unwrap().to_str().unwrap();
 
     let mut ignore_list = ignore.to_owned();
