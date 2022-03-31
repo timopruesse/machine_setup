@@ -145,12 +145,12 @@ mod test {
 
     #[test]
     fn it_expands_str_to_path() {
-        let expanded_dir = expand_dir("~/test", false);
+        let expanded_dir = expand_dir("~", false);
 
         assert!(expanded_dir.is_ok());
         assert_eq!(
             expanded_dir.unwrap().to_string_lossy(),
-            dirs::home_dir().unwrap().join("test").to_string_lossy()
+            dirs::home_dir().unwrap().to_string_lossy()
         );
     }
 

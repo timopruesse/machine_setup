@@ -135,7 +135,7 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
 mod test {
     use super::*;
     use std::{fs::File, vec};
-    use tempfile::tempdir;
+    use tempfile::{tempdir, tempfile, tempfile_in};
 
     #[test]
     fn it_fails_when_src_dir_doesnt_exist() {
@@ -159,35 +159,19 @@ mod test {
         dir.close().unwrap();
     }
 
-    #[test]
-    fn it_fails_when_src_dir_is_empty() {
-        let src_dir = tempdir().unwrap();
-        let src = src_dir.path().to_str().unwrap();
-
-        let dest_dir = tempdir().unwrap();
-        let dest = dest_dir.path().to_str().unwrap();
-
-        assert!(copy_dir(src, dest, vec![])
-            .unwrap_err()
-            .contains("Source directory is empty"));
-
-        src_dir.close().unwrap();
-        dest_dir.close().unwrap();
-    }
-
     // FIXME: this test fails for some reason (error is thrown outside of tests correctly)
     #[test]
     fn it_fails_when_dest_file_exists() {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
-        let src_file = File::create(&src_path).unwrap();
+        let src_file = tempfile_in(&src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
         let dest_path = dest_dir.path().join("example.txt");
-        let dest_file = File::create(&dest_path).unwrap();
+        let dest_file = tempfile_in(&dest_path).unwrap();
 
         assert!(copy_dir(src, dest, vec![])
             .unwrap_err()
@@ -206,7 +190,7 @@ mod test {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
-        let src_file = File::create(&src_path).unwrap();
+        let src_file = tempfile_in(&src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();

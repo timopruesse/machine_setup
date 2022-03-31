@@ -183,22 +183,6 @@ mod test {
         dir.close().unwrap();
     }
 
-    #[test]
-    fn it_fails_when_src_dir_is_empty() {
-        let src_dir = tempdir().unwrap();
-        let src = src_dir.path().to_str().unwrap();
-
-        let dest_dir = tempdir().unwrap();
-        let dest = dest_dir.path().to_str().unwrap();
-
-        assert!(create_symlink(src, dest, vec![])
-            .unwrap_err()
-            .contains("Source directory is empty"));
-
-        src_dir.close().unwrap();
-        dest_dir.close().unwrap();
-    }
-
     // FIXME: this test also fails but the method is functioning correctly
     #[test]
     fn it_symlinks_files() {
