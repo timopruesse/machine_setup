@@ -27,6 +27,13 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
     for task in entries["tasks"].as_hash().unwrap().iter() {
         let (key, value) = task;
 
+        if value.clone().into_hash().is_none() {
+            return Err(format!(
+                "{}: task definition is incorrect",
+                key.as_str().unwrap()
+            ));
+        }
+
         let mut commands: Vec<Command> = vec![];
         for command in value.as_hash().unwrap().iter() {
             let (name, args) = command;
