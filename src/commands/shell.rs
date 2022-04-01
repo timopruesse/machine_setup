@@ -12,44 +12,37 @@ use crate::{
 
 pub struct ShellCommand {}
 
-fn run_shell_command(command_name: &str) -> Result<(), String> {
+fn run_shell_command(command_name: &str) -> Result<String, String> {
     println!("{} ...", command_name);
 
     let command = Command::new("sh").arg("-c").arg(command_name).output();
 
-    if command.is_err() {
-        return Err(format!("ERR: {}", command.unwrap_err()));
+    if let Err(err_command) = command {
+        return Err(format!("ERR: {}", err_command));
     }
 
     let output = command.unwrap();
 
+    let mut stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
+    if stdout.is_empty() {
+        stdout = String::from("OK");
+    }
+
     if !output.status.success() {
-        let error_msg = String::from_utf8(output.stderr).unwrap_or_else(|_| String::from("Error"));
+        let error_msg = String::from_utf8(output.stderr).unwrap_or_else(|e| e.to_string());
 
         return Err(format!(
             "{}: {}",
             command_name,
             if error_msg.is_empty() {
-                String::from("Error")
+                stdout
             } else {
                 error_msg
             }
         ));
     }
 
-    let stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
-
-    println!(
-        "{}: {}",
-        command_name,
-        if stdout.is_empty() {
-            String::from("OK")
-        } else {
-            stdout
-        }
-    );
-
-    Ok(())
+    Ok(format!("{}: {}", command_name, stdout))
 }
 
 fn get_commands_from_yaml(args: Yaml) -> Vec<String> {
@@ -128,6 +121,10 @@ impl CommandInterface for ShellCommand {
             if let Err(err_result) = result {
                 return Err(err_result);
             }
+
+            result.unwrap().split('\n').for_each(|line| {
+                println!("{}", line);
+            });
         }
 
         Ok(())
@@ -145,6 +142,10 @@ impl CommandInterface for ShellCommand {
             if let Err(err_result) = result {
                 return Err(err_result);
             }
+
+            result.unwrap().split('\n').for_each(|line| {
+                println!("{}", line);
+            });
         }
 
         Ok(())
@@ -162,6 +163,10 @@ impl CommandInterface for ShellCommand {
             if let Err(err_result) = result {
                 return Err(err_result);
             }
+
+            result.unwrap().split('\n').for_each(|line| {
+                println!("{}", line);
+            });
         }
 
         Ok(())

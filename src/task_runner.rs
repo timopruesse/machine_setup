@@ -76,9 +76,9 @@ fn run_task(task: &Task, mode: &TaskRunnerMode) {
 
         let result = run_command(resolved_command.unwrap(), command.args.clone(), mode);
 
-        if result.is_err() {
+        if let Err(err_result) = result {
             eprintln!("{}: ERROR", command.name);
-            eprintln!("{:?}", result.unwrap_err());
+            err_result.split('\n').for_each(|err| eprintln!("{}", err));
         } else {
             println!("{}: OK", command.name);
         }
