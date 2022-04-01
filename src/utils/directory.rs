@@ -88,15 +88,11 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
     })
 }
 
-static DEFAULT_IGNORE: [&str; 3] = [".git", ".gitignore", ".gitmodules"];
-
+// TODO: improve this with a better regex approach :)
 fn is_ignored(path: &Path, source: &PathDir, ignore: &[Yaml]) -> bool {
     let path_str = path.strip_prefix(source).unwrap().to_str().unwrap();
 
-    let mut ignore_list = ignore.to_owned();
-    ignore_list.extend_from_slice(&DEFAULT_IGNORE.map(|s| Yaml::String(s.to_string())));
-
-    for ignore_path in ignore_list {
+    for ignore_path in ignore {
         let ignore_path = ignore_path.as_str().unwrap();
         if path_str.starts_with(ignore_path) {
             return true;

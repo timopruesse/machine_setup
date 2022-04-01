@@ -76,8 +76,6 @@ machine_setup uninstall
 
 This command copies the contents of a directory to another directory.
 
-> Hint: `.git`, `.gitignore`, and `.gitmodules` is automatically ignored. You should consider `clone` when working with git repositories.
-
 | argument | value                               | required | example                       |
 | -------- | ----------------------------------- | :------: | ----------------------------- |
 | src      | source directory                    |    ✅    | "./src/files"                 |
