@@ -1,5 +1,6 @@
 use core::fmt;
-use std::{collections::HashMap, process::Command};
+use std::{collections::HashMap, env, process::Command};
+use yaml_rust::yaml::Hash;
 use yaml_rust::Yaml;
 
 use crate::{
@@ -87,6 +88,7 @@ fn get_commands(args: Yaml, method: ShellMethod) -> Result<Vec<String>, String> 
     if arguments_are_named(Some(&args)) {
         let validation =
             validate_named_args(args.clone(), HashMap::from([(method_name.clone(), rules)]));
+
         if let Err(err_validation) = validation {
             return Err(format!("ERR: {}", err_validation));
         }
@@ -108,12 +110,63 @@ fn get_commands(args: Yaml, method: ShellMethod) -> Result<Vec<String>, String> 
     Ok(get_commands_from_yaml(args))
 }
 
+fn parse_environment_variables(args: Yaml) -> Result<Option<Hash>, String> {
+    if !arguments_are_named(Some(&args)) {
+        return Ok(None);
+    }
+
+    let hash = args.as_hash().unwrap();
+    if !hash.contains_key(&Yaml::String(String::from("env"))) {
+        return Ok(None);
+    }
+
+    let env = hash
+        .get(&Yaml::String(String::from("env")))
+        .unwrap()
+        .as_hash();
+
+    if env.is_none() {
+        return Err(String::from("ERR: env is not set correctly"));
+    }
+
+    Ok(Some(env.unwrap().to_owned()))
+}
+
+fn set_environment_variables(args: &Yaml) -> Result<(), String> {
+    let env = parse_environment_variables(args.to_owned());
+    if let Err(err_env) = env {
+        return Err(err_env);
+    }
+
+    let env = env.unwrap();
+    if let Some(env) = env {
+        println!("Setting environment...");
+        println!("-------------------");
+
+        for (key, value) in env {
+            let env_name = key.as_str().unwrap();
+            let env_value = value.as_str().unwrap();
+
+            env::set_var(env_name, env_value);
+            println!("{}={}", env_name, env_value);
+        }
+
+        println!("-------------------");
+    }
+
+    Ok(())
+}
+
 impl CommandInterface for ShellCommand {
     fn install(&self, args: Yaml) -> Result<(), String> {
-        let commands = get_commands(args, ShellMethod::Install);
+        let commands = get_commands(args.clone(), ShellMethod::Install);
 
         if let Err(err_commands) = commands {
             return Err(err_commands);
+        }
+
+        if let Err(err_env) = set_environment_variables(&args) {
+            return Err(err_env);
         }
 
         for command in commands.unwrap() {
@@ -131,10 +184,14 @@ impl CommandInterface for ShellCommand {
     }
 
     fn uninstall(&self, args: Yaml) -> Result<(), String> {
-        let commands = get_commands(args, ShellMethod::Uninstall);
+        let commands = get_commands(args.clone(), ShellMethod::Uninstall);
 
         if let Err(err_commands) = commands {
             return Err(err_commands);
+        }
+
+        if let Err(err_env) = set_environment_variables(&args) {
+            return Err(err_env);
         }
 
         for command in commands.unwrap() {
@@ -152,10 +209,14 @@ impl CommandInterface for ShellCommand {
     }
 
     fn update(&self, args: Yaml) -> Result<(), String> {
-        let commands = get_commands(args, ShellMethod::Update);
+        let commands = get_commands(args.clone(), ShellMethod::Update);
 
         if let Err(err_commands) = commands {
             return Err(err_commands);
+        }
+
+        if let Err(err_env) = set_environment_variables(&args) {
+            return Err(err_env);
         }
 
         for command in commands.unwrap() {
@@ -171,4 +232,11 @@ impl CommandInterface for ShellCommand {
 
         Ok(())
     }
+}
+
+// -- tests --
+
+#[cfg(test)]
+mod test {
+    // TODO: Add tests
 }

@@ -134,13 +134,14 @@ This command executes a shell command.
 > Hint: Avoid the usage of interactive commands when possible.
 
 By default, shell commands will be skipped when updating or uninstalling.  
-You can change that by prodiving the following arguments:
+You can change that by prodiving `update` and/or `uninstall`.
 
 | argument  | value                    | required | example                         |
 | --------- | ------------------------ | :------: | ------------------------------- |
 | install   | command for installing   |    ➖    | "sudo apt-get -y install git"   |
 | update    | command for updating     |    ➖    | "sudo apt-get -y upgrade git"   |
 | uninstall | command for uninstalling |    ➖    | "sudo apt-get -y uninstall git" |
+| env       | environment variables    |    ➖    | SOME_TOKEN: 'abc123'            |
 
 #### example
 
@@ -155,12 +156,16 @@ multiline_command:
 
 updatable_command:
   shell:
+    env:
+      SOME_TOKEN: "abc123"
     install: "sudo apt-get -y install git"
     update: "sudo apt-get -y upgrade git"
     uninstall: "sudo apt-get -y uninstall git"
 
 updatable_multiline_command:
   shell:
+    env:
+      SOME_TOKEN: "abc123"
     install:
       - "sudo apt update"
       - "sudo apt-get -y install git"
