@@ -105,6 +105,7 @@ mod test {
         let config = YamlConfig {};
         let result = config.read(src_path.to_str().unwrap());
 
-        assert!(result.unwrap_err().contains("no tasks found"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("ERR: No tasks defined"));
     }
 }
