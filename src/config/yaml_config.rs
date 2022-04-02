@@ -18,9 +18,8 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
     let config = YamlLoader::load_from_str(&contents).unwrap();
 
     let entries = &config[0];
-
-    if entries["tasks"] == Yaml::BadValue {
-        return Err(String::from("no tasks found"));
+    if entries["tasks"] == Yaml::BadValue || entries["tasks"] == Yaml::Null {
+        return Err(String::from("\nERR: No tasks defined"));
     }
 
     let mut tasks: Vec<Task> = vec![];

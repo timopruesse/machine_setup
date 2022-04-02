@@ -1,25 +1,15 @@
-use clap::Subcommand;
 use core::fmt;
-use std::str::FromStr;
 use yaml_rust::Yaml;
 
 use crate::{
     command::{get_command, CommandInterface},
-    config::{
-        base_config::{BaseConfig, Task},
-        yaml_config::YamlConfig,
-    },
+    config::base_config::{Task, TaskList},
 };
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug)]
 pub enum TaskRunnerMode {
-    /// Install all of the defined tasks
     Install,
-
-    /// Update all of the defined tasks
     Update,
-
-    /// Uninstall all of the defined tasks
     Uninstall,
 }
 
@@ -27,28 +17,6 @@ impl fmt::Display for TaskRunnerMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
-}
-
-impl FromStr for TaskRunnerMode {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "install" => Ok(TaskRunnerMode::Install),
-            "update" => Ok(TaskRunnerMode::Update),
-            "uninstall" => Ok(TaskRunnerMode::Uninstall),
-            _ => Err(format!("Invalid mode: {}", s)),
-        }
-    }
-}
-
-fn get_config_handler(config_path: &str) -> Result<Box<dyn BaseConfig>, String> {
-    let file_ending = config_path.split('.').last().unwrap();
-
-    return match file_ending {
-        file_ending if file_ending == "yml" || file_ending == "yaml" => Ok(Box::new(YamlConfig {})),
-        _ => Err(format!("Unsupported config file format: .{}", file_ending)),
-    };
 }
 
 fn run_command(
@@ -86,32 +54,18 @@ fn run_task(task: &Task, mode: &TaskRunnerMode) {
 }
 
 pub fn run(
-    config_path: &str,
+    task_list: TaskList,
     mode: TaskRunnerMode,
     task_name: Option<String>,
 ) -> Result<(), String> {
-    let config = get_config_handler(config_path);
-    if config.is_err() {
-        return Err(config.err().unwrap());
-    }
-    let config = config.unwrap();
-
-    let result = config.read(config_path);
-
-    if result.is_err() {
-        return Err(result.err().unwrap());
-    }
-
     match mode {
         TaskRunnerMode::Install => println!("\nInstalling..."),
         TaskRunnerMode::Update => println!("\nUpdating..."),
         TaskRunnerMode::Uninstall => println!("\nUninstalling..."),
     }
 
-    let task_list = result.unwrap().tasks;
-
     if let Some(task_name) = task_name {
-        let task = task_list.iter().find(|t| t.name == task_name);
+        let task = task_list.tasks.iter().find(|t| t.name == task_name);
         if task.is_none() {
             return Err(format!("Task \"{}\" not found", task_name));
         }
@@ -121,7 +75,7 @@ pub fn run(
         return Ok(());
     }
 
-    for task in task_list {
+    for task in task_list.tasks {
         run_task(&task, &mode);
     }
 
