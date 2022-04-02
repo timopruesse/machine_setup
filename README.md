@@ -16,6 +16,28 @@ For now, only `cargo install` is supported.
 cargo install machine_setup
 ```
 
+## Run
+
+Subcommands:
+
+| command   | description                   | example                   |
+| --------- | ----------------------------- | ------------------------- |
+| install   | install the defined tasks     | `machine_setup install`   |
+| update    | update the defined tasks      | `machine_setup update`    |
+| uninstall | uninstall the defined tasks   | `machine_setup uninstall` |
+| list      | list all of the defined tasks | `machine_setup list`      |
+
+By default, `machine_setup` will look for a file called `machine_setup.yaml`.
+
+Command line parameters:
+
+| flag             | value                                       | example                                           |
+| ---------------- | ------------------------------------------- | ------------------------------------------------- |
+| -c<br> --config  | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
+| -t<br> --task    | only run the specified task                 | `machine_setup install -t my_task2`               |
+| -h<br> --help    | display help information                    | `machine_setup --help`                            |
+| -v<br> --version | display version information                 | `machine_setup --version`                         |
+
 ## Configure
 
 Tasks can be defined under the `tasks` root key.  
@@ -43,36 +65,9 @@ tasks:
       target: "~/.dotfiles"
 ```
 
-## Run
+### Available config commands
 
-By default, `machine_setup` will look for a file called `machine_setup.yaml`.
-
-| flag            | value                                       | example                                           |
-| --------------- | ------------------------------------------- | ------------------------------------------------- |
-| -c<br> --config | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
-| -t<br> --task   | only run the specified task                 | `machine_setup install -t my_task2`               |
-
-### Install
-
-```bash
-machine_setup install
-```
-
-### Update
-
-```bash
-machine_setup update
-```
-
-### Uninstall
-
-```bash
-machine_setup uninstall
-```
-
-## Available commands
-
-### copy
+#### copy
 
 This command copies the contents of a directory to another directory.
 
@@ -82,7 +77,7 @@ This command copies the contents of a directory to another directory.
 | target   | target directory                    |    ✅    | "/tmp/target"                 |
 | ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"] |
 
-#### example
+##### example
 
 ```yaml
 copy:
@@ -91,7 +86,7 @@ copy:
   ignore: ["dist", "package-lock.json"]
 ```
 
-### clone
+#### clone
 
 This command clones a git repository to the specified destination.
 
@@ -100,7 +95,7 @@ This command clones a git repository to the specified destination.
 | url      | URL to a git repository |    ✅    | "git@github.com:Chroma91/machine_setup.git" |
 | target   | target directory        |    ✅    | "~/machine_setup"                           |
 
-#### example
+##### example
 
 ```yaml
 clone:
@@ -108,7 +103,7 @@ clone:
   target: "~/machine_setup"
 ```
 
-### symlink
+#### symlink
 
 This command symlinks all the files from the source directory to the target directory.
 
@@ -118,7 +113,7 @@ This command symlinks all the files from the source directory to the target dire
 | target   | target directory                    |    ✅    | "/tmp/target"                 |
 | ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"] |
 
-#### example
+##### example
 
 ```yaml
 symlink:
@@ -127,7 +122,7 @@ symlink:
   ignore: ["dist", "package-lock.json"]
 ```
 
-### shell
+#### shell
 
 This command executes a shell command.
 
@@ -143,7 +138,7 @@ You can change that by prodiving `update` and/or `uninstall`.
 | uninstall | command for uninstalling |    ➖    | "sudo apt-get -y uninstall git" |
 | env       | environment variables    |    ➖    | SOME_TOKEN: 'abc123'            |
 
-#### example
+##### example
 
 ```yaml
 inline_command:
@@ -181,4 +176,5 @@ updatable_multiline_command:
 
 ## TODOs
 
+- Add other binaries and installation options
 - Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
