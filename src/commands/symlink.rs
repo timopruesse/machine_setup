@@ -42,8 +42,8 @@ impl CommandInterface for SymlinkCommand {
         Ok(())
     }
 
-    fn update(&self, _args: Yaml) -> Result<(), String> {
-        unimplemented!()
+    fn update(&self, args: Yaml) -> Result<(), String> {
+        self.install(args)
     }
 }
 
