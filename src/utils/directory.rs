@@ -16,11 +16,11 @@ pub fn is_file_path(path: &PathArc) -> bool {
         .to_owned()
         .into_string()
         .unwrap()
-        .contains(".");
+        .contains('.');
 }
 
 fn create_missing_directories(path: &PathArc) -> Result<(), std::io::Error> {
-    if is_file_path(&path) {
+    if is_file_path(path) {
         let parent = path.parent();
 
         if parent.is_none() {
