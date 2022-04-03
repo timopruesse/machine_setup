@@ -1,4 +1,5 @@
 use core::fmt;
+use ergo_fs::PathArc;
 use std::{collections::HashMap, env, process::Command};
 use yaml_rust::yaml::Hash;
 use yaml_rust::Yaml;
@@ -9,6 +10,7 @@ use crate::{
         validation_rules::{is_array::IsArray, is_string::IsString, one_of::OneOf},
         validator::{arguments_are_named, validate_args, validate_named_args},
     },
+    utils::directory::expand_path,
 };
 
 pub struct ShellCommand {}
@@ -145,7 +147,12 @@ fn set_environment_variables(args: &Yaml) -> Result<(), String> {
 
         for (key, value) in env {
             let env_name = key.as_str().unwrap();
-            let env_value = value.as_str().unwrap();
+            let env_value_raw = value.as_str().unwrap();
+
+            let expanded_value =
+                expand_path(env_value_raw, false).unwrap_or_else(|_| PathArc::new(env_value_raw));
+
+            let env_value = expanded_value.to_str().unwrap();
 
             env::set_var(env_name, env_value);
             println!("{}={}", env_name, env_value);
