@@ -48,7 +48,7 @@ Every task can contain an arbitrary number of commands.
 | key           | description                                          | values        | default            |
 | ------------- | ---------------------------------------------------- | ------------- | ------------------ |
 | tasks         | root key for all of the tasks                        |               |
-| default_shell | the shell that is used when not specified by command | `bash`, `zsh` | `bash`             |
+| default_shell | shell that is used when not specified by the command | `bash`, `zsh` | `bash`             |
 | temp_dir      | define where temporary files are stored              |               | `~/.machine_setup` |
 
 > **Hint**  
