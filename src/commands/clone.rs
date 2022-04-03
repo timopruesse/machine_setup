@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use ergo_fs::PathDir;
+use ergo_fs::PathArc;
 use git_commands::git;
 use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
     config::{validation_rules::required::Required, validator::validate_named_args},
-    utils::directory::expand_dir,
+    utils::directory::expand_path,
 };
 
 pub struct CloneCommand {}
@@ -44,7 +44,7 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir = expand_dir(target, true);
+        let expanded_target_dir = expand_path(target, true);
         if let Err(err_expand_dir) = expanded_target_dir {
             return Err(err_expand_dir);
         }
@@ -76,7 +76,7 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir = expand_dir(target, false);
+        let expanded_target_dir = expand_path(target, false);
         if let Err(err_expand_target) = expanded_target_dir {
             return Err(err_expand_target);
         }
@@ -108,7 +108,7 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir = expand_dir(target, false);
+        let expanded_target_dir = expand_path(target, true);
         if let Err(err_expand_dir) = expanded_target_dir {
             return Err(err_expand_dir);
         }
@@ -123,7 +123,7 @@ impl CommandInterface for CloneCommand {
     }
 }
 
-pub fn clone_repository(url: &str, target: &PathDir) -> Result<(), String> {
+pub fn clone_repository(url: &str, target: &PathArc) -> Result<(), String> {
     println!("Cloning {} into {} ...", url, target.to_str().unwrap());
 
     let clone_result = git(&["clone", url, "."], target);
@@ -134,7 +134,7 @@ pub fn clone_repository(url: &str, target: &PathDir) -> Result<(), String> {
     Ok(())
 }
 
-pub fn remove_repository(target: &PathDir) -> Result<(), String> {
+pub fn remove_repository(target: &PathArc) -> Result<(), String> {
     println!("Removing {} ...", target.to_str().unwrap());
 
     let remove_result = std::fs::remove_dir_all(target);
@@ -145,7 +145,7 @@ pub fn remove_repository(target: &PathDir) -> Result<(), String> {
     Ok(())
 }
 
-pub fn update_repository(target: &PathDir) -> Result<(), String> {
+pub fn update_repository(target: &PathArc) -> Result<(), String> {
     println!("Updating {} ...", target.to_str().unwrap());
 
     let update_result = git(&["pull"], target);
@@ -167,7 +167,7 @@ mod test {
         let target = tempfile::tempdir().unwrap();
         let target_path = target.path().to_str().unwrap();
 
-        let result = remove_repository(&PathDir::new(target_path).unwrap());
+        let result = remove_repository(&PathArc::new(target_path));
         assert!(result.is_ok());
         assert!(!target.path().exists());
     }

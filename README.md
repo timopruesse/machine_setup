@@ -71,11 +71,11 @@ tasks:
 
 This command copies the contents of a directory to another directory.
 
-| argument | value                               | required | example                       |
-| -------- | ----------------------------------- | :------: | ----------------------------- |
-| src      | source directory                    |    ✅    | "./src/files"                 |
-| target   | target directory                    |    ✅    | "/tmp/target"                 |
-| ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"] |
+| argument | value                               | required | example                                |
+| -------- | ----------------------------------- | :------: | -------------------------------------- |
+| src      | source directory/file               |    ✅    | "./src/files" or "./src/test.txt"      |
+| target   | target directory/file               |    ✅    | "/tmp/target" or "/tmp/target/new.txt" |
+| ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"]          |
 
 ##### example
 
@@ -107,11 +107,11 @@ clone:
 
 This command symlinks all the files from the source directory to the target directory.
 
-| argument | value                               | required | example                       |
-| -------- | ----------------------------------- | :------: | ----------------------------- |
-| src      | source directory                    |    ✅    | "./src/files"                 |
-| target   | target directory                    |    ✅    | "/tmp/target"                 |
-| ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"] |
+| argument | value                               | required | example                           |
+| -------- | ----------------------------------- | :------: | --------------------------------- |
+| src      | source directory/file               |    ✅    | "./src/files" or "./src/test.txt" |
+| target   | target directory/file               |    ✅    | "/tmp/target" or "/tmp/new.txt"   |
+| ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"]     |
 
 ##### example
 

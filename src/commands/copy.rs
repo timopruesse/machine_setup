@@ -1,11 +1,11 @@
-use ergo_fs::{Path, PathDir};
+use ergo_fs::{Path, PathArc};
 use std::{collections::HashMap, fs};
 use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
     config::{validation_rules::required::Required, validator::validate_named_args},
-    utils::directory::{expand_dir, get_source_and_target, walk_files, DIR_TARGET},
+    utils::directory::{expand_path, get_source_and_target, walk_files, DIR_TARGET},
 };
 
 pub struct CopyDirCommand {}
@@ -69,7 +69,7 @@ fn target_file_is_newer(file_src: &Path, file_target: &Path) -> bool {
 }
 
 fn copy_files(
-    source_dir: &PathDir,
+    source_dir: &PathArc,
     destination_dir: &Path,
     ignore: Vec<Yaml>,
 ) -> Result<(), String> {
@@ -108,13 +108,13 @@ fn copy_files(
 }
 
 pub fn copy_dir(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<(), String> {
-    let expanded_source = expand_dir(source, false);
+    let expanded_source = expand_path(source, false);
     if let Err(err_expand_src) = expanded_source {
         return Err(err_expand_src);
     }
     let source_dir = expanded_source.to_owned().unwrap();
 
-    let expanded_destination = expand_dir(destination, true);
+    let expanded_destination = expand_path(destination, true);
     if let Err(err_expand_dest) = expanded_destination {
         return Err(err_expand_dest);
     }
@@ -131,7 +131,7 @@ pub fn copy_dir(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<()
 }
 
 pub fn remove_dir(target: &str) -> Result<(), String> {
-    let expanded_target_dir = expand_dir(target, false);
+    let expanded_target_dir = expand_path(target, false);
     if expanded_target_dir.is_err() {
         return Err(expanded_target_dir.err().unwrap());
     }
@@ -152,13 +152,6 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
 mod test {
     use super::*;
     use tempfile::{tempdir, tempfile_in, NamedTempFile};
-
-    #[test]
-    fn it_fails_when_src_dir_doesnt_exist() {
-        assert!(copy_dir("invalid", "invalid", vec![])
-            .unwrap_err()
-            .contains("path is not a dir when resolving"));
-    }
 
     #[test]
     fn it_fails_when_dirs_are_the_same() {

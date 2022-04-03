@@ -1,10 +1,10 @@
-use ergo_fs::{Path, PathDir};
+use ergo_fs::{Path, PathArc};
 use symlink::{remove_symlink_file, symlink_file};
 use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
-    utils::directory::{expand_dir, get_source_and_target, walk_files},
+    utils::directory::{expand_path, get_source_and_target, walk_files},
 };
 
 pub struct SymlinkCommand {}
@@ -48,12 +48,12 @@ impl CommandInterface for SymlinkCommand {
 }
 
 fn link_files(
-    source_dir: &PathDir,
+    source_dir: &PathArc,
     destination_dir: &Path,
     ignore: Vec<Yaml>,
 ) -> Result<(), String> {
     println!(
-        "Creating symlinks: {} -> {} ...",
+        "Creating symlinks: {} -> {} ...\n",
         source_dir.to_string(),
         destination_dir.to_str().unwrap()
     );
@@ -64,6 +64,7 @@ fn link_files(
             src.to_str().unwrap(),
             target.to_str().unwrap()
         );
+
         symlink_file(src, target)
             .map_err(|e| format!("Failed to link file: {}", e))
             .ok();
@@ -76,7 +77,7 @@ fn link_files(
     Ok(())
 }
 
-fn unlink_files(source_dir: &PathDir, destination_dir: &Path) -> Result<(), String> {
+fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), String> {
     println!(
         "Unlinking files in {} ...",
         destination_dir.to_str().unwrap()
@@ -97,7 +98,7 @@ fn unlink_files(source_dir: &PathDir, destination_dir: &Path) -> Result<(), Stri
 }
 
 pub fn create_symlink(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<(), String> {
-    let expanded_source = expand_dir(source, false);
+    let expanded_source = expand_path(source, false);
     if let Err(err_expand_src) = expanded_source {
         return Err(err_expand_src);
     }
@@ -107,7 +108,7 @@ pub fn create_symlink(source: &str, destination: &str, ignore: Vec<Yaml>) -> Res
         return Err(format!("Source directory does not exist: {}", source));
     }
 
-    let expanded_destination = expand_dir(destination, true);
+    let expanded_destination = expand_path(destination, true);
     if let Err(err_expand_dest) = expanded_destination {
         return Err(err_expand_dest);
     }
@@ -130,13 +131,13 @@ pub fn create_symlink(source: &str, destination: &str, ignore: Vec<Yaml>) -> Res
 }
 
 pub fn remove_symlink(source: &str, destination: &str) -> Result<(), String> {
-    let expanded_source = expand_dir(source, false);
+    let expanded_source = expand_path(source, false);
     if let Err(err_expand_src) = expanded_source {
         return Err(err_expand_src);
     }
     let source_dir = expanded_source.to_owned().unwrap();
 
-    let expanded_destination = expand_dir(destination, false);
+    let expanded_destination = expand_path(destination, false);
     if let Err(err_expand_dest) = expanded_destination {
         return Err(err_expand_dest);
     }
@@ -160,13 +161,6 @@ mod test {
     use super::*;
     use std::{fs::File, vec};
     use tempfile::tempdir;
-
-    #[test]
-    fn it_fails_when_src_dir_doesnt_exist() {
-        assert!(create_symlink("invalid", "invalid", vec![])
-            .unwrap_err()
-            .contains("path is not a dir when resolving"));
-    }
 
     #[test]
     fn it_fails_when_dirs_are_the_same() {
