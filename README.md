@@ -177,4 +177,5 @@ updatable_multiline_command:
 ## TODOs
 
 - Add other binaries and installation options
+- add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 - Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
