@@ -1,5 +1,7 @@
 use yaml_rust::Yaml;
 
+use crate::utils::shell::Shell;
+
 use super::yaml_config::YamlConfig;
 
 #[derive(Debug)]
@@ -17,6 +19,8 @@ pub struct Task {
 #[derive(Debug)]
 pub struct TaskList {
     pub tasks: Vec<Task>,
+    pub temp_dir: String,
+    pub default_shell: Shell,
 }
 
 pub trait BaseConfig {

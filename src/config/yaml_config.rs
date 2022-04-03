@@ -2,8 +2,8 @@ extern crate yaml_rust;
 
 use yaml_rust::{Yaml, YamlLoader};
 
-use crate::config::base_config::*;
-use std::{io::Read, path::Path};
+use crate::{config::base_config::*, utils::shell::Shell};
+use std::{io::Read, path::Path, str::FromStr};
 
 #[derive(Debug)]
 pub struct YamlConfig {}
@@ -50,7 +50,27 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
         tasks.push(task);
     }
 
-    Ok(TaskList { tasks })
+    let temp_dir = entries["temp_dir"]
+        .as_str()
+        .unwrap_or("~/.machine_setup")
+        .to_string();
+
+    let default_shell_str = entries["default_shell"]
+        .as_str()
+        .unwrap_or("bash")
+        .to_string();
+
+    let default_shell = Shell::from_str(&default_shell_str);
+    if let Err(err_shell) = default_shell {
+        return Err(format!("ERR: default_shell is incorrect: {}", err_shell));
+    }
+    let default_shell = default_shell.unwrap();
+
+    Ok(TaskList {
+        tasks,
+        temp_dir,
+        default_shell,
+    })
 }
 
 impl BaseConfig for YamlConfig {

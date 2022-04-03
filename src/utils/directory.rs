@@ -8,15 +8,18 @@ use yaml_rust::Yaml;
 use crate::config::{validation_rules::required::Required, validator::validate_named_args};
 
 pub fn is_file_path(path: &PathArc) -> bool {
-    return path
+    let last_component = path
         .components()
         .last()
         .unwrap()
         .as_os_str()
         .to_owned()
         .into_string()
-        .unwrap()
-        .contains('.');
+        .unwrap();
+
+    let dot_index = last_component.find('.').unwrap_or(0);
+
+    return dot_index != 0;
 }
 
 fn create_missing_directories(path: &PathArc) -> Result<(), std::io::Error> {

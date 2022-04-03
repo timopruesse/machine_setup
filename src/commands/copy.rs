@@ -5,13 +5,16 @@ use yaml_rust::Yaml;
 use crate::{
     command::CommandInterface,
     config::{validation_rules::required::Required, validator::validate_named_args},
-    utils::directory::{expand_path, get_source_and_target, walk_files, DIR_TARGET},
+    utils::{
+        directory::{expand_path, get_source_and_target, walk_files, DIR_TARGET},
+        shell::Shell,
+    },
 };
 
 pub struct CopyDirCommand {}
 
 impl CommandInterface for CopyDirCommand {
-    fn install(&self, args: Yaml) -> Result<(), String> {
+    fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if let Err(err_dirs) = dirs {
             return Err(err_dirs);
@@ -26,7 +29,7 @@ impl CommandInterface for CopyDirCommand {
         Ok(())
     }
 
-    fn uninstall(&self, args: Yaml) -> Result<(), String> {
+    fn uninstall(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let validation = validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from(DIR_TARGET), vec![&Required {}])]),
@@ -52,8 +55,9 @@ impl CommandInterface for CopyDirCommand {
         Ok(())
     }
 
-    fn update(&self, _args: Yaml) -> Result<(), String> {
-        unimplemented!()
+    fn update(&self, _args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
+        println!("update not implemented for copy command");
+        Ok(())
     }
 }
 

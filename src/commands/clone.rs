@@ -7,13 +7,13 @@ use yaml_rust::Yaml;
 use crate::{
     command::CommandInterface,
     config::{validation_rules::required::Required, validator::validate_named_args},
-    utils::directory::expand_path,
+    utils::{directory::expand_path, shell::Shell},
 };
 
 pub struct CloneCommand {}
 
 impl CommandInterface for CloneCommand {
-    fn install(&self, args: Yaml) -> Result<(), String> {
+    fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let rules = vec![&Required {}];
 
         let validation = validate_named_args(
@@ -58,7 +58,7 @@ impl CommandInterface for CloneCommand {
         Ok(())
     }
 
-    fn uninstall(&self, args: Yaml) -> Result<(), String> {
+    fn uninstall(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let validation = validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from("target"), vec![&Required {}])]),
@@ -90,7 +90,7 @@ impl CommandInterface for CloneCommand {
         Ok(())
     }
 
-    fn update(&self, args: Yaml) -> Result<(), String> {
+    fn update(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let validation = validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from("target"), vec![&Required {}])]),

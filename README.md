@@ -45,6 +45,12 @@ Command line parameters:
 Tasks can be defined under the `tasks` root key.  
 Every task can contain an arbitrary number of commands.
 
+| key           | description                                          | values        | default            |
+| ------------- | ---------------------------------------------------- | ------------- | ------------------ |
+| tasks         | root key for all of the tasks                        |               |
+| default_shell | the shell that is used when not specified by command | `bash`, `zsh` | `bash`             |
+| temp_dir      | define where temporary files are stored              |               | `~/.machine_setup` |
+
 > **Hint**  
 > Currently, there can only be one command of the same type per task.  
 > The last command in a task will take precedence.  
@@ -53,6 +59,8 @@ Every task can contain an arbitrary number of commands.
 Check out the example configuration below:
 
 ```yaml
+temp_dir: "~/my_temp" # defaults to "~/.machine_setup"
+default_shell: "zsh" # defaults to "bash"
 tasks:
   my_task1:
     copy:
@@ -124,54 +132,64 @@ symlink:
   ignore: ["dist", "package-lock.json"]
 ```
 
-#### shell
+#### run
 
 This command executes a shell command.
 
 > Hint: Avoid the usage of interactive commands when possible.
 
+| argument | description           | required | default | values        |
+| -------- | --------------------- | :------: | ------- | ------------- |
+| env      | environment variables |    ➖    |         |               |
+| shell    | shell that is used    |    ➖    | "bash"  | "bash", "zsh" |
+
 By default, shell commands will be skipped when updating or uninstalling.  
 You can change that by prodiving `update` and/or `uninstall`.
 
-| argument  | value                    | required | example                         |
+The following arguments can be passed to `commands`:
+
+| argument  | description              | required | example                         |
 | --------- | ------------------------ | :------: | ------------------------------- |
 | install   | command for installing   |    ➖    | "sudo apt-get -y install git"   |
 | update    | command for updating     |    ➖    | "sudo apt-get -y upgrade git"   |
 | uninstall | command for uninstalling |    ➖    | "sudo apt-get -y uninstall git" |
-| env       | environment variables    |    ➖    | SOME_TOKEN: 'abc123'            |
 
 ##### example
 
 ```yaml
 inline_command:
-  shell: "sudo apt-get -y install git"
+  run:
+    commands: "sudo apt-get -y install git"
 
 multiline_command:
-  shell:
-    - "sudo apt-get update"
-    - "sudo apt-get -y install git"
+  run:
+    commands:
+      - "sudo apt-get update"
+      - "sudo apt-get -y install git"
 
 updatable_command:
-  shell:
+  run:
     env:
       SOME_TOKEN: "abc123"
-    install: "sudo apt-get -y install git"
-    update: "sudo apt-get -y upgrade git"
-    uninstall: "sudo apt-get -y uninstall git"
+    commands:
+      install: "sudo apt-get -y install git"
+      update: "sudo apt-get -y upgrade git"
+      uninstall: "sudo apt-get -y uninstall git"
 
 updatable_multiline_command:
-  shell:
+  run:
     env:
       SOME_TOKEN: "abc123"
-    install:
-      - "sudo apt update"
-      - "sudo apt-get -y install git"
-    update:
-      - "sudo apt-get -y upgrade git"
-      - ...
-    uninstall:
-      - "sudo apt-get -y uninstall git"
-      - ...
+    commands:
+      install:
+        - "sudo apt update"
+        - "sudo apt-get -y install git"
+      update:
+        - "sudo apt-get -y upgrade git"
+        - ...
+      uninstall:
+        - "sudo apt-get -y uninstall git"
+        - ...
 ```
 
 ---

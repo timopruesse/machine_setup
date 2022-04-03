@@ -4,13 +4,16 @@ use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
-    utils::directory::{expand_path, get_source_and_target, walk_files},
+    utils::{
+        directory::{expand_path, get_source_and_target, walk_files},
+        shell::Shell,
+    },
 };
 
 pub struct SymlinkCommand {}
 
 impl CommandInterface for SymlinkCommand {
-    fn install(&self, args: Yaml) -> Result<(), String> {
+    fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if let Err(err_dirs) = dirs {
             return Err(err_dirs);
@@ -26,7 +29,7 @@ impl CommandInterface for SymlinkCommand {
         Ok(())
     }
 
-    fn uninstall(&self, args: Yaml) -> Result<(), String> {
+    fn uninstall(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if dirs.is_err() {
             return Err(dirs.err().unwrap());
@@ -42,8 +45,8 @@ impl CommandInterface for SymlinkCommand {
         Ok(())
     }
 
-    fn update(&self, args: Yaml) -> Result<(), String> {
-        self.install(args)
+    fn update(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
+        self.install(args, temp_dir, default_shell)
     }
 }
 

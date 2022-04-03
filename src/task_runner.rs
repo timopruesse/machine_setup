@@ -4,6 +4,7 @@ use yaml_rust::Yaml;
 use crate::{
     command::{get_command, CommandInterface},
     config::base_config::{Task, TaskList},
+    utils::shell::Shell,
 };
 
 #[derive(Debug)]
@@ -15,7 +16,13 @@ pub enum TaskRunnerMode {
 
 impl fmt::Display for TaskRunnerMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+        let mode = match self {
+            TaskRunnerMode::Install => "install",
+            TaskRunnerMode::Update => "update",
+            TaskRunnerMode::Uninstall => "uninstall",
+        };
+
+        write!(f, "{}", mode)
     }
 }
 
@@ -23,15 +30,17 @@ fn run_command(
     command: Box<dyn CommandInterface>,
     args: Yaml,
     mode: &TaskRunnerMode,
+    temp_dir: &str,
+    default_shell: &Shell,
 ) -> Result<(), String> {
     match mode {
-        TaskRunnerMode::Install => command.install(args),
-        TaskRunnerMode::Update => command.update(args),
-        TaskRunnerMode::Uninstall => command.uninstall(args),
+        TaskRunnerMode::Install => command.install(args, temp_dir, default_shell),
+        TaskRunnerMode::Update => command.update(args, temp_dir, default_shell),
+        TaskRunnerMode::Uninstall => command.uninstall(args, temp_dir, default_shell),
     }
 }
 
-fn run_task(task: &Task, mode: &TaskRunnerMode) {
+fn run_task(task: &Task, mode: &TaskRunnerMode, temp_dir: &str, default_shell: &Shell) {
     println!("\nRunning task \"{}\" ...", task.name);
 
     let commands = &task.commands;
@@ -42,7 +51,13 @@ fn run_task(task: &Task, mode: &TaskRunnerMode) {
             continue;
         }
 
-        let result = run_command(resolved_command.unwrap(), command.args.clone(), mode);
+        let result = run_command(
+            resolved_command.unwrap(),
+            command.args.clone(),
+            mode,
+            temp_dir,
+            default_shell,
+        );
 
         if let Err(err_result) = result {
             eprintln!("{}: ERROR", command.name);
@@ -70,13 +85,23 @@ pub fn run(
             return Err(format!("Task \"{}\" not found", task_name));
         }
 
-        run_task(task.unwrap(), &mode);
+        run_task(
+            task.unwrap(),
+            &mode,
+            task_list.temp_dir.as_str(),
+            &task_list.default_shell,
+        );
 
         return Ok(());
     }
 
     for task in task_list.tasks {
-        run_task(&task, &mode);
+        run_task(
+            &task,
+            &mode,
+            task_list.temp_dir.as_str(),
+            &task_list.default_shell,
+        );
     }
 
     Ok(())
