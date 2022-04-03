@@ -39,7 +39,7 @@ pub fn create_script_file(
 ) -> Result<String, String> {
     let temp_file = create_temp_file("sh", temp_dir);
     if let Err(err_temp_file) = temp_file {
-        return Err(err_temp_file.to_string());
+        return Err(err_temp_file);
     }
     let temp_file = temp_file.unwrap();
     let mut file = temp_file.file;
@@ -47,10 +47,10 @@ pub fn create_script_file(
 
     match shell {
         Shell::Zsh => file
-            .write_all(format!("#!/bin/zsh\nsource $HOME/.zshrc\n").as_bytes())
+            .write_all(String::from("#!/bin/zsh\nsource $HOME/.zshrc\n").as_bytes())
             .unwrap(),
         Shell::Bash => file
-            .write_all(format!("#!/bin/bash\nsource $HOME/.bashrc\n").as_bytes())
+            .write_all(String::from("#!/bin/bash\nsource $HOME/.bashrc\n").as_bytes())
             .unwrap(),
     }
 

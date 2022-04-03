@@ -19,7 +19,7 @@ pub fn is_file_path(path: &PathArc) -> bool {
 
     let dot_index = last_component.find('.').unwrap_or(0);
 
-    return dot_index != 0;
+    dot_index != 0
 }
 
 fn create_missing_directories(path: &PathArc) -> Result<(), std::io::Error> {

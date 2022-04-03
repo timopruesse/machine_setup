@@ -132,8 +132,8 @@ impl CommandInterface for RunCommand {
         }
 
         let result = run_commands(
-            &param_commands,
-            &param_shell,
+            param_commands,
+            param_shell,
             TaskRunnerMode::Install,
             temp_dir,
         );
@@ -144,7 +144,7 @@ impl CommandInterface for RunCommand {
 
         let result = result.unwrap();
 
-        result.split("\n").for_each(|line| println!("{}", line));
+        result.split('\n').for_each(|line| println!("{}", line));
 
         Ok(())
     }
