@@ -6,7 +6,9 @@ The idea is to be able to replicate a certain setup (when reseting your machine 
 Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.  
 So, it will help with managing dotfiles, symlinks, etc.
 
-It can also be used for other tasks, e.g. to ease the onboarding process of a new colleague by providing a config that installs certain dependencies and checks out important repositories.
+A real world example can be found in my [.dotfiles repository](https://github.com/Chroma91/.dotfiles/blob/main/machine_setup.yaml).
+
+You can also use it for other tasks such as making the onboarding process of a new colleague easier by providing them a config that installs certain dependencies and checks out important repositories.
 
 ## Install
 
@@ -177,4 +179,5 @@ updatable_multiline_command:
 ## TODOs
 
 - Add other binaries and installation options
+- add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 - Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
