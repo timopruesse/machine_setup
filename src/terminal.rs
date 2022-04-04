@@ -94,8 +94,6 @@ pub fn execute_command() {
                 eprintln!("{}", run.unwrap_err());
                 std::process::exit(1);
             }
-
-            println!("\n... DONE ...");
         }
         SubCommand::List => {
             println!("\nTasks:");

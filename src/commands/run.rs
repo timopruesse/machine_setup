@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fs::remove_file, process::Command, str::FromStr};
+use std::{
+    collections::HashMap,
+    fs::remove_file,
+    process::{Command, Stdio},
+    str::FromStr,
+};
 use yaml_rust::Yaml;
 
 use crate::{
@@ -84,7 +89,12 @@ fn run_commands(
     }
     let temp_script = temp_script.unwrap();
 
-    let command = Command::new(shell).arg("-c").arg(&temp_script).output();
+    let command = Command::new(shell)
+        .arg("-c")
+        .arg(&temp_script)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output();
 
     remove_file(temp_script).ok();
 
@@ -96,7 +106,7 @@ fn run_commands(
 
     let mut stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
     if stdout.is_empty() {
-        stdout = String::from("OK");
+        stdout = String::from("\n");
     }
 
     if !output.status.success() {
