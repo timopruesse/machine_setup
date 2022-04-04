@@ -1,7 +1,7 @@
 use ergo_fs::{expand, Path, PathArc, WalkDir};
 use std::{
     collections::HashMap,
-    fs::{self, create_dir_all},
+    fs::{canonicalize, create_dir_all},
 };
 use yaml_rust::Yaml;
 
@@ -106,8 +106,13 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
         .unwrap()
         .to_owned();
 
+    let src_absolute = canonicalize(src_dir);
+    if let Err(err_abs_src) = src_absolute {
+        return Err(err_abs_src.to_string())
+    }
+
     Ok(Dirs {
-        src: src_dir.to_string(),
+        src: src_absolute.unwrap().into_os_string().into_string().unwrap(),
         target: target_dir.to_string(),
         ignore,
     })
@@ -174,7 +179,7 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
         let destination_path = target.join(source_path.strip_prefix(&source).unwrap());
 
         if source_path.is_dir() {
-            let create_result = fs::create_dir_all(&destination_path);
+            let create_result = create_dir_all(&destination_path);
             if let Err(err_create) = create_result {
                 return Err(err_create.to_string());
             }
