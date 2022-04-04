@@ -75,6 +75,22 @@ tasks:
       target: "~/.dotfiles"
 ```
 
+### Extend a configuration
+
+Extensibility is not explicitly built in.
+However, it's possible to execute tasks from another configuration via the `run` command.
+You could also only execute a single task by providing the `task` argument.
+
+```yaml
+tasks:
+  my_other_config:
+    run:
+      commands:
+        install: "machine_setup install -c ./my_other_config.yaml"
+        update: "machine_setup update -c ./my_other_config.yaml"
+        uninstall: "machine_setup uninstall -c ./my_other_config.yaml"
+```
+
 ### Available config commands
 
 #### copy
@@ -197,5 +213,9 @@ updatable_multiline_command:
 ## TODOs
 
 - Add other binaries and installation options
-- add option to run `copy` and `symlink` as root user (needed to move/link some system files)
+- Improve the terminal output
+  - make it look nicer (colors!!)
+  - hide most of it behind a `--verbose` flag
+  - better output from `run` commands 
+- Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 - Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
