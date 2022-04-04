@@ -108,11 +108,15 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
 
     let src_absolute = canonicalize(src_dir);
     if let Err(err_abs_src) = src_absolute {
-        return Err(err_abs_src.to_string())
+        return Err(err_abs_src.to_string());
     }
 
     Ok(Dirs {
-        src: src_absolute.unwrap().into_os_string().into_string().unwrap(),
+        src: src_absolute
+            .unwrap()
+            .into_os_string()
+            .into_string()
+            .unwrap(),
         target: target_dir.to_string(),
         ignore,
     })
