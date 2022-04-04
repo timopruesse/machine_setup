@@ -12,8 +12,30 @@ use crate::{
 
 pub struct CloneCommand {}
 
+fn get_installed_repo_url(target_dir: &PathArc) -> Result<String, String> {
+    let result = git(&["config", "--get", "remote.origin.url"], &target_dir);
+    if let Err(err_result) = result {
+        return Err(err_result.to_string());
+    }
+
+    Ok(String::from_utf8(result.unwrap().stdout)
+        .unwrap()
+        .trim()
+        .to_string())
+}
+
+fn is_repo_installed(url: &str, target_dir: &PathArc) -> bool {
+    let installed_repo_url = get_installed_repo_url(target_dir);
+    if installed_repo_url.is_err() {
+        return false;
+    }
+    let installed_repo_url = installed_repo_url.unwrap();
+
+    installed_repo_url == url
+}
+
 impl CommandInterface for CloneCommand {
-    fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
+    fn install(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
         let rules = vec![&Required {}];
 
         let validation = validate_named_args(
@@ -49,6 +71,15 @@ impl CommandInterface for CloneCommand {
             return Err(err_expand_dir);
         }
         let expanded_target_dir = expanded_target_dir.unwrap();
+
+        if is_repo_installed(url, &expanded_target_dir) {
+            println!("The repository was already cloned. Updating...");
+            let update_result = self.update(args, temp_dir, default_shell);
+            if let Err(err_update) = update_result {
+                return Err(err_update);
+            }
+            return Ok(());
+        }
 
         let result = clone_repository(url, &expanded_target_dir);
         if let Err(err_result) = result {
