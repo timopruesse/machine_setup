@@ -112,54 +112,53 @@ fn run_commands(
     Ok(stdout)
 }
 
+fn run_task(
+    mode: TaskRunnerMode,
+    args: Yaml,
+    temp_dir: &str,
+    default_shell: &Shell,
+) -> Result<(), String> {
+    let parameters = args.as_hash().unwrap();
+
+    let param_commands = parameters
+        .get(&Yaml::String(String::from("commands")))
+        .unwrap();
+
+    let default_shell = Yaml::String(default_shell.to_string());
+    let param_shell = parameters
+        .get(&Yaml::String(String::from("shell")))
+        .unwrap_or(&default_shell)
+        .as_str()
+        .unwrap();
+
+    if let Err(err_env) = set_environment_variables(&args) {
+        return Err(err_env);
+    }
+
+    let result = run_commands(param_commands, param_shell, mode, temp_dir);
+
+    if let Err(err_result) = result {
+        return Err(err_result);
+    }
+
+    let result = result.unwrap();
+
+    result.split('\n').for_each(|line| println!("{}", line));
+
+    Ok(())
+}
+
 impl CommandInterface for RunCommand {
     fn install(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
-        let parameters = args.as_hash().unwrap();
-
-        let param_commands = parameters
-            .get(&Yaml::String(String::from("commands")))
-            .unwrap();
-
-        let default_shell = Yaml::String(default_shell.to_string());
-        let param_shell = parameters
-            .get(&Yaml::String(String::from("shell")))
-            .unwrap_or(&default_shell)
-            .as_str()
-            .unwrap();
-
-        if let Err(err_env) = set_environment_variables(&args) {
-            return Err(err_env);
-        }
-
-        let result = run_commands(
-            param_commands,
-            param_shell,
-            TaskRunnerMode::Install,
-            temp_dir,
-        );
-
-        if let Err(err_result) = result {
-            return Err(err_result);
-        }
-
-        let result = result.unwrap();
-
-        result.split('\n').for_each(|line| println!("{}", line));
-
-        Ok(())
+        run_task(TaskRunnerMode::Install, args, temp_dir, default_shell)
     }
 
-    fn uninstall(
-        &self,
-        _args: Yaml,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
-        Ok(())
+    fn uninstall(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
+        run_task(TaskRunnerMode::Uninstall, args, temp_dir, default_shell)
     }
 
-    fn update(&self, _args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
-        Ok(())
+    fn update(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
+        run_task(TaskRunnerMode::Update, args, temp_dir, default_shell)
     }
 }
 
