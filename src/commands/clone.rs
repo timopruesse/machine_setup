@@ -13,7 +13,7 @@ use crate::{
 pub struct CloneCommand {}
 
 fn get_installed_repo_url(target_dir: &PathArc) -> Result<String, String> {
-    let result = git(&["config", "--get", "remote.origin.url"], &target_dir);
+    let result = git(&["config", "--get", "remote.origin.url"], target_dir);
     if let Err(err_result) = result {
         return Err(err_result.to_string());
     }
