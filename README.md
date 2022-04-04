@@ -216,6 +216,5 @@ updatable_multiline_command:
 - Improve the terminal output
   - make it look nicer (colors!!)
   - hide most of it behind a `--verbose` flag
-  - better output from `run` commands 
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 - Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
