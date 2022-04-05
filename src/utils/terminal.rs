@@ -1,6 +1,6 @@
-use std::env;
-
+use ansi_term::Color::White;
 use ergo_fs::PathArc;
+use std::env;
 use yaml_rust::yaml::Hash;
 use yaml_rust::Yaml;
 
@@ -23,7 +23,7 @@ fn parse_environment_variables(args: Yaml) -> Result<Option<Hash>, String> {
         .as_hash();
 
     if env.is_none() {
-        return Err(String::from("ERR: env is not set correctly"));
+        return Err(String::from("env is not set correctly"));
     }
 
     Ok(Some(env.unwrap().to_owned()))
@@ -37,8 +37,8 @@ pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
 
     let env = env.unwrap();
     if let Some(env) = env {
-        println!("Setting environment...");
-        println!("-------------------");
+        println!("Environment");
+        println!("-----------------------------");
 
         for (key, value) in env {
             let env_name = key.as_str().unwrap();
@@ -50,10 +50,10 @@ pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
             let env_value = expanded_value.to_str().unwrap();
 
             env::set_var(env_name, env_value);
-            println!("{}={}", env_name, env_value);
+            println!("{}={}", env_name, White.bold().paint(env_value));
         }
 
-        println!("-------------------");
+        println!("-----------------------------");
     }
 
     Ok(())

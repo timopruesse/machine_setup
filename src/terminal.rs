@@ -73,7 +73,7 @@ pub fn execute_command() {
     let config_path = expand(&args.config);
     if let Err(err_config_path) = config_path {
         eprintln!("{}", Red.paint(err_config_path.to_string()));
-        std::process::exit(1);
+        return;
     }
 
     let config = get_config(&config_path.unwrap().to_string());

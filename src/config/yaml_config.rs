@@ -1,5 +1,6 @@
 extern crate yaml_rust;
 
+use ansi_term::Color::White;
 use yaml_rust::{Yaml, YamlLoader};
 
 use crate::{config::base_config::*, utils::shell::Shell};
@@ -19,7 +20,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
 
     let entries = &config[0];
     if entries["tasks"] == Yaml::BadValue || entries["tasks"] == Yaml::Null {
-        return Err(String::from("\nERR: No tasks defined"));
+        return Err(String::from("\nNo tasks defined"));
     }
 
     let mut tasks: Vec<Task> = vec![];
@@ -62,7 +63,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
 
     let default_shell = Shell::from_str(&default_shell_str);
     if let Err(err_shell) = default_shell {
-        return Err(format!("ERR: default_shell is incorrect: {}", err_shell));
+        return Err(format!("default_shell: {}", err_shell));
     }
     let default_shell = default_shell.unwrap();
 
@@ -85,7 +86,7 @@ impl BaseConfig for YamlConfig {
             return Err(format!("File {} is not a yaml file", path));
         }
 
-        println!("Reading config from {} ...", path);
+        println!("Reading config from {} ...", White.bold().paint(path));
 
         parse_yaml(yaml_path)
     }
@@ -126,6 +127,6 @@ mod test {
         let result = config.read(src_path.to_str().unwrap());
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("ERR: No tasks defined"));
+        assert!(result.unwrap_err().contains("No tasks defined"));
     }
 }
