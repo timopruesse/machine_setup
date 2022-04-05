@@ -18,13 +18,13 @@ impl CommandInterface for CopyDirCommand {
     fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if let Err(err_dirs) = dirs {
-            return Err(format!("{}", err_dirs));
+            return Err(format!("{}", err_dirs.to_string()));
         }
         let dirs = dirs.unwrap();
 
         let result = copy_dir(&dirs.src, &dirs.target, dirs.ignore);
         if let Err(err_result) = result {
-            return Err(format!("{}", err_result));
+            return Err(err_result);
         }
 
         Ok(())

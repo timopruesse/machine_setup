@@ -93,7 +93,6 @@ pub fn execute_command() {
 
             if run.is_err() {
                 eprintln!("{}", Red.paint(run.unwrap_err()));
-                return;
             }
         }
         SubCommand::List => {
