@@ -1,3 +1,4 @@
+use ansi_term::Color::{Red, White};
 use clap::Parser;
 use clap::Subcommand;
 use ergo_fs::expand;
@@ -71,15 +72,15 @@ pub fn execute_command() {
 
     let config_path = expand(&args.config);
     if let Err(err_config_path) = config_path {
-        eprintln!("{}", err_config_path);
+        eprintln!("{}", Red.paint(err_config_path.to_string()));
         std::process::exit(1);
     }
 
     let config = get_config(&config_path.unwrap().to_string());
 
     if let Err(err_config) = config {
-        eprintln!("{}", err_config);
-        std::process::exit(1);
+        eprintln!("{}", Red.paint(err_config));
+        return;
     }
 
     let task_list = config.unwrap();
@@ -91,13 +92,20 @@ pub fn execute_command() {
             let run = task_runner::run(task_list, mode, args.task);
 
             if run.is_err() {
-                eprintln!("{}", run.unwrap_err());
-                std::process::exit(1);
+                eprintln!("{}", Red.paint(run.unwrap_err()));
+                return;
             }
         }
         SubCommand::List => {
             println!("\nTasks:");
-            println!("{}", get_task_names(task_list).join("\n"));
+            println!(
+                "{}",
+                get_task_names(task_list)
+                    .into_iter()
+                    .map(|t| format!("\t> {}", White.bold().paint(t)))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            );
         }
     }
 }

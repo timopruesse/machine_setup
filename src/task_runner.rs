@@ -1,3 +1,4 @@
+use ansi_term::Color::{Green, Red, White};
 use core::fmt;
 use yaml_rust::Yaml;
 
@@ -41,13 +42,21 @@ fn run_command(
 }
 
 fn run_task(task: &Task, mode: &TaskRunnerMode, temp_dir: &str, default_shell: &Shell) {
-    println!("\nRunning task \"{}\" ...", task.name);
+    println!(
+        "\nRunning task {} ...\n",
+        White.bold().paint(task.name.to_string())
+    );
 
     let commands = &task.commands;
     for command in commands {
         let resolved_command = get_command(&command.name);
         if resolved_command.is_err() {
-            eprintln!("Command \"{}\" not found", command.name);
+            eprintln!(
+                "{} {} {}",
+                Red.paint("Command"),
+                White.on(Red).paint(format!(" {} ", command.name)),
+                Red.paint("not found")
+            );
             continue;
         }
 
@@ -60,10 +69,20 @@ fn run_task(task: &Task, mode: &TaskRunnerMode, temp_dir: &str, default_shell: &
         );
 
         if let Err(err_result) = result {
-            eprintln!("{}: ERROR", command.name);
-            err_result.split('\n').for_each(|err| eprintln!("{}", err));
+            eprintln!(
+                "{}: {}",
+                White.bold().paint(command.name.to_string()),
+                Red.paint("ERROR")
+            );
+            err_result
+                .split('\n')
+                .for_each(|err| eprintln!("{} {}", Red.bold().paint("|>"), Red.paint(err)));
         } else {
-            println!("{}: OK", command.name);
+            println!(
+                "\n{}: {}",
+                White.bold().paint(command.name.to_string()),
+                Green.bold().paint("OK")
+            );
         }
     }
 }
@@ -74,15 +93,19 @@ pub fn run(
     task_name: Option<String>,
 ) -> Result<(), String> {
     match mode {
-        TaskRunnerMode::Install => println!("\nInstalling..."),
-        TaskRunnerMode::Update => println!("\nUpdating..."),
-        TaskRunnerMode::Uninstall => println!("\nUninstalling..."),
+        TaskRunnerMode::Install => println!("{}", White.bold().paint("\nInstalling...")),
+        TaskRunnerMode::Update => println!("{}", White.bold().paint("\nUpdating...")),
+        TaskRunnerMode::Uninstall => println!("{}", White.bold().paint("\nUninstalling...")),
     }
 
     if let Some(task_name) = task_name {
         let task = task_list.tasks.iter().find(|t| t.name == task_name);
         if task.is_none() {
-            return Err(format!("Task \"{}\" not found", task_name));
+            return Err(format!(
+                "\nTask {} {}",
+                White.on(Red).paint(format!(" {} ", task_name)),
+                Red.paint("not found")
+            ));
         }
 
         run_task(

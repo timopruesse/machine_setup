@@ -24,3 +24,4 @@ yaml-rust = "0.4"
 symlink = "0.1"
 git_commands = "0.2"
 clap = { version = "3", features = ["derive"] }
+ansi_term = "0.12"

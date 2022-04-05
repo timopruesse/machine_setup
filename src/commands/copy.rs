@@ -1,3 +1,4 @@
+use ansi_term::Color::{Red, White, Yellow};
 use ergo_fs::{Path, PathArc};
 use std::{collections::HashMap, fs};
 use yaml_rust::Yaml;
@@ -17,13 +18,13 @@ impl CommandInterface for CopyDirCommand {
     fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if let Err(err_dirs) = dirs {
-            return Err(err_dirs);
+            return Err(format!("{}", err_dirs));
         }
         let dirs = dirs.unwrap();
 
         let result = copy_dir(&dirs.src, &dirs.target, dirs.ignore);
         if let Err(err_result) = result {
-            return Err(err_result);
+            return Err(format!("{}", err_result));
         }
 
         Ok(())
@@ -36,7 +37,7 @@ impl CommandInterface for CopyDirCommand {
         );
 
         if let Err(err_validation) = validation {
-            return Err(err_validation);
+            return Err(format!("{}", Red.paint(err_validation)));
         }
 
         let target_dir = args
@@ -49,14 +50,17 @@ impl CommandInterface for CopyDirCommand {
 
         let result = remove_dir(target_dir);
         if let Err(err_result) = result {
-            return Err(err_result);
+            return Err(format!("{}", Red.paint(err_result)));
         }
 
         Ok(())
     }
 
     fn update(&self, _args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
-        println!("update not implemented for copy command");
+        println!(
+            "{}",
+            Yellow.paint("update not implemented for copy command")
+        );
         Ok(())
     }
 }
@@ -79,28 +83,33 @@ fn copy_files(
 ) -> Result<(), String> {
     println!(
         "Copying files from {} to {} ...",
-        source_dir.to_string(),
-        destination_dir.to_str().unwrap()
+        White.bold().paint(source_dir.to_string()),
+        White.bold().paint(destination_dir.to_str().unwrap())
     );
 
     let result = walk_files(source_dir, destination_dir, ignore, |src, target| {
         if target_file_is_newer(src, target) {
             eprintln!(
-                "Skipping: {}: {}",
-                target.file_name().unwrap().to_str().unwrap(),
-                String::from("The target file is newer than the source file.",)
+                "{} {}: {}",
+                Yellow.paint("! Skipping !"),
+                Yellow
+                    .bold()
+                    .paint(target.file_name().unwrap().to_str().unwrap()),
+                Yellow
+                    .bold()
+                    .paint("The target file is newer than the source file.")
             );
             return;
         }
 
         println!(
             "Copying {} to {} ...",
-            src.to_str().unwrap(),
-            target.to_str().unwrap()
+            White.bold().paint(src.to_str().unwrap()),
+            White.bold().paint(target.to_str().unwrap())
         );
 
         fs::copy(src, target)
-            .map_err(|e| format!("Failed to copy file: {}", e))
+            .map_err(|e| format!("Failed to copy file: {}", Red.paint(e.to_string())))
             .ok();
     });
 
@@ -126,8 +135,9 @@ pub fn copy_dir(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<()
 
     if source_dir.to_string() == destination_dir.to_string() {
         return Err(format!(
-            "Source and destination directories are the same: {}",
-            source
+            "{} {}",
+            Red.paint("Source and destination directories are the same:"),
+            Red.paint(source)
         ));
     }
 

@@ -1,3 +1,4 @@
+use ansi_term::Color::{Green, Red, White};
 use ergo_fs::{Path, PathArc};
 use symlink::{remove_symlink_file, symlink_file};
 use yaml_rust::Yaml;
@@ -56,20 +57,21 @@ fn link_files(
     ignore: Vec<Yaml>,
 ) -> Result<(), String> {
     println!(
-        "Creating symlinks: {} -> {} ...\n",
-        source_dir.to_string(),
-        destination_dir.to_str().unwrap()
+        "Creating symlinks: {} {} {} ...\n",
+        White.bold().paint(source_dir.to_string()),
+        Green.bold().paint("->"),
+        White.bold().paint(destination_dir.to_str().unwrap())
     );
 
     let result = walk_files(source_dir, destination_dir, ignore, |src, target| {
         println!(
             "Linking {} to {} ...",
-            src.to_str().unwrap(),
-            target.to_str().unwrap()
+            White.bold().paint(src.to_str().unwrap()),
+            White.bold().paint(target.to_str().unwrap())
         );
 
         symlink_file(src, target)
-            .map_err(|e| format!("Failed to link file: {}", e))
+            .map_err(|e| format!("Failed to link file: {}", Red.paint(e.to_string())))
             .ok();
     });
 
@@ -83,13 +85,16 @@ fn link_files(
 fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), String> {
     println!(
         "Unlinking files in {} ...",
-        destination_dir.to_str().unwrap()
+        White.bold().paint(destination_dir.to_str().unwrap())
     );
 
     let result = walk_files(source_dir, destination_dir, vec![], |_src, target| {
-        println!("Unlinking {} ...", target.to_str().unwrap());
+        println!(
+            "Unlinking {} ...",
+            White.bold().paint(target.to_str().unwrap())
+        );
         remove_symlink_file(target)
-            .map_err(|e| format!("Failed to unlink file: {}", e))
+            .map_err(|e| format!("Failed to unlink file: {}", Red.paint(e.to_string())))
             .ok();
     });
 
@@ -145,8 +150,6 @@ pub fn remove_symlink(source: &str, destination: &str) -> Result<(), String> {
         return Err(err_expand_dest);
     }
     let destination_dir = expanded_destination.unwrap();
-
-    println!("Removing symlink to {} ...", destination_dir.to_string());
 
     let result = unlink_files(&source_dir, &destination_dir);
 

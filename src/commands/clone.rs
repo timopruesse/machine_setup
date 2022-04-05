@@ -1,3 +1,4 @@
+use ansi_term::Color::{White, Yellow};
 use std::collections::HashMap;
 
 use ergo_fs::PathArc;
@@ -73,7 +74,11 @@ impl CommandInterface for CloneCommand {
         let expanded_target_dir = expanded_target_dir.unwrap();
 
         if is_repo_installed(url, &expanded_target_dir) {
-            println!("The repository was already cloned. Updating...");
+            println!(
+                "{} {}",
+                Yellow.paint("The repository was already cloned."),
+                Yellow.bold().paint("Updating...")
+            );
             let update_result = self.update(args, temp_dir, default_shell);
             if let Err(err_update) = update_result {
                 return Err(err_update);
@@ -155,7 +160,11 @@ impl CommandInterface for CloneCommand {
 }
 
 pub fn clone_repository(url: &str, target: &PathArc) -> Result<(), String> {
-    println!("Cloning {} into {} ...", url, target.to_str().unwrap());
+    println!(
+        "Cloning {} into {} ...",
+        White.bold().paint(url),
+        White.bold().paint(target.to_str().unwrap())
+    );
 
     let clone_result = git(&["clone", url, "."], target);
     if let Err(err_clone) = clone_result {
@@ -166,7 +175,10 @@ pub fn clone_repository(url: &str, target: &PathArc) -> Result<(), String> {
 }
 
 pub fn remove_repository(target: &PathArc) -> Result<(), String> {
-    println!("Removing {} ...", target.to_str().unwrap());
+    println!(
+        "Removing {} ...",
+        White.bold().paint(target.to_str().unwrap())
+    );
 
     let remove_result = std::fs::remove_dir_all(target);
     if let Err(err_remove) = remove_result {
@@ -177,7 +189,10 @@ pub fn remove_repository(target: &PathArc) -> Result<(), String> {
 }
 
 pub fn update_repository(target: &PathArc) -> Result<(), String> {
-    println!("Updating {} ...", target.to_str().unwrap());
+    println!(
+        "Updating {} ...",
+        White.bold().paint(target.to_str().unwrap())
+    );
 
     let update_result = git(&["pull"], target);
     if let Err(err_update) = update_result {
