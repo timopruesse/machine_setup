@@ -212,6 +212,7 @@ updatable_multiline_command:
 
 ## TODOs
 
+- symlink command: add option to force symlink (delete existing files)
 - Add other binaries and installation options
 - Improve the terminal output
   - make it look nicer (colors!!)
