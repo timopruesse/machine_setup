@@ -58,3 +58,32 @@ pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
 
     Ok(())
 }
+
+// ---tests---
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use yaml_rust::yaml::Hash;
+
+    #[test]
+    fn it_sets_environment_variables_correctly() {
+        let mut env = Hash::new();
+        env.insert(
+            Yaml::String(String::from("TEST_1")),
+            Yaml::String(String::from("value_one")),
+        );
+        env.insert(
+            Yaml::String(String::from("TEST_2")),
+            Yaml::String(String::from("value_two")),
+        );
+
+        let mut args = Hash::new();
+        args.insert(Yaml::String("env".to_string()), Yaml::Hash(env));
+
+        set_environment_variables(&Yaml::Hash(args)).unwrap();
+
+        assert_eq!(env::var("TEST_1").unwrap(), "value_one");
+        assert_eq!(env::var("TEST_2").unwrap(), "value_two");
+    }
+}
