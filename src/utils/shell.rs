@@ -32,6 +32,9 @@ impl FromStr for Shell {
     }
 }
 
+const BASH_STR: &str = "#!/bin/bash\nsource $HOME/.bashrc\n";
+const ZSH_STR: &str = "#!/bin/zsh\nsource $HOME/.zshrc\n";
+
 pub fn create_script_file(
     shell: Shell,
     commands: Vec<String>,
@@ -46,12 +49,8 @@ pub fn create_script_file(
     let path = temp_file.path;
 
     match shell {
-        Shell::Zsh => file
-            .write_all(String::from("#!/bin/zsh\nsource $HOME/.zshrc\n").as_bytes())
-            .unwrap(),
-        Shell::Bash => file
-            .write_all(String::from("#!/bin/bash\nsource $HOME/.bashrc\n").as_bytes())
-            .unwrap(),
+        Shell::Bash => file.write_all(String::from(BASH_STR).as_bytes()).unwrap(),
+        Shell::Zsh => file.write_all(String::from(ZSH_STR).as_bytes()).unwrap(),
     }
 
     for command in commands {
@@ -64,4 +63,45 @@ pub fn create_script_file(
     }
 
     Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_creates_correct_bash_script_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_str().unwrap();
+        let script_file = create_script_file(
+            Shell::Bash,
+            vec![String::from("echo 'hello world'")],
+            temp_dir_path,
+        )
+        .unwrap();
+
+        assert!(script_file.contains(".sh"));
+
+        let file = std::fs::read_to_string(script_file).unwrap();
+        assert!(file.contains(BASH_STR));
+        assert!(file.contains("echo 'hello world'"));
+    }
+
+    #[test]
+    fn it_creates_correct_zsh_script_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_str().unwrap();
+        let script_file = create_script_file(
+            Shell::Zsh,
+            vec![String::from("echo 'hello world'")],
+            temp_dir_path,
+        )
+        .unwrap();
+
+        assert!(script_file.contains(".sh"));
+
+        let file = std::fs::read_to_string(script_file).unwrap();
+        assert!(file.contains(ZSH_STR));
+        assert!(file.contains("echo 'hello world'"));
+    }
 }
