@@ -160,8 +160,6 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
     Ok(())
 }
 
-// -- tests --
-
 #[cfg(test)]
 mod test {
     use super::*;

@@ -66,7 +66,7 @@ pub fn create_script_file(
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
 
     #[test]

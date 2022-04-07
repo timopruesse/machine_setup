@@ -92,8 +92,6 @@ impl BaseConfig for YamlConfig {
     }
 }
 
-// -- tests --
-
 #[cfg(test)]
 mod test {
     use std::{fs::File, io::Write};

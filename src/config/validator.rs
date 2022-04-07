@@ -48,8 +48,6 @@ pub fn validate_named_args(
     Ok(())
 }
 
-// --- tests ---
-
 #[cfg(test)]
 
 mod test {

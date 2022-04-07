@@ -167,10 +167,8 @@ pub fn run(
     Ok(())
 }
 
-// --- tests ---
-
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::config::base_config::Command;
 
     use super::*;

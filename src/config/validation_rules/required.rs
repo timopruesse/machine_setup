@@ -24,8 +24,6 @@ impl ValidationRule for Required {
     }
 }
 
-// --- tests ---
-
 #[cfg(test)]
 
 mod test {

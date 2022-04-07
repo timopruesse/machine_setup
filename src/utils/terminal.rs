@@ -59,9 +59,8 @@ pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
     Ok(())
 }
 
-// ---tests---
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
 
     use yaml_rust::yaml::Hash;

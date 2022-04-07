@@ -20,10 +20,7 @@ impl ValidationRule for IsString {
     }
 }
 
-// --- tests ---
-
 #[cfg(test)]
-
 mod test {
     use super::*;
 

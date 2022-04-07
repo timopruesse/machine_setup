@@ -9,10 +9,8 @@ pub fn get_task_names(task_list: TaskList) -> Vec<String> {
     task_names
 }
 
-// --- tests ---
-
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::{config::base_config::Task, utils::shell::Shell};
 
     use super::*;

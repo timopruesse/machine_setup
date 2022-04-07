@@ -202,8 +202,6 @@ pub fn update_repository(target: &PathArc) -> Result<(), String> {
     Ok(())
 }
 
-// -- tests --
-
 #[cfg(test)]
 mod test {
     use super::*;

@@ -196,8 +196,6 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
     Ok(())
 }
 
-// -- tests --
-
 #[cfg(test)]
 mod test {
     use super::*;

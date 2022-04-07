@@ -28,8 +28,6 @@ impl ValidationRule for OneOf {
     }
 }
 
-// --- tests ---
-
 #[cfg(test)]
 
 mod test {

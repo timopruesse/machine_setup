@@ -172,8 +172,6 @@ impl CommandInterface for RunCommand {
     }
 }
 
-// -- tests --
-
 #[cfg(test)]
 mod test {
     // TODO: Add tests
