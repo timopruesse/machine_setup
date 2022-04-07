@@ -212,9 +212,21 @@ updatable_multiline_command:
 
 ## TODOs
 
+### 0.3.0
+
 - symlink command: add option to force symlink (delete existing files)
 - Add other binaries and installation options
+
+### 0.4.0
+
+- Add autocomplete (also for tasks)
 - Improve the terminal output
   - hide most of it behind a `--verbose` flag
+
+### 0.5.0
+
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
+
+### 1.0.0
+
 - Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
