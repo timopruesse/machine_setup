@@ -41,7 +41,12 @@ fn run_command(
     }
 }
 
-fn run_task(task: &Task, mode: &TaskRunnerMode, temp_dir: &str, default_shell: &Shell) {
+fn run_task(
+    task: &Task,
+    mode: &TaskRunnerMode,
+    temp_dir: &str,
+    default_shell: &Shell,
+) -> Result<(), ()> {
     println!(
         "\nRunning task {} ...\n",
         White.bold().paint(task.name.to_string())
@@ -57,7 +62,7 @@ fn run_task(task: &Task, mode: &TaskRunnerMode, temp_dir: &str, default_shell: &
                 White.on(Red).paint(format!(" {} ", command.name)),
                 Red.paint("not found")
             );
-            continue;
+            return Err(());
         }
 
         let result = run_command(
@@ -77,14 +82,18 @@ fn run_task(task: &Task, mode: &TaskRunnerMode, temp_dir: &str, default_shell: &
             err_result
                 .split('\n')
                 .for_each(|err| eprintln!("{} {}", Red.bold().paint("|>"), Red.paint(err)));
-        } else {
-            println!(
-                "\n{}: {}",
-                White.bold().paint(command.name.to_string()),
-                Green.bold().paint("OK")
-            );
+
+            return Err(());
         }
+
+        println!(
+            "\n{}: {}",
+            White.bold().paint(command.name.to_string()),
+            Green.bold().paint("OK")
+        );
     }
+
+    Ok(())
 }
 
 pub fn run(
@@ -108,24 +117,153 @@ pub fn run(
             ));
         }
 
-        run_task(
+        let task_result = run_task(
             task.unwrap(),
             &mode,
             task_list.temp_dir.as_str(),
             &task_list.default_shell,
         );
 
+        if let Err(_) = task_result {
+            return Err(format!(
+                "\nTask {} {}",
+                White.on(Red).paint(format!(" {} ", task_name)),
+                Red.paint("failed")
+            ));
+        }
+
         return Ok(());
     }
 
+    let mut errored_tasks = vec![];
     for task in task_list.tasks {
-        run_task(
+        let task_result = run_task(
             &task,
             &mode,
             task_list.temp_dir.as_str(),
             &task_list.default_shell,
         );
+
+        if let Err(_) = task_result {
+            errored_tasks.push(task.name.to_string());
+        }
+    }
+
+    if errored_tasks.len() > 0 {
+        return Err(format!(
+            "\n{} {}",
+            Red.paint("Errors occurred while running tasks:"),
+            errored_tasks.join(", ")
+        ));
     }
 
     Ok(())
+}
+
+// --- tests ---
+
+mod tests {
+    use crate::config::base_config::Command;
+
+    use super::*;
+
+    #[test]
+    fn it_runs_single_task_when_argument_is_passed() {
+        let task_list = TaskList {
+            tasks: vec![
+                Task {
+                    name: "task_one".to_string(),
+                    commands: vec![Command {
+                        name: "_TEST_".to_string(),
+                        args: Yaml::Array(vec![]),
+                    }],
+                },
+                Task {
+                    name: "task_two".to_string(),
+                    commands: vec![],
+                },
+            ],
+            temp_dir: "".to_string(),
+            default_shell: Shell::Bash,
+        };
+
+        let result = run(
+            task_list,
+            TaskRunnerMode::Install,
+            Some("task_one".to_string()),
+        );
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("task_one"));
+    }
+
+    #[test]
+    fn it_fails_when_the_task_doesnt_exist() {
+        let task_list = TaskList {
+            tasks: vec![],
+            temp_dir: "".to_string(),
+            default_shell: Shell::Bash,
+        };
+
+        let result = run(task_list, TaskRunnerMode::Install, Some("test".to_string()));
+
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("test"));
+        assert!(error_message.contains("not found"));
+    }
+
+    #[test]
+    fn it_runs_all_tasks_when_no_argument_is_passed() {
+        let task_list = TaskList {
+            tasks: vec![
+                Task {
+                    name: "task_one".to_string(),
+                    commands: vec![],
+                },
+                Task {
+                    name: "task_two".to_string(),
+                    commands: vec![],
+                },
+            ],
+            temp_dir: "".to_string(),
+            default_shell: Shell::Bash,
+        };
+
+        let result = run(task_list, TaskRunnerMode::Install, None);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn it_prints_failing_tasks() {
+        let task_list = TaskList {
+            tasks: vec![
+                Task {
+                    name: "task_one".to_string(),
+                    commands: vec![Command {
+                        name: "_TEST_".to_string(),
+                        args: Yaml::Array(vec![]),
+                    }],
+                },
+                Task {
+                    name: "task_two".to_string(),
+                    commands: vec![Command {
+                        name: "_TEST_".to_string(),
+                        args: Yaml::Array(vec![]),
+                    }],
+                },
+            ],
+            temp_dir: "".to_string(),
+            default_shell: Shell::Bash,
+        };
+
+        let result = run(task_list, TaskRunnerMode::Install, None);
+
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("Errors occurred while running tasks"));
+        assert!(error_message.contains("task_one"));
+        assert!(error_message.contains("task_two"));
+    }
 }
