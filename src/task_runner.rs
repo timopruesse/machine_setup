@@ -124,7 +124,7 @@ pub fn run(
             &task_list.default_shell,
         );
 
-        if let Err(_) = task_result {
+        if task_result.is_err() {
             return Err(format!(
                 "\nTask {} {}",
                 White.on(Red).paint(format!(" {} ", task_name)),
@@ -144,7 +144,7 @@ pub fn run(
             &task_list.default_shell,
         );
 
-        if let Err(_) = task_result {
+        if task_result.is_err() {
             errored_tasks.push(task.name.to_string());
         }
     }
