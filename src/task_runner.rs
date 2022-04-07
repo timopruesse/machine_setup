@@ -149,11 +149,18 @@ pub fn run(
         }
     }
 
-    if errored_tasks.len() > 0 {
+    let num_errored = errored_tasks.len();
+    if num_errored > 0 {
         return Err(format!(
-            "\n{} {}",
-            Red.paint("Errors occurred while running tasks:"),
-            errored_tasks.join(", ")
+            "\n{} {} {}\n{}",
+            Red.paint("Errors occurred in"),
+            Red.bold().underline().paint(num_errored.to_string()),
+            Red.paint("tasks:"),
+            errored_tasks
+                .into_iter()
+                .map(|e| format!("> {}", e))
+                .collect::<Vec<String>>()
+                .join("\n")
         ));
     }
 
@@ -162,6 +169,7 @@ pub fn run(
 
 // --- tests ---
 
+#[cfg(test)]
 mod tests {
     use crate::config::base_config::Command;
 
@@ -262,7 +270,7 @@ mod tests {
 
         assert!(result.is_err());
         let error_message = result.unwrap_err().to_string();
-        assert!(error_message.contains("Errors occurred while running tasks"));
+        assert!(error_message.contains("Errors occurred in"));
         assert!(error_message.contains("task_one"));
         assert!(error_message.contains("task_two"));
     }

@@ -11,10 +11,8 @@ pub fn get_task_names(task_list: TaskList) -> Vec<String> {
 
 // --- tests ---
 
+#[cfg(test)]
 mod tests {
-
-    use tempfile::tempdir;
-
     use crate::{config::base_config::Task, utils::shell::Shell};
 
     use super::*;
@@ -32,7 +30,7 @@ mod tests {
                     commands: vec![],
                 },
             ],
-            temp_dir: tempdir().unwrap().path().to_str().unwrap().to_string(),
+            temp_dir: "".to_string(),
             default_shell: Shell::Bash,
         };
 
