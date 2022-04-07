@@ -46,7 +46,7 @@ fn get_commands(args: Yaml, mode: TaskRunnerMode) -> Result<Vec<String>, String>
             validate_named_args(args.clone(), HashMap::from([(method_name.clone(), rules)]));
 
         if let Err(err_validation) = validation {
-            return Err(format!("ERR: {}", err_validation));
+            return Err(err_validation);
         }
 
         return Ok(get_commands_from_yaml(
@@ -99,7 +99,7 @@ fn run_commands(
     remove_file(temp_script).ok();
 
     if let Err(err_command) = command {
-        return Err(format!("ERR: {}", err_command));
+        return Err(err_command.to_string());
     }
 
     let output = command.unwrap();
@@ -174,5 +174,144 @@ impl CommandInterface for RunCommand {
 
 #[cfg(test)]
 mod test {
-    // TODO: Add tests
+    use yaml_rust::yaml::Hash;
+
+    use super::*;
+
+    #[test]
+    fn it_gets_command_from_string() {
+        let command = "echo hello";
+
+        let commands = get_commands(Yaml::String(command.to_string()), TaskRunnerMode::Install);
+
+        assert!(commands.is_ok());
+        assert_eq!(vec![command.to_string()], commands.unwrap());
+    }
+
+    #[test]
+    fn it_gets_commands_from_array() {
+        let commands = Yaml::Array(vec![
+            Yaml::String(String::from("command1")),
+            Yaml::String(String::from("command2")),
+        ]);
+
+        let commands = get_commands(commands.clone(), TaskRunnerMode::Install);
+        assert!(commands.is_ok());
+        assert_eq!(
+            commands.unwrap(),
+            vec![String::from("command1"), String::from("command2")]
+        );
+    }
+
+    #[test]
+    fn it_gets_install_commands() {
+        let mut commands = Hash::new();
+        commands.insert(
+            Yaml::String("install".to_string()),
+            Yaml::Array(vec![
+                Yaml::String("command1".to_string()),
+                Yaml::String("command2".to_string()),
+            ]),
+        );
+
+        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Install);
+        assert!(commands.is_ok());
+        assert_eq!(
+            commands.unwrap(),
+            vec![String::from("command1"), String::from("command2")]
+        );
+    }
+
+    #[test]
+    fn it_gets_install_command_string() {
+        let mut commands = Hash::new();
+        commands.insert(
+            Yaml::String("install".to_string()),
+            Yaml::String(String::from("command1")),
+        );
+
+        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Install);
+        assert!(commands.is_ok());
+        assert_eq!(commands.unwrap(), vec![String::from("command1")]);
+    }
+
+    #[test]
+    fn it_gets_uninstall_commands() {
+        let mut commands = Hash::new();
+        commands.insert(
+            Yaml::String("uninstall".to_string()),
+            Yaml::Array(vec![
+                Yaml::String("command1".to_string()),
+                Yaml::String("command2".to_string()),
+            ]),
+        );
+
+        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Uninstall);
+        assert!(commands.is_ok());
+        assert_eq!(
+            commands.unwrap(),
+            vec![String::from("command1"), String::from("command2")]
+        );
+    }
+
+    #[test]
+    fn it_gets_uninstall_command_string() {
+        let mut commands = Hash::new();
+        commands.insert(
+            Yaml::String("uninstall".to_string()),
+            Yaml::String(String::from("command1")),
+        );
+
+        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Uninstall);
+        assert!(commands.is_ok());
+        assert_eq!(commands.unwrap(), vec![String::from("command1")]);
+    }
+
+    #[test]
+    fn it_gets_update_commands() {
+        let mut commands = Hash::new();
+        commands.insert(
+            Yaml::String("update".to_string()),
+            Yaml::Array(vec![
+                Yaml::String("command1".to_string()),
+                Yaml::String("command2".to_string()),
+            ]),
+        );
+
+        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Update);
+        assert!(commands.is_ok());
+        assert_eq!(
+            commands.unwrap(),
+            vec![String::from("command1"), String::from("command2")]
+        );
+    }
+
+    #[test]
+    fn it_gets_update_command_string() {
+        let mut commands = Hash::new();
+        commands.insert(
+            Yaml::String("update".to_string()),
+            Yaml::String(String::from("command1")),
+        );
+
+        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Update);
+        assert!(commands.is_ok());
+        assert_eq!(commands.unwrap(), vec![String::from("command1")]);
+    }
+
+    #[test]
+    fn it_fails_when_method_is_not_defined() {
+        let mut commands = Hash::new();
+        commands.insert(
+            Yaml::String("invalid".to_string()),
+            Yaml::String(String::from("command1")),
+        );
+
+        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Install);
+        assert!(commands.is_err());
+        assert_eq!(
+            commands.unwrap_err(),
+            String::from("install: OneOf: argument must be an array | argument must be a string")
+        );
+    }
 }
