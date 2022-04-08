@@ -163,6 +163,25 @@ mod test {
     }
 
     #[test]
+    fn it_uses_provided_task_name_instead_of_select() {
+        let args = Args {
+            command: SubCommand::Install,
+            config: "./machine_setup.yaml".to_string(),
+            task: Some("test".to_string()),
+            select: true,
+        };
+
+        let tasks = vec![Task {
+            name: "test".to_string(),
+            commands: vec![],
+        }];
+
+        let task_name = get_task_from_args(&args, &tasks);
+
+        assert_eq!(task_name.unwrap(), Some("test".to_string()));
+    }
+
+    #[test]
     fn it_gets_task_runner_mode() {
         let mode = get_task_runner_mode(SubCommand::Install);
 
