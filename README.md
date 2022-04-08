@@ -2,8 +2,8 @@
 
 [![Tests](https://github.com/Chroma91/machine-setup/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/Chroma91/machine-setup/actions/workflows/run_tests.yml) [![Crates.io](https://img.shields.io/crates/v/machine_setup)](https://crates.io/crates/machine_setup)
 
-The idea is to be able to replicate a certain setup (when reseting your machine or using a completely new machine).  
-Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.  
+The idea is to be able to replicate a certain setup (when reseting your machine or using a completely new machine).
+Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.
 So, it will help with managing dotfiles, symlinks, etc.
 
 A real world example can be found in my [.dotfiles repository](https://github.com/Chroma91/.dotfiles/blob/main/machine_setup.yaml).
@@ -37,12 +37,13 @@ Command line parameters:
 | ---------------- | ------------------------------------------- | ------------------------------------------------- |
 | -c<br> --config  | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
 | -t<br> --task    | only run the specified task                 | `machine_setup install -t my_task2`               |
+| -s<br> --select  | select a task to run                        | `machine_setup install -s`                        |
 | -h<br> --help    | display help information                    | `machine_setup --help`                            |
 | -v<br> --version | display version information                 | `machine_setup --version`                         |
 
 ## Configure
 
-Tasks can be defined under the `tasks` root key.  
+Tasks can be defined under the `tasks` root key.
 Every task can contain an arbitrary number of commands.
 
 | key           | description                                          | values        | default            |
@@ -51,9 +52,9 @@ Every task can contain an arbitrary number of commands.
 | default_shell | shell that is used when not specified by the command | `bash`, `zsh` | `bash`             |
 | temp_dir      | define where temporary files are stored              |               | `~/.machine_setup` |
 
-> **Hint**  
-> Currently, there can only be one command of the same type per task.  
-> The last command in a task will take precedence.  
+> **Hint**
+> Currently, there can only be one command of the same type per task.
+> The last command in a task will take precedence.
 > This is an open bug and will be fixed in a future release.
 
 Check out the example configuration below:
@@ -159,7 +160,7 @@ This command executes a shell command.
 | env      | environment variables |    ➖    |         |               |
 | shell    | shell that is used    |    ➖    | "bash"  | "bash", "zsh" |
 
-By default, shell commands will be skipped when updating or uninstalling.  
+By default, shell commands will be skipped when updating or uninstalling.
 You can change that by prodiving `update` and/or `uninstall`.
 
 The following arguments can be passed to `commands`:
@@ -212,18 +213,18 @@ updatable_multiline_command:
 
 ## TODOs
 
-### 0.3.0
+### 0.4.0
 
 - symlink command: add option to force symlink (delete existing files)
 - Add other binaries and installation options
 
-### 0.4.0
+### 0.5.0
 
-- Add autocomplete (also for tasks)
+- Add autocomplete (also for tasks) -> `clap_complete`
 - Improve the terminal output
   - hide most of it behind a `--verbose` flag
 
-### 0.5.0
+### 0.6.0
 
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 

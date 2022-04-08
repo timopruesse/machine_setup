@@ -5,7 +5,7 @@ use ergo_fs::IoWrite;
 
 use super::temp_storage::create_temp_file;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Shell {
     Zsh,
     Bash,

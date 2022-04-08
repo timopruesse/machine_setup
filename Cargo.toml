@@ -1,6 +1,6 @@
 [package]
 name = "machine_setup"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2021"
 authors = ["Timo Prüße <chroma91@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -23,5 +23,6 @@ ergo_fs = "0.2"
 yaml-rust = "0.4"
 symlink = "0.1"
 git_commands = "0.2"
-clap = { version = "3", features = ["derive"] }
+clap = { version = "3", features = ["derive", "wrap_help"] }
 ansi_term = "0.12"
+dialoguer = "0.10"

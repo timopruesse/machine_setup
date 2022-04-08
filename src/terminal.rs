@@ -5,7 +5,9 @@ use ergo_fs::expand;
 use std::str::FromStr;
 
 use crate::config::base_config::get_config;
+use crate::config::base_config::Task;
 use crate::task::get_task_names;
+use crate::task::select_task;
 use crate::task_runner;
 use crate::task_runner::TaskRunnerMode;
 
@@ -56,6 +58,11 @@ struct Args {
     #[clap(short, long)]
     #[clap(global = true)]
     task: Option<String>,
+
+    /// Select a task to run
+    #[clap(short, long)]
+    #[clap(global = true)]
+    select: bool,
 }
 
 fn get_task_runner_mode(subcommand: SubCommand) -> TaskRunnerMode {
@@ -65,6 +72,23 @@ fn get_task_runner_mode(subcommand: SubCommand) -> TaskRunnerMode {
         SubCommand::Uninstall => TaskRunnerMode::Uninstall,
         _ => panic!("Invalid task runner mode"),
     }
+}
+
+fn get_task_from_args(args: &Args, tasks: &[Task]) -> Result<Option<String>, String> {
+    if let Some(task_name) = &args.task {
+        return Ok(Some(task_name.to_string()));
+    }
+
+    if !args.select {
+        return Ok(None);
+    }
+
+    let task_name = select_task(tasks);
+    if task_name.is_none() {
+        return Err(format!("{}", Red.paint("No task selected")));
+    }
+
+    return Ok(task_name);
 }
 
 pub fn execute_command() {
@@ -87,8 +111,15 @@ pub fn execute_command() {
 
     match args.command {
         SubCommand::Install | SubCommand::Uninstall | SubCommand::Update => {
+            let task_name = get_task_from_args(&args, &task_list.tasks);
+
+            if let Err(err_task_name) = task_name {
+                eprintln!("{}", Red.paint(err_task_name));
+                return;
+            }
+
             let mode = get_task_runner_mode(args.command);
-            let run = task_runner::run(task_list, mode, args.task);
+            let run = task_runner::run(task_list, mode, task_name.unwrap());
 
             if run.is_err() {
                 eprintln!("{}", Red.paint(run.unwrap_err()));
@@ -98,12 +129,43 @@ pub fn execute_command() {
             println!("\nTasks:");
             println!(
                 "{}",
-                get_task_names(task_list)
+                get_task_names(&task_list.tasks)
                     .into_iter()
                     .map(|t| format!("\t> {}", White.bold().paint(t)))
                     .collect::<Vec<String>>()
                     .join("\n")
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn it_gets_task_from_args() {
+        let args = Args {
+            command: SubCommand::Install,
+            config: "./machine_setup.yaml".to_string(),
+            task: Some("test".to_string()),
+            select: false,
+        };
+
+        let tasks = vec![Task {
+            name: "test".to_string(),
+            commands: vec![],
+        }];
+
+        let task_name = get_task_from_args(&args, &tasks);
+
+        assert_eq!(task_name.unwrap(), Some("test".to_string()));
+    }
+
+    #[test]
+    fn it_gets_task_runner_mode() {
+        let mode = get_task_runner_mode(SubCommand::Install);
+
+        assert_eq!(mode.to_string(), TaskRunnerMode::Install.to_string());
     }
 }
