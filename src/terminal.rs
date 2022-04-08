@@ -45,7 +45,7 @@ impl FromStr for SubCommand {
 struct Args {
     /// what should be done?
     #[clap(subcommand)]
-    command: Option<SubCommand>,
+    command: SubCommand,
 
     /// path to the config file
     #[clap(short, long, default_value = "./machine_setup.yaml")]
@@ -84,11 +84,10 @@ pub fn execute_command() {
     }
 
     let task_list = config.unwrap();
-    let subcommand = args.command.unwrap_or(SubCommand::Install);
 
-    match subcommand {
+    match args.command {
         SubCommand::Install | SubCommand::Uninstall | SubCommand::Update => {
-            let mode = get_task_runner_mode(subcommand);
+            let mode = get_task_runner_mode(args.command);
             let run = task_runner::run(task_list, mode, args.task);
 
             if run.is_err() {
