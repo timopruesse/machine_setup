@@ -88,7 +88,7 @@ fn get_task_from_args(args: &Args, tasks: &[Task]) -> Result<Option<String>, Str
         return Err(format!("{}", Red.paint("No task selected")));
     }
 
-    return Ok(task_name);
+    Ok(task_name)
 }
 
 pub fn execute_command() {
