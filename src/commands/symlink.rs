@@ -19,7 +19,7 @@ fn should_force(args: Yaml) -> bool {
 
     arg_values
         .get(&Yaml::String("force".to_string()))
-        .unwrap_or_else(|| &Yaml::Boolean(false))
+        .unwrap_or(&Yaml::Boolean(false))
         .as_bool()
         .unwrap()
 }
