@@ -215,7 +215,7 @@ updatable_multiline_command:
 
 ### 0.4.0
 
-- symlink command: add option to force symlink (delete existing files)
+- ~~symlink command: add option to force symlink (delete existing files)~~
 - Add other binaries and installation options
 
 ### 0.5.0

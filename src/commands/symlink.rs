@@ -1,5 +1,6 @@
-use ansi_term::Color::{Green, Red, White};
+use ansi_term::Color::{Green, Red, White, Yellow};
 use ergo_fs::{Path, PathArc};
+use std::fs::remove_file;
 use symlink::{remove_symlink_file, symlink_file};
 use yaml_rust::Yaml;
 
@@ -13,15 +14,25 @@ use crate::{
 
 pub struct SymlinkCommand {}
 
+fn should_force(args: Yaml) -> bool {
+    let arg_values = args.as_hash().unwrap();
+
+    arg_values
+        .get(&Yaml::String("force".to_string()))
+        .unwrap_or_else(|| &Yaml::Boolean(false))
+        .as_bool()
+        .unwrap()
+}
+
 impl CommandInterface for SymlinkCommand {
     fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
-        let dirs = get_source_and_target(args);
+        let dirs = get_source_and_target(args.clone());
         if let Err(err_dirs) = dirs {
             return Err(err_dirs);
         }
         let dirs = dirs.unwrap();
 
-        let result = create_symlink(&dirs.src, &dirs.target, dirs.ignore);
+        let result = create_symlink(&dirs.src, &dirs.target, dirs.ignore, should_force(args));
 
         if let Err(err_result) = result {
             return Err(err_result);
@@ -55,6 +66,7 @@ fn link_files(
     source_dir: &PathArc,
     destination_dir: &Path,
     ignore: Vec<Yaml>,
+    force: bool,
 ) -> Result<(), String> {
     println!(
         "Creating symlinks: {} {} {} ...\n",
@@ -69,6 +81,15 @@ fn link_files(
             White.bold().paint(src.to_str().unwrap()),
             White.bold().paint(target.to_str().unwrap())
         );
+
+        if force && target.is_file() {
+            println!(
+                "{}",
+                Yellow.paint("Replacing exisiting file with symlink (force) ...")
+            );
+
+            remove_file(target).ok();
+        }
 
         symlink_file(src, target)
             .map_err(|e| format!("Failed to link file: {}", Red.paint(e.to_string())))
@@ -105,7 +126,12 @@ fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), Stri
     Ok(())
 }
 
-pub fn create_symlink(source: &str, destination: &str, ignore: Vec<Yaml>) -> Result<(), String> {
+pub fn create_symlink(
+    source: &str,
+    destination: &str,
+    ignore: Vec<Yaml>,
+    force: bool,
+) -> Result<(), String> {
     let expanded_source = expand_path(source, false);
     if let Err(err_expand_src) = expanded_source {
         return Err(err_expand_src);
@@ -129,7 +155,7 @@ pub fn create_symlink(source: &str, destination: &str, ignore: Vec<Yaml>) -> Res
         ));
     }
 
-    let result = link_files(&source_dir, &destination_dir, ignore);
+    let result = link_files(&source_dir, &destination_dir, ignore, force);
 
     if let Err(err_result) = result {
         return Err(err_result);
@@ -174,9 +200,9 @@ mod test {
 
         let src = src_path.to_str().unwrap();
 
-        println!("{:?}", create_symlink(src, src, vec![]));
+        println!("{:?}", create_symlink(src, src, vec![], false));
 
-        assert!(create_symlink(src, src, vec![])
+        assert!(create_symlink(src, src, vec![], false)
             .unwrap_err()
             .contains("Source and destination directories are the same"));
     }
@@ -191,10 +217,28 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(create_symlink(src, dest, vec![]).is_ok());
+        assert!(create_symlink(src, dest, vec![], false).is_ok());
 
         let dest_path = dest_dir.path().join("example.txt");
-        assert!(dest_path.exists());
+        assert!(dest_path.is_symlink())
+    }
+
+    #[test]
+    fn it_overrides_file_with_symlink() {
+        let src_dir = tempdir().unwrap();
+        let src = src_dir.path().to_str().unwrap();
+        let src_path = src_dir.path().join("example.txt");
+        File::create(&src_path).unwrap();
+
+        let dest_dir = tempdir().unwrap();
+        let dest = dest_dir.path().to_str().unwrap();
+        let dest_path = dest_dir.path().join("example.txt");
+
+        File::create(&dest_path).unwrap();
+
+        assert!(create_symlink(src, dest, vec![], true).is_ok());
+
+        assert!(dest_path.is_symlink());
     }
 
     #[test]
@@ -207,7 +251,7 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(create_symlink(src, dest, vec![]).is_ok());
+        assert!(create_symlink(src, dest, vec![], false).is_ok());
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());
