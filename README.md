@@ -139,6 +139,9 @@ This command symlinks all the files from the source directory to the target dire
 | src      | source directory/file               |    ✅    | "./src/files" or "./src/test.txt" |
 | target   | target directory/file               |    ✅    | "/tmp/target" or "/tmp/new.txt"   |
 | ignore   | list of files/directories to ignore |    ➖    | ["dist", "package-lock.json"]     |
+| force    | true/false                          |    ➖    |                                   |
+
+> If `force` is set to `true`, existing files will be **removed** and replaced by the symlinks.
 
 ##### example
 
@@ -147,6 +150,7 @@ symlink:
   src: "./src/files"
   target: "/tmp/target"
   ignore: ["dist", "package-lock.json"]
+  force: true
 ```
 
 #### run
