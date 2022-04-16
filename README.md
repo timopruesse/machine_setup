@@ -234,4 +234,11 @@ updatable_multiline_command:
 
 ### 1.0.0
 
-- Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
+Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
+
+- remove hardcoded Yaml types
+- add JSON support
+
+### 1.1.0
+
+- make it possible to specify that all commands in a task should be run in parallel (this might be useful when cloning/updating a chunk of repos for example)
