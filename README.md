@@ -232,6 +232,12 @@ updatable_multiline_command:
 
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 
+### 0.7.0
+
+- conditional tasks
+  - add the ability to run tasks for specific OSs, e.g. `os: ['linux', 'osx']`
+  - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
+
 ### 1.0.0
 
 Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
