@@ -221,12 +221,6 @@ updatable_multiline_command:
 
 ## TODOs
 
-### 0.4.0
-
-- ~~symlink command: add option to force symlink (delete existing files)~~
-- ~~remove hardcoded Yaml types~~
-- ~~add JSON support~~
-
 ### 0.5.0
 
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
