@@ -3,9 +3,10 @@ use std::{
     collections::HashMap,
     fs::{canonicalize, create_dir_all},
 };
-use yaml_rust::Yaml;
 
-use crate::config::{validation_rules::required::Required, validator::validate_named_args};
+use crate::config::{
+    config::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
+};
 
 pub fn is_file_path(path: &PathArc) -> bool {
     let last_component = path
@@ -60,10 +61,10 @@ pub static DIR_IGNORE: &str = "ignore";
 pub struct Dirs {
     pub src: String,
     pub target: String,
-    pub ignore: Vec<Yaml>,
+    pub ignore: Vec<ConfigValue>,
 }
 
-pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
+pub fn get_source_and_target(args: ConfigValue) -> Result<Dirs, String> {
     let rules = vec![&Required {}];
 
     let validation = validate_named_args(
@@ -80,7 +81,7 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
     let src_dir = args
         .as_hash()
         .unwrap()
-        .get(&Yaml::String(String::from(DIR_SRC)))
+        .get(DIR_SRC)
         .unwrap()
         .as_str()
         .unwrap();
@@ -88,7 +89,7 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
     let target_dir = args
         .as_hash()
         .unwrap()
-        .get(&Yaml::String(String::from(DIR_TARGET)))
+        .get(DIR_TARGET)
         .unwrap()
         .as_str()
         .unwrap();
@@ -100,8 +101,8 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
     let ignore = args
         .as_hash()
         .unwrap()
-        .get(&Yaml::String(String::from(DIR_IGNORE)))
-        .unwrap_or(&Yaml::Array(vec![]))
+        .get(DIR_IGNORE)
+        .unwrap_or(&ConfigValue::Array(vec![]))
         .as_vec()
         .unwrap()
         .to_owned();
@@ -123,7 +124,7 @@ pub fn get_source_and_target(args: Yaml) -> Result<Dirs, String> {
 }
 
 // TODO: improve this with a better regex approach :)
-fn is_ignored(path: &Path, source: &PathArc, ignore: &[Yaml]) -> bool {
+fn is_ignored(path: &Path, source: &PathArc, ignore: &[ConfigValue]) -> bool {
     let path_str = path.strip_prefix(source).unwrap().to_str().unwrap();
 
     for ignore_path in ignore {
@@ -139,7 +140,7 @@ fn is_ignored(path: &Path, source: &PathArc, ignore: &[Yaml]) -> bool {
 pub fn walk_files<O: Fn(&Path, &Path)>(
     source: &PathArc,
     target: &Path,
-    ignore: Vec<Yaml>,
+    ignore: Vec<ConfigValue>,
     op: O,
 ) -> Result<(), String> {
     if !source.exists() {

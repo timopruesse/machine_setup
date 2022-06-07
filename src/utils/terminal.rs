@@ -1,35 +1,29 @@
 use ansi_term::Color::White;
 use ergo_fs::PathArc;
 use std::env;
-use yaml_rust::yaml::Hash;
-use yaml_rust::Yaml;
 
+use crate::config::config::ConfigValue;
 use crate::config::validator::arguments_are_named;
 use crate::utils::directory::expand_path;
 
-fn parse_environment_variables(args: Yaml) -> Result<Option<Hash>, String> {
+fn parse_environment_variables(args: ConfigValue) -> Result<Option<ConfigValue>, String> {
     if !arguments_are_named(Some(&args)) {
         return Ok(None);
     }
 
     let hash = args.as_hash().unwrap();
-    if !hash.contains_key(&Yaml::String(String::from("env"))) {
+    if !hash.contains_key("env") {
         return Ok(None);
     }
 
-    let env = hash
-        .get(&Yaml::String(String::from("env")))
-        .unwrap()
-        .as_hash();
-
-    if env.is_none() {
-        return Err(String::from("env is not set correctly"));
+    if let Some(env) = hash.get("env") {
+        return Ok(Some(env.to_owned()));
     }
 
-    Ok(Some(env.unwrap().to_owned()))
+    return Err(String::from("env is not set correctly"));
 }
 
-pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
+pub fn set_environment_variables(args: &ConfigValue) -> Result<(), String> {
     let env = parse_environment_variables(args.to_owned());
     if let Err(err_env) = env {
         return Err(err_env);
@@ -40,8 +34,7 @@ pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
         println!("Environment");
         println!("-----------------------------");
 
-        for (key, value) in env {
-            let env_name = key.as_str().unwrap();
+        for (key, value) in env.as_hash().unwrap() {
             let env_value_raw = value.as_str().unwrap();
 
             let expanded_value =
@@ -49,8 +42,8 @@ pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
 
             let env_value = expanded_value.to_str().unwrap();
 
-            env::set_var(env_name, env_value);
-            println!("{}={}", env_name, White.bold().paint(env_value));
+            env::set_var(key, env_value);
+            println!("{}={}", key, White.bold().paint(env_value));
         }
 
         println!("-----------------------------");
@@ -61,26 +54,26 @@ pub fn set_environment_variables(args: &Yaml) -> Result<(), String> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::collections::HashMap;
 
-    use yaml_rust::yaml::Hash;
+    use super::*;
 
     #[test]
     fn it_sets_environment_variables_correctly() {
-        let mut env = Hash::new();
+        let mut env = HashMap::new();
         env.insert(
-            Yaml::String(String::from("TEST_1")),
-            Yaml::String(String::from("value_one")),
+            String::from("TEST_1"),
+            ConfigValue::String(String::from("value_one")),
         );
         env.insert(
-            Yaml::String(String::from("TEST_2")),
-            Yaml::String(String::from("value_two")),
+            String::from("TEST_2"),
+            ConfigValue::String(String::from("value_two")),
         );
 
-        let mut args = Hash::new();
-        args.insert(Yaml::String("env".to_string()), Yaml::Hash(env));
+        let mut args = HashMap::new();
+        args.insert("env".to_string(), ConfigValue::Hash(env));
 
-        set_environment_variables(&Yaml::Hash(args)).unwrap();
+        set_environment_variables(&ConfigValue::Hash(args)).unwrap();
 
         assert_eq!(env::var("TEST_1").unwrap(), "value_one");
         assert_eq!(env::var("TEST_2").unwrap(), "value_two");

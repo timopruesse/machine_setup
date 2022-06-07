@@ -1,18 +1,16 @@
-use yaml_rust::Yaml;
-
-use crate::config::validator::ValidationRule;
+use crate::config::{config::ConfigValue, validator::ValidationRule};
 
 pub struct Required {}
 
 impl ValidationRule for Required {
-    fn validate(&self, input: Option<&Yaml>) -> bool {
+    fn validate(&self, input: Option<&ConfigValue>) -> bool {
         if input.is_none() {
             return false;
         }
 
         let value = input.unwrap();
 
-        if value.is_badvalue() || value.is_null() {
+        if value.is_invalid() || value.is_null() {
             return false;
         }
 
@@ -32,28 +30,28 @@ mod test {
     #[test]
     fn it_fails_when_required_arg_is_a_bad_value() {
         let rule = Required {};
-        let input = Yaml::BadValue;
+        let input = ConfigValue::Invalid;
         assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_fails_when_required_arg_is_empty() {
         let rule = Required {};
-        let input = Yaml::String(String::from(""));
+        let input = ConfigValue::String(String::from(""));
         assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_fails_when_required_arg_is_null() {
         let rule = Required {};
-        let input = Yaml::Null;
+        let input = ConfigValue::Null;
         assert!(!rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_returns_ok_when_required_arg_is_present() {
         let rule = Required {};
-        let input = Yaml::String(String::from("hello"));
+        let input = ConfigValue::String(String::from("hello"));
         assert!(rule.validate(Some(&input)));
     }
 }

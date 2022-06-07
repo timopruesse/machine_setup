@@ -4,12 +4,43 @@ use ansi_term::Color::White;
 use yaml_rust::{Yaml, YamlLoader};
 
 use crate::{config::base_config::*, utils::shell::Shell};
-use std::{io::Read, path::Path, str::FromStr};
+use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
+
+use super::config::ConfigValue;
 
 #[derive(Debug)]
 pub struct YamlConfig {}
 
 static ALLOWED_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
+
+fn convert_to_config_value(yaml: &Yaml) -> ConfigValue {
+    match yaml {
+        Yaml::String(s) => ConfigValue::String(s.to_string()),
+        Yaml::Integer(i) => ConfigValue::Integer(i.to_owned() as i32),
+        Yaml::Real(f) => ConfigValue::Float(f.parse().unwrap()),
+        Yaml::Boolean(b) => ConfigValue::Boolean(b.to_owned()),
+        Yaml::Array(a) => {
+            let mut array = Vec::new();
+            for yaml in a {
+                array.push(convert_to_config_value(yaml));
+            }
+            ConfigValue::Array(array)
+        }
+        Yaml::Hash(h) => {
+            let mut hash = HashMap::new();
+            for (key, value) in h {
+                hash.insert(
+                    key.as_str().unwrap().to_string(),
+                    convert_to_config_value(value),
+                );
+            }
+            ConfigValue::Hash(hash)
+        }
+        Yaml::Null => ConfigValue::Null,
+        Yaml::BadValue => ConfigValue::Invalid,
+        _ => ConfigValue::Invalid,
+    }
+}
 
 fn parse_yaml(path: &Path) -> Result<TaskList, String> {
     let mut file = std::fs::File::open(path).unwrap();
@@ -40,7 +71,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
 
             commands.push(Command {
                 name: name.as_str().unwrap().to_string(),
-                args: args.to_owned(),
+                args: convert_to_config_value(args),
             });
         }
 

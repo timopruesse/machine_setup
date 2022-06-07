@@ -1,10 +1,12 @@
 use ansi_term::Color::{Green, Red, White};
 use core::fmt;
-use yaml_rust::Yaml;
 
 use crate::{
     command::{get_command, CommandInterface},
-    config::base_config::{Task, TaskList},
+    config::{
+        base_config::{Task, TaskList},
+        config::ConfigValue,
+    },
     utils::shell::Shell,
 };
 
@@ -29,7 +31,7 @@ impl fmt::Display for TaskRunnerMode {
 
 fn run_command(
     command: Box<dyn CommandInterface>,
-    args: Yaml,
+    args: ConfigValue,
     mode: &TaskRunnerMode,
     temp_dir: &str,
     default_shell: &Shell,
@@ -169,7 +171,7 @@ pub fn run(
 
 #[cfg(test)]
 mod test {
-    use crate::config::base_config::Command;
+    use crate::config::{base_config::Command, config::ConfigValue};
 
     use super::*;
 
@@ -181,7 +183,7 @@ mod test {
                     name: "task_one".to_string(),
                     commands: vec![Command {
                         name: "_TEST_".to_string(),
-                        args: Yaml::Array(vec![]),
+                        args: ConfigValue::Array(vec![]),
                     }],
                 },
                 Task {
@@ -249,14 +251,14 @@ mod test {
                     name: "task_one".to_string(),
                     commands: vec![Command {
                         name: "_TEST_".to_string(),
-                        args: Yaml::Array(vec![]),
+                        args: ConfigValue::Array(vec![]),
                     }],
                 },
                 Task {
                     name: "task_two".to_string(),
                     commands: vec![Command {
                         name: "_TEST_".to_string(),
-                        args: Yaml::Array(vec![]),
+                        args: ConfigValue::Array(vec![]),
                     }],
                 },
             ],

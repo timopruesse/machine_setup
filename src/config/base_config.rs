@@ -1,13 +1,11 @@
-use yaml_rust::Yaml;
-
 use crate::utils::shell::Shell;
 
-use super::yaml_config::YamlConfig;
+use super::{config::ConfigValue, yaml_config::YamlConfig};
 
 #[derive(Debug)]
 pub struct Command {
     pub name: String,
-    pub args: Yaml,
+    pub args: ConfigValue,
 }
 
 #[derive(Debug)]

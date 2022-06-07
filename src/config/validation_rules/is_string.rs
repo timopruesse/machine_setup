@@ -1,14 +1,12 @@
-use yaml_rust::Yaml;
-
-use crate::config::validator::ValidationRule;
+use crate::config::{config::ConfigValue, validator::ValidationRule};
 
 pub struct IsString {}
 
 impl ValidationRule for IsString {
-    fn validate(&self, input: Option<&Yaml>) -> bool {
-        let value = input.unwrap_or(&Yaml::BadValue);
+    fn validate(&self, input: Option<&ConfigValue>) -> bool {
+        let value = input.unwrap_or(&ConfigValue::Invalid);
 
-        if let Yaml::String(_) = value {
+        if let ConfigValue::String(_) = value {
             return true;
         }
 
@@ -27,7 +25,7 @@ mod test {
     #[test]
     fn it_fails_when_input_is_not_string() {
         let rule = IsString {};
-        let input = Yaml::Array(vec![Yaml::Integer(1)]);
+        let input = ConfigValue::Array(vec![ConfigValue::Integer(1)]);
 
         assert!(!rule.validate(Some(&input)));
     }
@@ -35,7 +33,7 @@ mod test {
     #[test]
     fn it_returns_true_when_value_is_a_string() {
         let rule = IsString {};
-        let input = Yaml::String(String::from("test"));
+        let input = ConfigValue::String(String::from("test"));
 
         assert!(rule.validate(Some(&input)));
     }

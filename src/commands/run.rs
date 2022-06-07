@@ -4,11 +4,11 @@ use std::{
     process::{Command, Stdio},
     str::FromStr,
 };
-use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
     config::{
+        config::ConfigValue,
         validation_rules::{is_array::IsArray, is_string::IsString, one_of::OneOf},
         validator::{arguments_are_named, validate_args, validate_named_args},
     },
@@ -21,7 +21,7 @@ use crate::{
 
 pub struct RunCommand {}
 
-fn get_commands_from_yaml(args: Yaml) -> Vec<String> {
+fn get_commands_from_yaml(args: ConfigValue) -> Vec<String> {
     return if args.is_array() {
         args.as_vec()
             .unwrap()
@@ -33,7 +33,7 @@ fn get_commands_from_yaml(args: Yaml) -> Vec<String> {
     };
 }
 
-fn get_commands(args: Yaml, mode: TaskRunnerMode) -> Result<Vec<String>, String> {
+fn get_commands(args: ConfigValue, mode: TaskRunnerMode) -> Result<Vec<String>, String> {
     let is_str_or_array = OneOf {
         rules: vec![Box::new(IsArray {}), Box::new(IsString {})],
     };
@@ -52,7 +52,7 @@ fn get_commands(args: Yaml, mode: TaskRunnerMode) -> Result<Vec<String>, String>
         return Ok(get_commands_from_yaml(
             args.as_hash()
                 .unwrap()
-                .get(&Yaml::String(method_name))
+                .get(&method_name)
                 .unwrap()
                 .to_owned(),
         ));
@@ -67,7 +67,7 @@ fn get_commands(args: Yaml, mode: TaskRunnerMode) -> Result<Vec<String>, String>
 }
 
 fn run_commands(
-    commands: &Yaml,
+    commands: &ConfigValue,
     shell: &str,
     mode: TaskRunnerMode,
     temp_dir: &str,
@@ -124,19 +124,16 @@ fn run_commands(
 
 fn run_task(
     mode: TaskRunnerMode,
-    args: Yaml,
+    args: ConfigValue,
     temp_dir: &str,
     default_shell: &Shell,
 ) -> Result<(), String> {
     let parameters = args.as_hash().unwrap();
+    let param_commands = parameters.get("commands").unwrap();
 
-    let param_commands = parameters
-        .get(&Yaml::String(String::from("commands")))
-        .unwrap();
-
-    let default_shell = Yaml::String(default_shell.to_string());
+    let default_shell = ConfigValue::String(default_shell.to_string());
     let param_shell = parameters
-        .get(&Yaml::String(String::from("shell")))
+        .get("shell")
         .unwrap_or(&default_shell)
         .as_str()
         .unwrap();
@@ -159,30 +156,46 @@ fn run_task(
 }
 
 impl CommandInterface for RunCommand {
-    fn install(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
+    fn install(
+        &self,
+        args: ConfigValue,
+        temp_dir: &str,
+        default_shell: &Shell,
+    ) -> Result<(), String> {
         run_task(TaskRunnerMode::Install, args, temp_dir, default_shell)
     }
 
-    fn uninstall(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        temp_dir: &str,
+        default_shell: &Shell,
+    ) -> Result<(), String> {
         run_task(TaskRunnerMode::Uninstall, args, temp_dir, default_shell)
     }
 
-    fn update(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
+    fn update(
+        &self,
+        args: ConfigValue,
+        temp_dir: &str,
+        default_shell: &Shell,
+    ) -> Result<(), String> {
         run_task(TaskRunnerMode::Update, args, temp_dir, default_shell)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use yaml_rust::yaml::Hash;
-
     use super::*;
 
     #[test]
     fn it_gets_command_from_string() {
         let command = "echo hello";
 
-        let commands = get_commands(Yaml::String(command.to_string()), TaskRunnerMode::Install);
+        let commands = get_commands(
+            ConfigValue::String(command.to_string()),
+            TaskRunnerMode::Install,
+        );
 
         assert!(commands.is_ok());
         assert_eq!(vec![command.to_string()], commands.unwrap());
@@ -190,9 +203,9 @@ mod test {
 
     #[test]
     fn it_gets_commands_from_array() {
-        let commands = Yaml::Array(vec![
-            Yaml::String(String::from("command1")),
-            Yaml::String(String::from("command2")),
+        let commands = ConfigValue::Array(vec![
+            ConfigValue::String(String::from("command1")),
+            ConfigValue::String(String::from("command2")),
         ]);
 
         let commands = get_commands(commands.clone(), TaskRunnerMode::Install);
@@ -205,16 +218,16 @@ mod test {
 
     #[test]
     fn it_gets_install_commands() {
-        let mut commands = Hash::new();
+        let mut commands = HashMap::new();
         commands.insert(
-            Yaml::String("install".to_string()),
-            Yaml::Array(vec![
-                Yaml::String("command1".to_string()),
-                Yaml::String("command2".to_string()),
+            "install".to_string(),
+            ConfigValue::Array(vec![
+                ConfigValue::String("command1".to_string()),
+                ConfigValue::String("command2".to_string()),
             ]),
         );
 
-        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Install);
+        let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Install);
         assert!(commands.is_ok());
         assert_eq!(
             commands.unwrap(),
@@ -224,29 +237,32 @@ mod test {
 
     #[test]
     fn it_gets_install_command_string() {
-        let mut commands = Hash::new();
+        let mut commands = HashMap::new();
         commands.insert(
-            Yaml::String("install".to_string()),
-            Yaml::String(String::from("command1")),
+            "install".to_string(),
+            ConfigValue::String(String::from("command1")),
         );
 
-        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Install);
+        let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Install);
         assert!(commands.is_ok());
         assert_eq!(commands.unwrap(), vec![String::from("command1")]);
     }
 
     #[test]
     fn it_gets_uninstall_commands() {
-        let mut commands = Hash::new();
+        let mut commands = HashMap::new();
         commands.insert(
-            Yaml::String("uninstall".to_string()),
-            Yaml::Array(vec![
-                Yaml::String("command1".to_string()),
-                Yaml::String("command2".to_string()),
+            "uninstall".to_string(),
+            ConfigValue::Array(vec![
+                ConfigValue::String("command1".to_string()),
+                ConfigValue::String("command2".to_string()),
             ]),
         );
 
-        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Uninstall);
+        let commands = get_commands(
+            ConfigValue::Hash(commands.clone()),
+            TaskRunnerMode::Uninstall,
+        );
         assert!(commands.is_ok());
         assert_eq!(
             commands.unwrap(),
@@ -256,29 +272,32 @@ mod test {
 
     #[test]
     fn it_gets_uninstall_command_string() {
-        let mut commands = Hash::new();
+        let mut commands = HashMap::new();
         commands.insert(
-            Yaml::String("uninstall".to_string()),
-            Yaml::String(String::from("command1")),
+            "uninstall".to_string(),
+            ConfigValue::String(String::from("command1")),
         );
 
-        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Uninstall);
+        let commands = get_commands(
+            ConfigValue::Hash(commands.clone()),
+            TaskRunnerMode::Uninstall,
+        );
         assert!(commands.is_ok());
         assert_eq!(commands.unwrap(), vec![String::from("command1")]);
     }
 
     #[test]
     fn it_gets_update_commands() {
-        let mut commands = Hash::new();
+        let mut commands = HashMap::new();
         commands.insert(
-            Yaml::String("update".to_string()),
-            Yaml::Array(vec![
-                Yaml::String("command1".to_string()),
-                Yaml::String("command2".to_string()),
+            "update".to_string(),
+            ConfigValue::Array(vec![
+                ConfigValue::String("command1".to_string()),
+                ConfigValue::String("command2".to_string()),
             ]),
         );
 
-        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Update);
+        let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Update);
         assert!(commands.is_ok());
         assert_eq!(
             commands.unwrap(),
@@ -288,26 +307,26 @@ mod test {
 
     #[test]
     fn it_gets_update_command_string() {
-        let mut commands = Hash::new();
+        let mut commands = HashMap::new();
         commands.insert(
-            Yaml::String("update".to_string()),
-            Yaml::String(String::from("command1")),
+            "update".to_string(),
+            ConfigValue::String(String::from("command1")),
         );
 
-        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Update);
+        let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Update);
         assert!(commands.is_ok());
         assert_eq!(commands.unwrap(), vec![String::from("command1")]);
     }
 
     #[test]
     fn it_fails_when_method_is_not_defined() {
-        let mut commands = Hash::new();
+        let mut commands = HashMap::new();
         commands.insert(
-            Yaml::String("invalid".to_string()),
-            Yaml::String(String::from("command1")),
+            "invalid".to_string(),
+            ConfigValue::String(String::from("command1")),
         );
 
-        let commands = get_commands(Yaml::Hash(commands.clone()), TaskRunnerMode::Install);
+        let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Install);
         assert!(commands.is_err());
         assert_eq!(
             commands.unwrap_err(),

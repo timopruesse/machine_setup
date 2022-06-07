@@ -1,13 +1,11 @@
-use yaml_rust::Yaml;
-
-use crate::config::validator::ValidationRule;
+use crate::config::{config::ConfigValue, validator::ValidationRule};
 
 pub struct OneOf {
     pub rules: Vec<Box<dyn ValidationRule>>,
 }
 
 impl ValidationRule for OneOf {
-    fn validate(&self, input: Option<&Yaml>) -> bool {
+    fn validate(&self, input: Option<&ConfigValue>) -> bool {
         for rule in &self.rules {
             if rule.validate(input) {
                 return true;
@@ -41,7 +39,7 @@ mod test {
             rules: vec![Box::new(Required {}), Box::new(IsArray {})],
         };
 
-        assert!(rule.validate(Some(&Yaml::from_str("foo"))));
+        assert!(rule.validate(Some(&ConfigValue::String(String::from("foo")))));
     }
 
     #[test]
@@ -50,6 +48,6 @@ mod test {
             rules: vec![Box::new(Required {}), Box::new(IsArray {})],
         };
 
-        assert!(!rule.validate(Some(&Yaml::from_str(""))));
+        assert!(!rule.validate(Some(&ConfigValue::String(String::from("")))));
     }
 }

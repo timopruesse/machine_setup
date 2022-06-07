@@ -2,10 +2,10 @@ use ansi_term::Color::{Green, Red, White, Yellow};
 use ergo_fs::{Path, PathArc};
 use std::fs::remove_file;
 use symlink::{remove_symlink_file, symlink_file};
-use yaml_rust::Yaml;
 
 use crate::{
     command::CommandInterface,
+    config::config::ConfigValue,
     utils::{
         directory::{expand_path, get_source_and_target, walk_files},
         shell::Shell,
@@ -14,18 +14,27 @@ use crate::{
 
 pub struct SymlinkCommand {}
 
-fn should_force(args: Yaml) -> bool {
+fn should_force(args: ConfigValue) -> bool {
+    if !args.is_hash() {
+        return false;
+    }
+
     let arg_values = args.as_hash().unwrap();
 
-    arg_values
-        .get(&Yaml::String("force".to_string()))
-        .unwrap_or(&Yaml::Boolean(false))
-        .as_bool()
-        .unwrap()
+    if let Some(force) = arg_values.get("force") {
+        return force.as_bool().unwrap_or(false);
+    }
+
+    false
 }
 
 impl CommandInterface for SymlinkCommand {
-    fn install(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
+    fn install(
+        &self,
+        args: ConfigValue,
+        _temp_dir: &str,
+        _default_shell: &Shell,
+    ) -> Result<(), String> {
         let dirs = get_source_and_target(args.clone());
         if let Err(err_dirs) = dirs {
             return Err(err_dirs);
@@ -41,7 +50,12 @@ impl CommandInterface for SymlinkCommand {
         Ok(())
     }
 
-    fn uninstall(&self, args: Yaml, _temp_dir: &str, _default_shell: &Shell) -> Result<(), String> {
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        _temp_dir: &str,
+        _default_shell: &Shell,
+    ) -> Result<(), String> {
         let dirs = get_source_and_target(args);
         if dirs.is_err() {
             return Err(dirs.err().unwrap());
@@ -57,7 +71,12 @@ impl CommandInterface for SymlinkCommand {
         Ok(())
     }
 
-    fn update(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String> {
+    fn update(
+        &self,
+        args: ConfigValue,
+        temp_dir: &str,
+        default_shell: &Shell,
+    ) -> Result<(), String> {
         self.install(args, temp_dir, default_shell)
     }
 }
@@ -65,7 +84,7 @@ impl CommandInterface for SymlinkCommand {
 fn link_files(
     source_dir: &PathArc,
     destination_dir: &Path,
-    ignore: Vec<Yaml>,
+    ignore: Vec<ConfigValue>,
     force: bool,
 ) -> Result<(), String> {
     println!(
@@ -129,7 +148,7 @@ fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), Stri
 pub fn create_symlink(
     source: &str,
     destination: &str,
-    ignore: Vec<Yaml>,
+    ignore: Vec<ConfigValue>,
     force: bool,
 ) -> Result<(), String> {
     let expanded_source = expand_path(source, false);

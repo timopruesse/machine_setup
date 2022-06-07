@@ -1,16 +1,30 @@
-use yaml_rust::Yaml;
-
 use crate::{
     commands::{
         clone::CloneCommand, copy::CopyDirCommand, run::RunCommand, symlink::SymlinkCommand,
     },
+    config::config::ConfigValue,
     utils::shell::Shell,
 };
 
 pub trait CommandInterface {
-    fn install(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String>;
-    fn uninstall(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String>;
-    fn update(&self, args: Yaml, temp_dir: &str, default_shell: &Shell) -> Result<(), String>;
+    fn install(
+        &self,
+        args: ConfigValue,
+        temp_dir: &str,
+        default_shell: &Shell,
+    ) -> Result<(), String>;
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        temp_dir: &str,
+        default_shell: &Shell,
+    ) -> Result<(), String>;
+    fn update(
+        &self,
+        args: ConfigValue,
+        temp_dir: &str,
+        default_shell: &Shell,
+    ) -> Result<(), String>;
 }
 
 pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {
