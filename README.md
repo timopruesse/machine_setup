@@ -20,7 +20,7 @@ cargo install machine_setup
 
 ## Run
 
-Subcommands:
+### Subcommands
 
 | command   | description                   | example                   |
 | --------- | ----------------------------- | ------------------------- |
@@ -29,10 +29,9 @@ Subcommands:
 | uninstall | uninstall the defined tasks   | `machine_setup uninstall` |
 | list      | list all of the defined tasks | `machine_setup list`      |
 
-By default, `machine_setup` will look for a file called `machine_setup.yaml`.
-Currently, the supported formats are `YAML` and `JSON`.
+By default, `machine_setup` will look for a file called `machine_setup.yaml`.  
 
-Command line parameters:
+### Command line parameters
 
 | flag             | value                                       | example                                           |
 | ---------------- | ------------------------------------------- | ------------------------------------------------- |
@@ -41,6 +40,10 @@ Command line parameters:
 | -s<br> --select  | select a task to run                        | `machine_setup install -s`                        |
 | -h<br> --help    | display help information                    | `machine_setup --help`                            |
 | -v<br> --version | display version information                 | `machine_setup --version`                         |
+
+### Supported config file formats
+
+The supported formats are `YAML` and `JSON`.
 
 ## Configure
 
