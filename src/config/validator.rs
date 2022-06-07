@@ -1,5 +1,6 @@
-use super::config::ConfigValue;
 use std::collections::HashMap;
+
+use super::config_value::ConfigValue;
 
 pub trait ValidationRule {
     fn validate(&self, input: Option<&ConfigValue>) -> bool;
@@ -7,7 +8,7 @@ pub trait ValidationRule {
 }
 
 pub fn arguments_are_named(args: Option<&ConfigValue>) -> bool {
-    return args.unwrap_or(&ConfigValue::Invalid).is_hash();
+    args.unwrap_or(&ConfigValue::Invalid).is_hash()
 }
 
 pub fn validate_args(

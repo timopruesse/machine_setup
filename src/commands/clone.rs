@@ -7,7 +7,8 @@ use git_commands::git;
 use crate::{
     command::CommandInterface,
     config::{
-        config::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
+        config_value::ConfigValue, validation_rules::required::Required,
+        validator::validate_named_args,
     },
     utils::{directory::expand_path, shell::Shell},
 };

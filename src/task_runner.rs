@@ -5,7 +5,7 @@ use crate::{
     command::{get_command, CommandInterface},
     config::{
         base_config::{Task, TaskList},
-        config::ConfigValue,
+        config_value::ConfigValue,
     },
     utils::shell::Shell,
 };
@@ -171,7 +171,7 @@ pub fn run(
 
 #[cfg(test)]
 mod test {
-    use crate::config::{base_config::Command, config::ConfigValue};
+    use crate::config::base_config::Command;
 
     use super::*;
 

@@ -2,7 +2,7 @@ use crate::{
     commands::{
         clone::CloneCommand, copy::CopyDirCommand, run::RunCommand, symlink::SymlinkCommand,
     },
-    config::config::ConfigValue,
+    config::config_value::ConfigValue,
     utils::shell::Shell,
 };
 

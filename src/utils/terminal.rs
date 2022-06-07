@@ -2,7 +2,7 @@ use ansi_term::Color::White;
 use ergo_fs::PathArc;
 use std::env;
 
-use crate::config::config::ConfigValue;
+use crate::config::config_value::ConfigValue;
 use crate::config::validator::arguments_are_named;
 use crate::utils::directory::expand_path;
 
@@ -20,7 +20,7 @@ fn parse_environment_variables(args: ConfigValue) -> Result<Option<ConfigValue>,
         return Ok(Some(env.to_owned()));
     }
 
-    return Err(String::from("env is not set correctly"));
+    Err(String::from("env is not set correctly"))
 }
 
 pub fn set_environment_variables(args: &ConfigValue) -> Result<(), String> {

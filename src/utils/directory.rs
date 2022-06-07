@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::config::{
-    config::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
+    config_value::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
 };
 
 pub fn is_file_path(path: &PathArc) -> bool {

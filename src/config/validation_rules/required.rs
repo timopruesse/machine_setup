@@ -1,4 +1,4 @@
-use crate::config::{config::ConfigValue, validator::ValidationRule};
+use crate::config::{config_value::ConfigValue, validator::ValidationRule};
 
 pub struct Required {}
 

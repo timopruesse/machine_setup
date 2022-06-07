@@ -8,7 +8,7 @@ use std::{
 use crate::{
     command::CommandInterface,
     config::{
-        config::ConfigValue,
+        config_value::ConfigValue,
         validation_rules::{is_array::IsArray, is_string::IsString, one_of::OneOf},
         validator::{arguments_are_named, validate_args, validate_named_args},
     },

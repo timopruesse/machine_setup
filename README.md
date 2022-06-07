@@ -30,6 +30,7 @@ Subcommands:
 | list      | list all of the defined tasks | `machine_setup list`      |
 
 By default, `machine_setup` will look for a file called `machine_setup.yaml`.
+Currently, the supported formats are `YAML` and `JSON`.
 
 Command line parameters:
 
@@ -56,6 +57,9 @@ Every task can contain an arbitrary number of commands.
 > Currently, there can only be one command of the same type per task.
 > The last command in a task will take precedence.
 > This is an open bug and will be fixed in a future release.
+
+
+> TODO: Add JSON examples...
 
 Check out the example configuration below:
 
@@ -241,10 +245,10 @@ updatable_multiline_command:
 
 ### 1.0.0
 
-Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...
+~~Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...~~
 
-- remove hardcoded Yaml types
-- add JSON support
+- ~~remove hardcoded Yaml types~~
+- ~~add JSON support~~
 
 ### 1.1.0
 

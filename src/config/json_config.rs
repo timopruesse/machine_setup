@@ -4,7 +4,7 @@ use serde_json::Value;
 use crate::{config::base_config::*, utils::shell::Shell};
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
 
-use super::config::ConfigValue;
+use super::config_value::ConfigValue;
 
 #[derive(Debug)]
 pub struct JsonConfig {}
@@ -53,7 +53,7 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
         let (key, value) = task;
 
         if !value.is_object() {
-            return Err(format!("{}: task definition is incorrect", key.to_string()));
+            return Err(format!("{}: task definition is incorrect", key));
         }
 
         let mut commands: Vec<Command> = vec![];
@@ -104,7 +104,7 @@ impl BaseConfig for JsonConfig {
             return Err(format!("File {} does not exist", path));
         }
 
-        if json_path.extension().unwrap().to_str().unwrap() != String::from("json") {
+        if json_path.extension().unwrap().to_str().unwrap() != "json" {
             return Err(format!("File {} is not a JSON file", path));
         }
 

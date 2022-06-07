@@ -49,30 +49,18 @@ impl ConfigValue {
     define_as_ref!(as_vec, &Array, Array);
 
     pub fn is_null(&self) -> bool {
-        match *self {
-            ConfigValue::Null => true,
-            _ => false,
-        }
+        matches!(*self, ConfigValue::Null)
     }
 
     pub fn is_invalid(&self) -> bool {
-        match *self {
-            ConfigValue::Invalid => true,
-            _ => false,
-        }
+        matches!(*self, ConfigValue::Invalid)
     }
 
     pub fn is_array(&self) -> bool {
-        match *self {
-            ConfigValue::Array(_) => true,
-            _ => false,
-        }
+        matches!(*self, ConfigValue::Array(_))
     }
 
     pub fn is_hash(&self) -> bool {
-        match *self {
-            ConfigValue::Hash(_) => true,
-            _ => false,
-        }
+        matches!(*self, ConfigValue::Hash(_))
     }
 }

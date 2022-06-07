@@ -1,6 +1,6 @@
 use crate::utils::shell::Shell;
 
-use super::{config::ConfigValue, json_config::JsonConfig, yaml_config::YamlConfig};
+use super::{config_value::ConfigValue, json_config::JsonConfig, yaml_config::YamlConfig};
 
 #[derive(Debug)]
 pub struct Command {

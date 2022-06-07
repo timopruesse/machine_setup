@@ -5,7 +5,7 @@ use symlink::{remove_symlink_file, symlink_file};
 
 use crate::{
     command::CommandInterface,
-    config::config::ConfigValue,
+    config::config_value::ConfigValue,
     utils::{
         directory::{expand_path, get_source_and_target, walk_files},
         shell::Shell,

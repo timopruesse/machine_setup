@@ -5,7 +5,8 @@ use std::{collections::HashMap, fs};
 use crate::{
     command::CommandInterface,
     config::{
-        config::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
+        config_value::ConfigValue, validation_rules::required::Required,
+        validator::validate_named_args,
     },
     utils::{
         directory::{expand_path, get_source_and_target, walk_files, DIR_TARGET},
