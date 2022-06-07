@@ -224,31 +224,25 @@ updatable_multiline_command:
 ### 0.4.0
 
 - ~~symlink command: add option to force symlink (delete existing files)~~
-- Add other binaries and installation options
-- Relative paths should be relative to the config file
+- ~~remove hardcoded Yaml types~~
+- ~~add JSON support~~
 
 ### 0.5.0
 
-- Add autocomplete (also for tasks) -> `clap_complete`
-- Improve the terminal output
-  - hide most of it behind a `--verbose` flag
-
-### 0.6.0
-
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 
-### 0.7.0
+### 0.6.0
 
 - conditional tasks
   - add the ability to run tasks for specific OSs, e.g. `os: ['linux', 'osx']`
   - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
 
-### 1.0.0
-
-~~Theoretically, other config formats can be used. However, a lot of the types are still hardcoded to Yaml...~~
-
-- ~~remove hardcoded Yaml types~~
-- ~~add JSON support~~
+### 1.0.0                                                                                                                            1
+- Add other binaries and installation options
+- Relative paths should be relative to the config file
+- Add autocomplete (also for tasks) -> `clap_complete`
+- Improve the terminal output
+    - hide most of it behind a `--verbose` flag
 
 ### 1.1.0
 
