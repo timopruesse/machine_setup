@@ -1,4 +1,4 @@
-use terminal::terminal::execute_command;
+use terminal::command::execute_command;
 
 pub mod command;
 pub mod commands;

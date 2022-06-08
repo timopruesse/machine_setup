@@ -1,6 +1,10 @@
 use crate::utils::shell::Shell;
 
-use super::{config_value::ConfigValue, json_config::JsonConfig, yaml_config::YamlConfig};
+use super::{
+    config_value::ConfigValue,
+    json_config::JsonConfig,
+    yaml_config::{YamlConfig, ALLOWED_EXTENSIONS},
+};
 
 #[derive(Debug)]
 pub struct Command {
@@ -28,11 +32,11 @@ pub trait BaseConfig {
 fn get_config_handler(config_path: &str) -> Result<Box<dyn BaseConfig>, String> {
     let file_ending = config_path.split('.').last().unwrap();
 
-    return match file_ending {
-        file_ending if file_ending == "yml" || file_ending == "yaml" => Ok(Box::new(YamlConfig {})),
-        file_ending if file_ending == "json" => Ok(Box::new(JsonConfig {})),
-        _ => Err(format!("Unsupported config file format: .{}", file_ending)),
-    };
+    match file_ending {
+        file_ending if ALLOWED_EXTENSIONS.contains(&file_ending) => Ok(Box::new(YamlConfig {})),
+        "json" => Ok(Box::new(JsonConfig {})),
+        _ => Err(format!("Unsupported config file type: {}", file_ending)),
+    }
 }
 
 pub fn get_config(config_path: &str) -> Result<TaskList, String> {

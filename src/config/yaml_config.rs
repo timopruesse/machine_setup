@@ -11,7 +11,7 @@ use super::config_value::ConfigValue;
 #[derive(Debug)]
 pub struct YamlConfig {}
 
-static ALLOWED_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
+pub static ALLOWED_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
 
 fn convert_to_config_value(yaml: &Yaml) -> ConfigValue {
     match yaml {
