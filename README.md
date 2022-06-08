@@ -29,7 +29,7 @@ cargo install machine_setup
 | uninstall | uninstall the defined tasks   | `machine_setup uninstall` |
 | list      | list all of the defined tasks | `machine_setup list`      |
 
-By default, `machine_setup` will look for a file called `machine_setup.yaml`.  
+By default, `machine_setup` will look for a file called `machine_setup.yaml`.
 
 ### Command line parameters
 
@@ -60,7 +60,6 @@ Every task can contain an arbitrary number of commands.
 > Currently, there can only be one command of the same type per task.
 > The last command in a task will take precedence.
 > This is an open bug and will be fixed in a future release.
-
 
 > TODO: Add JSON examples...
 
@@ -224,23 +223,20 @@ updatable_multiline_command:
 
 ## TODOs
 
-### 0.5.0
-
-- Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
-
 ### 0.6.0
 
 - conditional tasks
   - add the ability to run tasks for specific OSs, e.g. `os: ['linux', 'osx']`
   - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
 
-### 1.0.0                                                                                                                            1
+### 1.0.0
+
 - Add other binaries and installation options
 - Relative paths should be relative to the config file
-- Add autocomplete (also for tasks) -> `clap_complete`
 - Improve the terminal output
-    - hide most of it behind a `--verbose` flag
+  - hide most of it behind a `--verbose` flag
 
 ### 1.1.0
 
 - make it possible to specify that all commands in a task should be run in parallel (this might be useful when cloning/updating a chunk of repos for example)
+- Add option to run `copy` and `symlink` as root user (needed to move/link some system files)

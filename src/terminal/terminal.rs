@@ -1,8 +1,5 @@
 use ansi_term::Color::{Red, White};
-use clap::Parser;
-use clap::Subcommand;
 use ergo_fs::expand;
-use std::str::FromStr;
 
 use crate::config::base_config::get_config;
 use crate::config::base_config::Task;
@@ -11,59 +8,9 @@ use crate::task::select_task;
 use crate::task_runner;
 use crate::task_runner::TaskRunnerMode;
 
-#[derive(Subcommand, Debug)]
-enum SubCommand {
-    /// Install all of the defined tasks
-    Install,
-
-    /// Update all of the defined tasks
-    Update,
-
-    /// Uninstall all of the defined tasks
-    Uninstall,
-
-    /// List defined tasks
-    List,
-}
-
-impl FromStr for SubCommand {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "install" => Ok(SubCommand::Install),
-            "update" => Ok(SubCommand::Update),
-            "uninstall" => Ok(SubCommand::Uninstall),
-            "list" => Ok(SubCommand::List),
-            _ => Err(format!("Invalid mode: {}", s)),
-        }
-    }
-}
-
-/// Machine Setup CLI
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
-struct Args {
-    /// what should be done?
-    #[clap(subcommand)]
-    command: SubCommand,
-
-    /// path to the config file
-    #[clap(short, long, default_value = "./machine_setup.yaml")]
-    #[clap(global = true)]
-    config: String,
-
-    /// run a single task
-    #[clap(short, long)]
-    #[clap(global = true)]
-    task: Option<String>,
-
-    /// Select a task to run
-    #[clap(short, long)]
-    #[clap(global = true)]
-    select: bool,
-}
+use super::cli::Args;
+use super::cli::SubCommand;
+use clap::Parser;
 
 fn get_task_runner_mode(subcommand: SubCommand) -> TaskRunnerMode {
     match subcommand {
@@ -100,7 +47,7 @@ pub fn execute_command() {
         return;
     }
 
-    let config = get_config(&config_path.unwrap().to_string());
+    let config = get_config(&config_path.unwrap());
 
     if let Err(err_config) = config {
         eprintln!("{}", Red.paint(err_config));

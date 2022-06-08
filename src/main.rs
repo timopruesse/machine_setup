@@ -1,3 +1,5 @@
+use terminal::terminal::execute_command;
+
 pub mod command;
 pub mod commands;
 pub mod config;
@@ -7,5 +9,5 @@ pub mod terminal;
 pub mod utils;
 
 fn main() {
-    terminal::execute_command()
+    execute_command()
 }
