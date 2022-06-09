@@ -29,7 +29,7 @@ cargo install machine_setup
 | uninstall | uninstall the defined tasks   | `machine_setup uninstall` |
 | list      | list all of the defined tasks | `machine_setup list`      |
 
-By default, `machine_setup` will look for a file called `machine_setup` with a supported file format.
+By default, `machine_setup` will look for a file called `machine_setup` with a supported file format.  
 Supported file formats are: `yaml`, `yml`, and `json`.
 
 ### Command line parameters
