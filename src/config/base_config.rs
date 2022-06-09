@@ -32,13 +32,11 @@ pub trait BaseConfig {
 }
 
 fn get_valid_file_endings() -> Vec<&'static str> {
-    let priorities: Vec<&str> = ALLOWED_YAML_EXTENSIONS
+    ALLOWED_YAML_EXTENSIONS
         .iter()
         .chain(ALLOWED_JSON_EXTENSIONS.iter())
         .cloned()
-        .collect();
-
-    return priorities;
+        .collect()
 }
 
 fn is_valid_file_ending(file_ending: &str) -> bool {
