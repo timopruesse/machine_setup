@@ -29,7 +29,8 @@ cargo install machine_setup
 | uninstall | uninstall the defined tasks   | `machine_setup uninstall` |
 | list      | list all of the defined tasks | `machine_setup list`      |
 
-By default, `machine_setup` will look for a file called `machine_setup.yaml`.
+By default, `machine_setup` will look for a file called `machine_setup` with a supported file format.
+Supported file formats are: `yaml`, `yml`, and `json`.
 
 ### Command line parameters
 
@@ -223,16 +224,19 @@ updatable_multiline_command:
 
 ## TODOs
 
-### 0.6.0
+### 0.7.0
 
 - conditional tasks
   - add the ability to run tasks for specific OSs, e.g. `os: ['linux', 'osx']`
   - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
 
+### 0.8.0
+
+- Relative paths should be relative to the config file
+
 ### 1.0.0
 
 - Add other binaries and installation options
-- Relative paths should be relative to the config file
 - Improve the terminal output
   - hide most of it behind a `--verbose` flag
 
@@ -240,3 +244,14 @@ updatable_multiline_command:
 
 - make it possible to specify that all commands in a task should be run in parallel (this might be useful when cloning/updating a chunk of repos for example)
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
+
+### 1.2.0
+
+- also make it possible to run tasks in parallel (not only commands inside)
+
+### 2.0.0
+
+[BREAKING]
+
+- all tasks run in parallel by default
+- `dependsOn` can be set for tasks to make them wait for other tasks

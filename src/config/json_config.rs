@@ -9,6 +9,8 @@ use super::config_value::ConfigValue;
 #[derive(Debug)]
 pub struct JsonConfig {}
 
+pub static ALLOWED_JSON_EXTENSIONS: [&str; 1] = ["json"];
+
 fn convert_to_config_value(json: &Value) -> ConfigValue {
     match json {
         Value::String(s) => ConfigValue::String(s.to_string()),
@@ -140,7 +142,7 @@ mod test {
         let dir = tempdir().unwrap();
         let src_path = dir.path().join("example.json");
         let mut src_file = File::create(&src_path).unwrap();
-        // write string to src_file
+
         src_file.write_all(b"{\"text\": \"hello world\"}").unwrap();
 
         let config = JsonConfig {};

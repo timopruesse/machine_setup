@@ -40,7 +40,7 @@ pub struct Args {
     pub command: SubCommand,
 
     /// path to the config file
-    #[clap(short, long, default_value = "./machine_setup.yaml")]
+    #[clap(short, long, default_value = "./machine_setup")]
     #[clap(global = true)]
     pub config: String,
 

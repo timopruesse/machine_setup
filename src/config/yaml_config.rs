@@ -11,7 +11,7 @@ use super::config_value::ConfigValue;
 #[derive(Debug)]
 pub struct YamlConfig {}
 
-pub static ALLOWED_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
+pub static ALLOWED_YAML_EXTENSIONS: [&str; 2] = ["yml", "yaml"];
 
 fn convert_to_config_value(yaml: &Yaml) -> ConfigValue {
     match yaml {
@@ -117,7 +117,7 @@ impl BaseConfig for YamlConfig {
             return Err(format!("File {} does not exist", path));
         }
 
-        if !ALLOWED_EXTENSIONS.contains(&yaml_path.extension().unwrap().to_str().unwrap()) {
+        if !ALLOWED_YAML_EXTENSIONS.contains(&yaml_path.extension().unwrap().to_str().unwrap()) {
             return Err(format!("File {} is not a YAML file", path));
         }
 
