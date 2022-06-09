@@ -153,7 +153,7 @@ mod test {
         let dir = tempdir().unwrap();
         let src_path = dir.path().join("example.yaml");
         let mut src_file = File::create(&src_path).unwrap();
-        // write string to src_file
+
         src_file.write_all(b"text: hello world").unwrap();
 
         let config = YamlConfig {};
