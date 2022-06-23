@@ -6,7 +6,7 @@ use yaml_rust::{Yaml, YamlLoader};
 use crate::{config::base_config::*, utils::shell::Shell};
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
 
-use super::config_value::ConfigValue;
+use super::{config_value::ConfigValue, os::Os};
 
 #[derive(Debug)]
 pub struct YamlConfig {}
@@ -42,6 +42,53 @@ fn convert_to_config_value(yaml: &Yaml) -> ConfigValue {
     }
 }
 
+fn get_os_list(value: &Yaml) -> Result<Vec<Os>, String> {
+    if value.is_null() {
+        return Ok(vec![]);
+    }
+
+    if value.is_array() {
+        return Ok(value
+            .as_vec()
+            .unwrap()
+            .iter()
+            .map(|os| Os::from_str(os.as_str().unwrap()).unwrap())
+            .collect());
+    }
+
+    let str_value = value.as_str();
+    if str_value.is_none() {
+        return Err(format!("{:?} is in the wrong format", value));
+    }
+
+    Ok(vec![Os::from_str(str_value.unwrap()).unwrap()])
+}
+
+fn get_commands(value: &Yaml) -> Result<Vec<Command>, String> {
+    if value.is_badvalue() || value.is_null() {
+        return Err(String::from("\nNo commands defined"));
+    }
+
+    let mut commands: Vec<Command> = vec![];
+    for c in value.as_vec().unwrap().iter() {
+        let command_map = c.as_hash();
+        if command_map.is_none() {
+            return Err(String::from("command definition is incorrect"));
+        }
+
+        for command in command_map.unwrap().iter() {
+            let (name, args) = command;
+
+            commands.push(Command {
+                name: name.as_str().unwrap().to_string(),
+                args: convert_to_config_value(args),
+            });
+        }
+    }
+
+    Ok(commands)
+}
+
 fn parse_yaml(path: &Path) -> Result<TaskList, String> {
     let mut file = std::fs::File::open(path).unwrap();
     let mut contents = String::new();
@@ -69,18 +116,21 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
             ));
         }
 
-        let mut commands: Vec<Command> = vec![];
-        for command in value.as_hash().unwrap().iter() {
-            let (name, args) = command;
-
-            commands.push(Command {
-                name: name.as_str().unwrap().to_string(),
-                args: convert_to_config_value(args),
-            });
+        let commands = get_commands(&value["commands"]);
+        if let Err(commands_err) = commands {
+            return Err(commands_err);
         }
+        let commands = commands.unwrap();
+
+        let os_list = get_os_list(&value["os"]);
+        if let Err(os_err) = os_list {
+            return Err(os_err);
+        }
+        let os_list = os_list.unwrap();
 
         let task = Task {
             name: key.as_str().unwrap().to_string(),
+            os: os_list,
             commands,
         };
         tasks.push(task);

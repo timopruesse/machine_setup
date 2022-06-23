@@ -102,6 +102,7 @@ mod test {
         let tasks = vec![Task {
             name: "test".to_string(),
             commands: vec![],
+            os: vec![],
         }];
 
         let task_name = get_task_from_args(&args, &tasks);
@@ -121,6 +122,7 @@ mod test {
         let tasks = vec![Task {
             name: "test".to_string(),
             commands: vec![],
+            os: vec![],
         }];
 
         let task_name = get_task_from_args(&args, &tasks);

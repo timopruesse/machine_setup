@@ -1,4 +1,4 @@
-use ansi_term::Color::{Green, Red, White};
+use ansi_term::Color::{Green, Red, White, Yellow};
 use core::fmt;
 
 use crate::{
@@ -7,6 +7,7 @@ use crate::{
         base_config::{Task, TaskList},
         config_value::ConfigValue,
     },
+    task::should_skip_task,
     utils::shell::Shell,
 };
 
@@ -49,6 +50,18 @@ fn run_task(
     temp_dir: &str,
     default_shell: &Shell,
 ) -> Result<(), ()> {
+    if should_skip_task(task) {
+        println!(
+            "{}",
+            Yellow.bold().paint(format!(
+                "Skipping task \"{}\" due to OS condition ...",
+                task.name
+            ))
+        );
+
+        return Ok(());
+    }
+
     println!(
         "\nRunning task {} ...\n",
         White.bold().paint(task.name.to_string())
@@ -185,10 +198,12 @@ mod test {
                         name: "_TEST_".to_string(),
                         args: ConfigValue::Array(vec![]),
                     }],
+                    os: vec![],
                 },
                 Task {
                     name: "task_two".to_string(),
                     commands: vec![],
+                    os: vec![],
                 },
             ],
             temp_dir: "".to_string(),
@@ -228,10 +243,12 @@ mod test {
                 Task {
                     name: "task_one".to_string(),
                     commands: vec![],
+                    os: vec![],
                 },
                 Task {
                     name: "task_two".to_string(),
                     commands: vec![],
+                    os: vec![],
                 },
             ],
             temp_dir: "".to_string(),
@@ -253,6 +270,7 @@ mod test {
                         name: "_TEST_".to_string(),
                         args: ConfigValue::Array(vec![]),
                     }],
+                    os: vec![],
                 },
                 Task {
                     name: "task_two".to_string(),
@@ -260,6 +278,7 @@ mod test {
                         name: "_TEST_".to_string(),
                         args: ConfigValue::Array(vec![]),
                     }],
+                    os: vec![],
                 },
             ],
             temp_dir: "".to_string(),
