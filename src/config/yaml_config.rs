@@ -218,7 +218,7 @@ mod test {
     }
 
     #[test]
-    fn it_fails_when_command_is_not_found() {
+    fn it_fails_when_commands_are_not_defined() {
         let dir = tempdir().unwrap();
         let src_path = dir.path().join("example.yaml");
         let mut src_file = File::create(&src_path).unwrap();

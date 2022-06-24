@@ -206,4 +206,21 @@ mod test {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No tasks defined"));
     }
+
+    #[test]
+    fn it_fails_when_commands_are_not_a_list() {
+        let dir = tempdir().unwrap();
+        let src_path = dir.path().join("example.json");
+        let mut src_file = File::create(&src_path).unwrap();
+
+        src_file
+            .write_all(b"{ \"tasks\": { \"test\": { \"commands\": { \"invalid\": 0 } } } }")
+            .unwrap();
+
+        let config = JsonConfig {};
+        let result = config.read(src_path.to_str().unwrap());
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Commands have to be a list"));
+    }
 }
