@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-#[derive(PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Os {
     Linux,
     Mac,

@@ -9,7 +9,7 @@ use crate::config::{
 };
 
 pub fn is_file_path(path: &PathArc) -> bool {
-    if path.to_str().unwrap().len() == 0 {
+    if path.to_str().unwrap().is_empty() {
         return false;
     }
 

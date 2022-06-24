@@ -52,7 +52,7 @@ fn get_os_list(value: &Value) -> Result<Vec<Os>, String> {
         return Ok(vec![Os::from_str(value.as_str().unwrap()).unwrap()]);
     }
 
-    return Err(format!("{:?} is in the wrong format", value));
+    Err(format!("{:?} is in the wrong format", value))
 }
 
 fn get_commands(value: &Value) -> Result<Vec<Command>, String> {
