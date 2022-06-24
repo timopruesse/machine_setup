@@ -43,25 +43,22 @@ fn convert_to_config_value(yaml: &Yaml) -> ConfigValue {
 }
 
 fn get_os_list(value: &Yaml) -> Result<Vec<Os>, String> {
-    if value.is_null() {
-        return Ok(vec![]);
+    if let Some(str_value) = value.as_str() {
+        return Ok(vec![Os::from_str(str_value).unwrap()]);
     }
 
-    if value.is_array() {
-        return Ok(value
-            .as_vec()
-            .unwrap()
+    if let Some(arr_value) = value.as_vec() {
+        return Ok(arr_value
             .iter()
             .map(|os| Os::from_str(os.as_str().unwrap()).unwrap())
             .collect());
     }
 
-    let str_value = value.as_str();
-    if str_value.is_none() {
-        return Err(format!("{:?} is in the wrong format", value));
+    if value.is_null() {
+        return Ok(vec![]);
     }
 
-    Ok(vec![Os::from_str(str_value.unwrap()).unwrap()])
+    Err(format!("os: {:?}", value))
 }
 
 fn get_commands(value: &Yaml) -> Result<Vec<Command>, String> {
@@ -126,7 +123,19 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
         }
         let commands = commands.unwrap();
 
-        let os_list = get_os_list(&value["os"]);
+        let map = value.as_hash();
+        if map.is_none() {
+            return Err(format!(
+                "{}: task entries are not an object",
+                key.as_str().unwrap()
+            ));
+        }
+        let map = map.unwrap();
+
+        let os_list = get_os_list(
+            map.get(&Yaml::String(String::from("os")))
+                .unwrap_or(&Yaml::Null),
+        );
         if let Err(os_err) = os_list {
             return Err(os_err);
         }

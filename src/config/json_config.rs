@@ -116,7 +116,7 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
         }
         let commands = commands.unwrap();
 
-        let os_list = get_os_list(&values["os"]);
+        let os_list = get_os_list(values.get("os").unwrap_or(&Value::Null));
         if let Err(os_err) = os_list {
             return Err(os_err);
         }
