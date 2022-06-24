@@ -9,6 +9,10 @@ use crate::config::{
 };
 
 pub fn is_file_path(path: &PathArc) -> bool {
+    if path.to_str().unwrap().len() == 0 {
+        return false;
+    }
+
     let last_component = path
         .components()
         .last()

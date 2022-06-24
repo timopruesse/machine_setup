@@ -128,8 +128,18 @@ fn run_task(
     temp_dir: &str,
     default_shell: &Shell,
 ) -> Result<(), String> {
-    let parameters = args.as_hash().unwrap();
-    let param_commands = parameters.get("commands").unwrap();
+    let parameters = args.as_hash();
+
+    if parameters.is_none() {
+        return Err(String::from("args is not an object"));
+    }
+    let parameters = parameters.unwrap();
+
+    let param_commands = parameters.get("commands");
+    if param_commands.is_none() {
+        return Err(String::from("\"commands\" is missing in args"));
+    }
+    let param_commands = param_commands.unwrap();
 
     let default_shell = ConfigValue::String(default_shell.to_string());
     let param_shell = parameters
