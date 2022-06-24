@@ -57,10 +57,11 @@ Every task can contain an arbitrary number of commands.
 | default_shell | shell that is used when not specified by the command | `bash`, `zsh` | `bash`             |
 | temp_dir      | define where temporary files are stored              |               | `~/.machine_setup` |
 
-> **Hint**
-> Currently, there can only be one command of the same type per task.
-> The last command in a task will take precedence.
-> This is an open bug and will be fixed in a future release.
+### Task specific configuration
+
+| key | description                  | values                                                                       | examples                      |
+| --- | ---------------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
+| os  | only run on the specified os | [possible values](https://doc.rust-lang.org/std/env/consts/constant.OS.html) | "linux" or ["linux", "macos"] |
 
 > TODO: Add JSON examples...
 
@@ -226,8 +227,8 @@ updatable_multiline_command:
 
 ### 0.7.0
 
+- add tests that verify new config structure (commands key etc.)
 - conditional tasks
-  - add the ability to run tasks for specific OSs, e.g. `os: ['linux', 'osx']`
   - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
 
 ### 0.8.0

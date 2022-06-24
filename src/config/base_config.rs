@@ -5,6 +5,7 @@ use crate::utils::shell::Shell;
 use super::{
     config_value::ConfigValue,
     json_config::{JsonConfig, ALLOWED_JSON_EXTENSIONS},
+    os::Os,
     yaml_config::{YamlConfig, ALLOWED_YAML_EXTENSIONS},
 };
 
@@ -18,6 +19,7 @@ pub struct Command {
 pub struct Task {
     pub name: String,
     pub commands: Vec<Command>,
+    pub os: Vec<Os>,
 }
 
 #[derive(Debug)]

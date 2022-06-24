@@ -1,4 +1,4 @@
-use ansi_term::Color::{Green, Red, White};
+use ansi_term::Color::{Green, Red, White, Yellow};
 use core::fmt;
 
 use crate::{
@@ -7,6 +7,7 @@ use crate::{
         base_config::{Task, TaskList},
         config_value::ConfigValue,
     },
+    task::should_skip_task,
     utils::shell::Shell,
 };
 
@@ -49,6 +50,18 @@ fn run_task(
     temp_dir: &str,
     default_shell: &Shell,
 ) -> Result<(), ()> {
+    if should_skip_task(task) {
+        println!(
+            "{}",
+            Yellow.bold().paint(format!(
+                "Skipping task \"{}\" due to OS condition ...",
+                task.name
+            ))
+        );
+
+        return Ok(());
+    }
+
     println!(
         "\nRunning task {} ...\n",
         White.bold().paint(task.name.to_string())
@@ -171,6 +184,8 @@ pub fn run(
 
 #[cfg(test)]
 mod test {
+    use std::{collections::HashMap, env::temp_dir};
+
     use crate::config::base_config::Command;
 
     use super::*;
@@ -185,10 +200,12 @@ mod test {
                         name: "_TEST_".to_string(),
                         args: ConfigValue::Array(vec![]),
                     }],
+                    os: vec![],
                 },
                 Task {
                     name: "task_two".to_string(),
                     commands: vec![],
+                    os: vec![],
                 },
             ],
             temp_dir: "".to_string(),
@@ -228,10 +245,12 @@ mod test {
                 Task {
                     name: "task_one".to_string(),
                     commands: vec![],
+                    os: vec![],
                 },
                 Task {
                     name: "task_two".to_string(),
                     commands: vec![],
+                    os: vec![],
                 },
             ],
             temp_dir: "".to_string(),
@@ -253,6 +272,7 @@ mod test {
                         name: "_TEST_".to_string(),
                         args: ConfigValue::Array(vec![]),
                     }],
+                    os: vec![],
                 },
                 Task {
                     name: "task_two".to_string(),
@@ -260,6 +280,7 @@ mod test {
                         name: "_TEST_".to_string(),
                         args: ConfigValue::Array(vec![]),
                     }],
+                    os: vec![],
                 },
             ],
             temp_dir: "".to_string(),
@@ -273,5 +294,33 @@ mod test {
         assert!(error_message.contains("Errors occurred in"));
         assert!(error_message.contains("task_one"));
         assert!(error_message.contains("task_two"));
+    }
+
+    #[test]
+    fn it_runs_commands() {
+        let mut run_commands = HashMap::new();
+        run_commands.insert(
+            String::from("commands"),
+            ConfigValue::String(String::from("echo \"test\"")),
+        );
+
+        let command = Command {
+            name: String::from("run"),
+            args: ConfigValue::Hash(run_commands),
+        };
+
+        let task_list = TaskList {
+            tasks: vec![Task {
+                name: "task_one".to_string(),
+                commands: vec![command],
+                os: vec![],
+            }],
+            temp_dir: temp_dir().to_str().unwrap().to_string(),
+            default_shell: Shell::Bash,
+        };
+
+        let result = run(task_list, TaskRunnerMode::Install, None);
+
+        assert!(result.is_ok());
     }
 }

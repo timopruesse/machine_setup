@@ -4,7 +4,7 @@ use serde_json::Value;
 use crate::{config::base_config::*, utils::shell::Shell};
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
 
-use super::config_value::ConfigValue;
+use super::{config_value::ConfigValue, os::Os};
 
 #[derive(Debug)]
 pub struct JsonConfig {}
@@ -34,6 +34,56 @@ fn convert_to_config_value(json: &Value) -> ConfigValue {
     }
 }
 
+fn get_os_list(value: &Value) -> Result<Vec<Os>, String> {
+    if value.is_null() {
+        return Ok(vec![]);
+    }
+
+    if value.is_array() {
+        return Ok(value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|os| Os::from_str(os.as_str().unwrap()).unwrap())
+            .collect());
+    }
+
+    if value.is_string() {
+        return Ok(vec![Os::from_str(value.as_str().unwrap()).unwrap()]);
+    }
+
+    Err(format!("{:?} is in the wrong format", value))
+}
+
+fn get_commands(value: &Value) -> Result<Vec<Command>, String> {
+    if value.is_null() {
+        return Err(String::from("No commands defined"));
+    }
+
+    if !value.is_array() {
+        return Err(String::from("Commands have to be a list"));
+    }
+
+    let mut commands: Vec<Command> = vec![];
+    for command in value.as_array().unwrap().iter() {
+        if !command.is_object() {
+            return Err(String::from("command definition is incorrect"));
+        }
+
+        let command_map = command.as_object().unwrap();
+        for c in command_map.into_iter() {
+            let (name, args) = c;
+
+            commands.push(Command {
+                name: name.to_string(),
+                args: convert_to_config_value(args),
+            });
+        }
+    }
+
+    Ok(commands)
+}
+
 fn parse_json(path: &Path) -> Result<TaskList, String> {
     let mut file = std::fs::File::open(path).unwrap();
     let mut contents = String::new();
@@ -58,18 +108,23 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
             return Err(format!("{}: task definition is incorrect", key));
         }
 
-        let mut commands: Vec<Command> = vec![];
-        for command in value.as_object().unwrap().iter() {
-            let (name, args) = command;
+        let values = value.as_object().unwrap();
 
-            commands.push(Command {
-                name: name.to_string(),
-                args: convert_to_config_value(args),
-            });
+        let commands = get_commands(&values["commands"]);
+        if let Err(commands_err) = commands {
+            return Err(commands_err);
         }
+        let commands = commands.unwrap();
+
+        let os_list = get_os_list(&values["os"]);
+        if let Err(os_err) = os_list {
+            return Err(os_err);
+        }
+        let os_list = os_list.unwrap();
 
         let task = Task {
             name: key.to_string(),
+            os: os_list,
             commands,
         };
         tasks.push(task);
@@ -150,5 +205,22 @@ mod test {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No tasks defined"));
+    }
+
+    #[test]
+    fn it_fails_when_commands_are_not_a_list() {
+        let dir = tempdir().unwrap();
+        let src_path = dir.path().join("example.json");
+        let mut src_file = File::create(&src_path).unwrap();
+
+        src_file
+            .write_all(b"{ \"tasks\": { \"test\": { \"commands\": { \"invalid\": 0 } } } }")
+            .unwrap();
+
+        let config = JsonConfig {};
+        let result = config.read(src_path.to_str().unwrap());
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Commands have to be a list"));
     }
 }
