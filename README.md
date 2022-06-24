@@ -72,16 +72,22 @@ temp_dir: "~/my_temp" # defaults to "~/.machine_setup"
 default_shell: "zsh" # defaults to "bash"
 tasks:
   my_task1:
-    copy:
-      src: "./src/files"
-      target: "/tmp/target"
+    os: ["linux", "windows"]
+    commands:
+      - copy:
+          src: "./src/files"
+          target: "/tmp/target"
+      - copy:
+          src: "./src/files_2"
+          target: "/tmp/target"
 
   my_task2:
-    shell: "sudo apt-get install git -y"
-
-    symlink:
-      src: "./src/config"
-      target: "~/.dotfiles"
+    os: ["linux"]
+    commands:
+      - shell: "sudo apt-get install git -y"
+      - symlink:
+          src: "./src/config"
+          target: "~/.dotfiles"
 ```
 
 ### Extend a configuration
@@ -93,11 +99,12 @@ You could also only execute a single task by providing the `task` argument.
 ```yaml
 tasks:
   my_other_config:
-    run:
-      commands:
-        install: "machine_setup install -c ./my_other_config.yaml"
-        update: "machine_setup update -c ./my_other_config.yaml"
-        uninstall: "machine_setup uninstall -c ./my_other_config.yaml"
+    commands:
+      - run:
+          commands:
+          install: "machine_setup install -c ./my_other_config.yaml"
+          update: "machine_setup update -c ./my_other_config.yaml"
+          uninstall: "machine_setup uninstall -c ./my_other_config.yaml"
 ```
 
 ### Available config commands
