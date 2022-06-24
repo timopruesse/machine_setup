@@ -66,4 +66,22 @@ mod test {
 
         assert_eq!(task_names, vec!["task1", "task2"]);
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn it_only_runs_task_for_specific_os() {
+        let task_linux = Task {
+            os: vec![Os::Linux],
+            name: String::from("my-linux-task"),
+            commands: vec![],
+        };
+        assert!(!should_skip_task(&task_linux));
+
+        let task_win = Task {
+            os: vec![Os::Windows],
+            name: String::from("my-linux-task"),
+            commands: vec![],
+        };
+        assert!(should_skip_task(&task_win));
+    }
 }
