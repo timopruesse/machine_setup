@@ -68,9 +68,13 @@ fn get_commands(value: &Yaml) -> Result<Vec<Command>, String> {
     if value.is_badvalue() || value.is_null() {
         return Err(String::from("\nNo commands defined"));
     }
+    let command_list = value.as_vec();
+    if command_list.is_none() {
+        return Err(String::from("\nNo commands defined"));
+    }
 
     let mut commands: Vec<Command> = vec![];
-    for c in value.as_vec().unwrap().iter() {
+    for c in command_list.unwrap().iter() {
         let command_map = c.as_hash();
         if command_map.is_none() {
             return Err(String::from("command definition is incorrect"));
@@ -211,5 +215,22 @@ mod test {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No tasks defined"));
+    }
+
+    #[test]
+    fn it_fails_when_command_is_not_found() {
+        let dir = tempdir().unwrap();
+        let src_path = dir.path().join("example.yaml");
+        let mut src_file = File::create(&src_path).unwrap();
+
+        src_file
+            .write_all(b"tasks:\n  test:\n    commands:\n      invalid:")
+            .unwrap();
+
+        let config = YamlConfig {};
+        let result = config.read(src_path.to_str().unwrap());
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No commands defined"));
     }
 }
