@@ -225,15 +225,11 @@ updatable_multiline_command:
 
 ## TODOs
 
-### 0.7.0
-
-- add tests that verify new config structure (commands key etc.)
-- conditional tasks
-  - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
-
 ### 0.8.0
 
 - Relative paths should be relative to the config file
+- conditional tasks
+  - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
 
 ### 1.0.0
 
