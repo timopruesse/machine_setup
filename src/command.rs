@@ -1,3 +1,5 @@
+use ergo_fs::PathDir;
+
 use crate::{
     commands::{
         clone::CloneCommand, copy::CopyDirCommand, run::RunCommand, symlink::SymlinkCommand,
@@ -6,25 +8,16 @@ use crate::{
     utils::shell::Shell,
 };
 
+pub struct CommandConfig {
+    pub config_dir: PathDir,
+    pub temp_dir: String,
+    pub default_shell: Shell,
+}
+
 pub trait CommandInterface {
-    fn install(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String>;
-    fn uninstall(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String>;
-    fn update(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String>;
+    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String>;
+    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String>;
+    fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String>;
 }
 
 pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {

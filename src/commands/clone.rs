@@ -5,12 +5,12 @@ use ergo_fs::PathArc;
 use git_commands::git;
 
 use crate::{
-    command::CommandInterface,
+    command::{CommandConfig, CommandInterface},
     config::{
         config_value::ConfigValue, validation_rules::required::Required,
         validator::validate_named_args,
     },
-    utils::{directory::expand_path, shell::Shell},
+    utils::directory::expand_path,
 };
 
 pub struct CloneCommand {}
@@ -38,12 +38,7 @@ fn is_repo_installed(url: &str, target_dir: &PathArc) -> bool {
 }
 
 impl CommandInterface for CloneCommand {
-    fn install(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String> {
+    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
         let rules = vec![&Required {}];
 
         let validation = validate_named_args(
@@ -74,7 +69,8 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir = expand_path(target, true);
+        let expanded_target_dir =
+            expand_path(config.config_dir.join(target).to_str().unwrap(), true);
         if let Err(err_expand_dir) = expanded_target_dir {
             return Err(err_expand_dir);
         }
@@ -86,7 +82,7 @@ impl CommandInterface for CloneCommand {
                 Yellow.paint("The repository was already cloned."),
                 Yellow.bold().paint("Updating...")
             );
-            let update_result = self.update(args, temp_dir, default_shell);
+            let update_result = self.update(args, config);
             if let Err(err_update) = update_result {
                 return Err(err_update);
             }
@@ -101,12 +97,7 @@ impl CommandInterface for CloneCommand {
         Ok(())
     }
 
-    fn uninstall(
-        &self,
-        args: ConfigValue,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
+    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
         let validation = validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from("target"), vec![&Required {}])]),
@@ -124,7 +115,8 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir = expand_path(target, false);
+        let expanded_target_dir =
+            expand_path(config.config_dir.join(target).to_str().unwrap(), false);
         if let Err(err_expand_target) = expanded_target_dir {
             return Err(err_expand_target);
         }
@@ -138,12 +130,7 @@ impl CommandInterface for CloneCommand {
         Ok(())
     }
 
-    fn update(
-        &self,
-        args: ConfigValue,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
+    fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
         let validation = validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from("target"), vec![&Required {}])]),
@@ -161,7 +148,8 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir = expand_path(target, true);
+        let expanded_target_dir =
+            expand_path(config.config_dir.join(target).to_str().unwrap(), true);
         if let Err(err_expand_dir) = expanded_target_dir {
             return Err(err_expand_dir);
         }

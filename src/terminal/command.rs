@@ -1,5 +1,9 @@
+use std::fs::canonicalize;
+
 use ansi_term::Color::{Red, White};
 use ergo_fs::expand;
+use ergo_fs::Path;
+use ergo_fs::PathDir;
 
 use crate::config::base_config::get_config;
 use crate::config::base_config::Task;
@@ -46,9 +50,9 @@ pub fn execute_command() {
         eprintln!("{}", Red.paint(err_config_path.to_string()));
         return;
     }
+    let config_path = config_path.unwrap();
 
-    let config = get_config(&config_path.unwrap());
-
+    let config = get_config(&config_path);
     if let Err(err_config) = config {
         eprintln!("{}", Red.paint(err_config));
         return;
@@ -66,7 +70,17 @@ pub fn execute_command() {
             }
 
             let mode = get_task_runner_mode(args.command);
-            let run = task_runner::run(task_list, mode, task_name.unwrap());
+            let run = task_runner::run(
+                task_list,
+                mode,
+                task_name.unwrap(),
+                PathDir::new(
+                    canonicalize(Path::new(&config_path.to_string()).parent().unwrap())
+                        .unwrap()
+                        .as_path(),
+                )
+                .unwrap(),
+            );
 
             if run.is_err() {
                 eprintln!("{}", Red.paint(run.unwrap_err()));

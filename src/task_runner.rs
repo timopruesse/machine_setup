@@ -1,14 +1,14 @@
 use ansi_term::Color::{Green, Red, White, Yellow};
 use core::fmt;
+use ergo_fs::PathDir;
 
 use crate::{
-    command::{get_command, CommandInterface},
+    command::{get_command, CommandConfig, CommandInterface},
     config::{
         base_config::{Task, TaskList},
         config_value::ConfigValue,
     },
     task::should_skip_task,
-    utils::shell::Shell,
 };
 
 #[derive(Debug)]
@@ -34,22 +34,16 @@ fn run_command(
     command: Box<dyn CommandInterface>,
     args: ConfigValue,
     mode: &TaskRunnerMode,
-    temp_dir: &str,
-    default_shell: &Shell,
+    config: &CommandConfig,
 ) -> Result<(), String> {
     match mode {
-        TaskRunnerMode::Install => command.install(args, temp_dir, default_shell),
-        TaskRunnerMode::Update => command.update(args, temp_dir, default_shell),
-        TaskRunnerMode::Uninstall => command.uninstall(args, temp_dir, default_shell),
+        TaskRunnerMode::Install => command.install(args, config),
+        TaskRunnerMode::Update => command.update(args, config),
+        TaskRunnerMode::Uninstall => command.uninstall(args, config),
     }
 }
 
-fn run_task(
-    task: &Task,
-    mode: &TaskRunnerMode,
-    temp_dir: &str,
-    default_shell: &Shell,
-) -> Result<(), ()> {
+fn run_task(task: &Task, mode: &TaskRunnerMode, config: &CommandConfig) -> Result<(), ()> {
     if should_skip_task(task) {
         println!(
             "{}",
@@ -84,8 +78,7 @@ fn run_task(
             resolved_command.unwrap(),
             command.args.clone(),
             mode,
-            temp_dir,
-            default_shell,
+            config,
         );
 
         if let Err(err_result) = result {
@@ -115,12 +108,19 @@ pub fn run(
     task_list: TaskList,
     mode: TaskRunnerMode,
     task_name: Option<String>,
+    config_dir: PathDir,
 ) -> Result<(), String> {
     match mode {
         TaskRunnerMode::Install => println!("{}", White.bold().paint("\nInstalling...")),
         TaskRunnerMode::Update => println!("{}", White.bold().paint("\nUpdating...")),
         TaskRunnerMode::Uninstall => println!("{}", White.bold().paint("\nUninstalling...")),
     }
+
+    let command_config = CommandConfig {
+        config_dir,
+        temp_dir: task_list.temp_dir.to_string(),
+        default_shell: task_list.default_shell,
+    };
 
     if let Some(task_name) = task_name {
         let task = task_list.tasks.iter().find(|t| t.name == task_name);
@@ -132,13 +132,7 @@ pub fn run(
             ));
         }
 
-        let task_result = run_task(
-            task.unwrap(),
-            &mode,
-            task_list.temp_dir.as_str(),
-            &task_list.default_shell,
-        );
-
+        let task_result = run_task(task.unwrap(), &mode, &command_config);
         if task_result.is_err() {
             return Err(format!(
                 "\nTask {} {}",
@@ -152,12 +146,7 @@ pub fn run(
 
     let mut errored_tasks = vec![];
     for task in task_list.tasks {
-        let task_result = run_task(
-            &task,
-            &mode,
-            task_list.temp_dir.as_str(),
-            &task_list.default_shell,
-        );
+        let task_result = run_task(&task, &mode, &command_config);
 
         if task_result.is_err() {
             errored_tasks.push(task.name.to_string());
@@ -186,9 +175,13 @@ pub fn run(
 mod test {
     use std::{collections::HashMap, env::temp_dir};
 
-    use crate::config::base_config::Command;
+    use crate::{config::base_config::Command, utils::shell::Shell};
 
     use super::*;
+
+    fn get_temp_path_dir() -> PathDir {
+        PathDir::new(temp_dir()).unwrap()
+    }
 
     #[test]
     fn it_runs_single_task_when_argument_is_passed() {
@@ -216,6 +209,7 @@ mod test {
             task_list,
             TaskRunnerMode::Install,
             Some("task_one".to_string()),
+            get_temp_path_dir(),
         );
 
         assert!(result.is_err());
@@ -230,7 +224,12 @@ mod test {
             default_shell: Shell::Bash,
         };
 
-        let result = run(task_list, TaskRunnerMode::Install, Some("test".to_string()));
+        let result = run(
+            task_list,
+            TaskRunnerMode::Install,
+            Some("test".to_string()),
+            get_temp_path_dir(),
+        );
 
         assert!(result.is_err());
         let error_message = result.unwrap_err().to_string();
@@ -257,7 +256,12 @@ mod test {
             default_shell: Shell::Bash,
         };
 
-        let result = run(task_list, TaskRunnerMode::Install, None);
+        let result = run(
+            task_list,
+            TaskRunnerMode::Install,
+            None,
+            get_temp_path_dir(),
+        );
 
         assert!(result.is_ok());
     }
@@ -287,7 +291,12 @@ mod test {
             default_shell: Shell::Bash,
         };
 
-        let result = run(task_list, TaskRunnerMode::Install, None);
+        let result = run(
+            task_list,
+            TaskRunnerMode::Install,
+            None,
+            get_temp_path_dir(),
+        );
 
         assert!(result.is_err());
         let error_message = result.unwrap_err().to_string();
@@ -319,7 +328,12 @@ mod test {
             default_shell: Shell::Bash,
         };
 
-        let result = run(task_list, TaskRunnerMode::Install, None);
+        let result = run(
+            task_list,
+            TaskRunnerMode::Install,
+            None,
+            get_temp_path_dir(),
+        );
 
         assert!(result.is_ok());
     }

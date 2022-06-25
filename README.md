@@ -234,7 +234,7 @@ updatable_multiline_command:
 
 ### 0.8.0
 
-- Relative paths should be relative to the config file
+- ~~relative paths should be relative to the config file~~
 - conditional tasks
   - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
 

@@ -1,8 +1,5 @@
-use ergo_fs::{expand, Path, PathArc, WalkDir};
-use std::{
-    collections::HashMap,
-    fs::{canonicalize, create_dir_all},
-};
+use ergo_fs::{expand, Path, PathArc, PathDir, WalkDir};
+use std::{collections::HashMap, fs::create_dir_all};
 
 use crate::config::{
     config_value::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
@@ -68,7 +65,7 @@ pub struct Dirs {
     pub ignore: Vec<ConfigValue>,
 }
 
-pub fn get_source_and_target(args: ConfigValue) -> Result<Dirs, String> {
+pub fn get_source_and_target(args: ConfigValue, root: &PathDir) -> Result<Dirs, String> {
     let rules = vec![&Required {}];
 
     let validation = validate_named_args(
@@ -98,9 +95,12 @@ pub fn get_source_and_target(args: ConfigValue) -> Result<Dirs, String> {
         .as_str()
         .unwrap();
 
-    if target_dir.is_empty() {
+    let relative_target_dir = root.join(target_dir).to_string();
+    if relative_target_dir.is_empty() {
         return Err(String::from("Target directory cannot be empty"));
     }
+
+    let relative_src_dir = root.join(src_dir).to_string();
 
     let ignore = args
         .as_hash()
@@ -111,18 +111,9 @@ pub fn get_source_and_target(args: ConfigValue) -> Result<Dirs, String> {
         .unwrap()
         .to_owned();
 
-    let src_absolute = canonicalize(src_dir);
-    if let Err(err_abs_src) = src_absolute {
-        return Err(err_abs_src.to_string());
-    }
-
     Ok(Dirs {
-        src: src_absolute
-            .unwrap()
-            .into_os_string()
-            .into_string()
-            .unwrap(),
-        target: target_dir.to_string(),
+        src: relative_src_dir,
+        target: relative_target_dir,
         ignore,
     })
 }

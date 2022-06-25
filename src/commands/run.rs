@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    command::CommandInterface,
+    command::{CommandConfig, CommandInterface},
     config::{
         config_value::ConfigValue,
         validation_rules::{is_array::IsArray, is_string::IsString, one_of::OneOf},
@@ -122,14 +122,8 @@ fn run_commands(
     Ok(stdout)
 }
 
-fn run_task(
-    mode: TaskRunnerMode,
-    args: ConfigValue,
-    temp_dir: &str,
-    default_shell: &Shell,
-) -> Result<(), String> {
+fn run_task(mode: TaskRunnerMode, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
     let parameters = args.as_hash();
-
     if parameters.is_none() {
         return Err(String::from("args is not an object"));
     }
@@ -141,7 +135,7 @@ fn run_task(
     }
     let param_commands = param_commands.unwrap();
 
-    let default_shell = ConfigValue::String(default_shell.to_string());
+    let default_shell = ConfigValue::String(config.default_shell.to_string());
     let param_shell = parameters
         .get("shell")
         .unwrap_or(&default_shell)
@@ -152,8 +146,7 @@ fn run_task(
         return Err(err_env);
     }
 
-    let result = run_commands(param_commands, param_shell, mode, temp_dir);
-
+    let result = run_commands(param_commands, param_shell, mode, &config.temp_dir);
     if let Err(err_result) = result {
         return Err(err_result);
     }
@@ -166,31 +159,16 @@ fn run_task(
 }
 
 impl CommandInterface for RunCommand {
-    fn install(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String> {
-        run_task(TaskRunnerMode::Install, args, temp_dir, default_shell)
+    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        run_task(TaskRunnerMode::Install, args, config)
     }
 
-    fn uninstall(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String> {
-        run_task(TaskRunnerMode::Uninstall, args, temp_dir, default_shell)
+    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        run_task(TaskRunnerMode::Uninstall, args, config)
     }
 
-    fn update(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String> {
-        run_task(TaskRunnerMode::Update, args, temp_dir, default_shell)
+    fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        run_task(TaskRunnerMode::Update, args, config)
     }
 }
 

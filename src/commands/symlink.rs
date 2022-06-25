@@ -4,12 +4,9 @@ use std::fs::remove_file;
 use symlink::{remove_symlink_file, symlink_file};
 
 use crate::{
-    command::CommandInterface,
+    command::{CommandConfig, CommandInterface},
     config::config_value::ConfigValue,
-    utils::{
-        directory::{expand_path, get_source_and_target, walk_files},
-        shell::Shell,
-    },
+    utils::directory::{expand_path, get_source_and_target, walk_files},
 };
 
 pub struct SymlinkCommand {}
@@ -29,13 +26,8 @@ fn should_force(args: ConfigValue) -> bool {
 }
 
 impl CommandInterface for SymlinkCommand {
-    fn install(
-        &self,
-        args: ConfigValue,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
-        let dirs = get_source_and_target(args.clone());
+    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        let dirs = get_source_and_target(args.clone(), &config.config_dir);
         if let Err(err_dirs) = dirs {
             return Err(err_dirs);
         }
@@ -50,13 +42,8 @@ impl CommandInterface for SymlinkCommand {
         Ok(())
     }
 
-    fn uninstall(
-        &self,
-        args: ConfigValue,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
-        let dirs = get_source_and_target(args);
+    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        let dirs = get_source_and_target(args, &config.config_dir);
         if dirs.is_err() {
             return Err(dirs.err().unwrap());
         }
@@ -71,13 +58,8 @@ impl CommandInterface for SymlinkCommand {
         Ok(())
     }
 
-    fn update(
-        &self,
-        args: ConfigValue,
-        temp_dir: &str,
-        default_shell: &Shell,
-    ) -> Result<(), String> {
-        self.install(args, temp_dir, default_shell)
+    fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        self.install(args, config)
     }
 }
 

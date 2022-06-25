@@ -1,29 +1,24 @@
 use ansi_term::Color::{Red, White, Yellow};
-use ergo_fs::{Path, PathArc};
-use std::{collections::HashMap, fs};
+use ergo_fs::{Path, PathArc, PathBuf};
+use std::{
+    collections::HashMap,
+    fs::{self, canonicalize},
+};
 
 use crate::{
-    command::CommandInterface,
+    command::{CommandConfig, CommandInterface},
     config::{
         config_value::ConfigValue, validation_rules::required::Required,
         validator::validate_named_args,
     },
-    utils::{
-        directory::{expand_path, get_source_and_target, walk_files, DIR_TARGET},
-        shell::Shell,
-    },
+    utils::directory::{expand_path, get_source_and_target, walk_files, DIR_TARGET},
 };
 
 pub struct CopyDirCommand {}
 
 impl CommandInterface for CopyDirCommand {
-    fn install(
-        &self,
-        args: ConfigValue,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
-        let dirs = get_source_and_target(args);
+    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        let dirs = get_source_and_target(args, &config.config_dir);
         if let Err(err_dirs) = dirs {
             return Err(err_dirs);
         }
@@ -37,12 +32,7 @@ impl CommandInterface for CopyDirCommand {
         Ok(())
     }
 
-    fn uninstall(
-        &self,
-        args: ConfigValue,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
+    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
         let validation = validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from(DIR_TARGET), vec![&Required {}])]),
@@ -60,7 +50,22 @@ impl CommandInterface for CopyDirCommand {
             .as_str()
             .unwrap();
 
-        let result = remove_dir(target_dir);
+        let abs_target_path = canonicalize(config.config_dir.join(target_dir));
+        if let Err(target_err) = abs_target_path {
+            if target_err.raw_os_error().unwrap() == 2 {
+                println!("{}", Yellow.paint("The file(s) were already removed..."));
+                return Ok(());
+            }
+
+            return Err(format!("{}", target_err));
+        }
+        let abs_target_path = abs_target_path.unwrap();
+
+        if abs_target_path.as_os_str() == config.config_dir.as_os_str() {
+            return Err(format!("{}", Red.paint("cannot delete config_dir")));
+        }
+
+        let result = remove_dir(&abs_target_path);
         if let Err(err_result) = result {
             return Err(format!("{}", Red.paint(err_result)));
         }
@@ -68,12 +73,7 @@ impl CommandInterface for CopyDirCommand {
         Ok(())
     }
 
-    fn update(
-        &self,
-        _args: ConfigValue,
-        _temp_dir: &str,
-        _default_shell: &Shell,
-    ) -> Result<(), String> {
+    fn update(&self, _args: ConfigValue, _config: &CommandConfig) -> Result<(), String> {
         println!(
             "{}",
             Yellow.paint("update not implemented for copy command")
@@ -161,8 +161,8 @@ pub fn copy_dir(source: &str, destination: &str, ignore: Vec<ConfigValue>) -> Re
     copy_files(&source_dir, &destination_dir, ignore)
 }
 
-pub fn remove_dir(target: &str) -> Result<(), String> {
-    let expanded_target_dir = expand_path(target, false);
+pub fn remove_dir(target: &PathBuf) -> Result<(), String> {
+    let expanded_target_dir = expand_path(target.to_str().unwrap(), false);
     if expanded_target_dir.is_err() {
         return Err(expanded_target_dir.err().unwrap());
     }
@@ -179,7 +179,10 @@ pub fn remove_dir(target: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod test {
+    use crate::utils::shell::Shell;
+
     use super::*;
+    use ergo_fs::PathDir;
     use tempfile::{tempdir, tempfile_in, NamedTempFile};
 
     #[test]
@@ -216,7 +219,38 @@ mod test {
         let dir = tempdir().unwrap();
         let path = dir.path().to_str().unwrap();
 
-        assert!(remove_dir(path).is_ok());
+        assert!(remove_dir(&PathArc::new(path)).is_ok());
         assert!(!dir.path().exists());
+    }
+
+    #[test]
+    fn it_doesnt_remove_config_dir() {
+        let copy = CopyDirCommand {};
+
+        let dir = tempdir().unwrap();
+        let config_dir = PathDir::new(&dir).unwrap();
+
+        let mut args = HashMap::new();
+        args.insert(
+            String::from("source"),
+            ConfigValue::String(String::from("./test")),
+        );
+        args.insert(
+            String::from("target"),
+            ConfigValue::String(String::from(".")),
+        );
+
+        let result = copy.uninstall(
+            ConfigValue::Hash(args),
+            &CommandConfig {
+                config_dir,
+                temp_dir: tempdir().unwrap().path().to_str().unwrap().to_string(),
+                default_shell: Shell::Bash,
+            },
+        );
+
+        assert!(dir.path().exists());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot delete config_dir"))
     }
 }
