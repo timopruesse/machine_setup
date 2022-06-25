@@ -232,12 +232,6 @@ updatable_multiline_command:
 
 ## TODOs
 
-### 0.8.0
-
-- ~~relative paths should be relative to the config file~~
-- conditional tasks
-  - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
-
 ### 1.0.0
 
 - Add other binaries and installation options
@@ -259,3 +253,8 @@ updatable_multiline_command:
 
 - all tasks run in parallel by default
 - `dependsOn` can be set for tasks to make them wait for other tasks
+
+### 2.1.0
+
+- conditional tasks
+  - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
