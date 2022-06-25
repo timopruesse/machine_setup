@@ -1,5 +1,5 @@
 use ansi_term::Color::{Red, White, Yellow};
-use ergo_fs::{Path, PathArc, PathBuf};
+use ergo_fs::{Path, PathArc};
 use std::{
     collections::HashMap,
     fs::{self, canonicalize},
@@ -161,7 +161,7 @@ pub fn copy_dir(source: &str, destination: &str, ignore: Vec<ConfigValue>) -> Re
     copy_files(&source_dir, &destination_dir, ignore)
 }
 
-pub fn remove_dir(target: &PathBuf) -> Result<(), String> {
+pub fn remove_dir(target: &Path) -> Result<(), String> {
     let expanded_target_dir = expand_path(target.to_str().unwrap(), false);
     if expanded_target_dir.is_err() {
         return Err(expanded_target_dir.err().unwrap());
