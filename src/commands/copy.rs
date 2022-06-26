@@ -11,7 +11,9 @@ use crate::{
         config_value::ConfigValue, validation_rules::required::Required,
         validator::validate_named_args,
     },
-    utils::directory::{expand_path, get_source_and_target, walk_files, DIR_TARGET},
+    utils::directory::{
+        expand_path, get_relative_dir, get_source_and_target, walk_files, DIR_TARGET,
+    },
 };
 
 pub struct CopyDirCommand {}
@@ -50,7 +52,8 @@ impl CommandInterface for CopyDirCommand {
             .as_str()
             .unwrap();
 
-        let abs_target_path = canonicalize(config.config_dir.join(target_dir));
+        let relative_target_path = get_relative_dir(&config.config_dir, target_dir);
+        let abs_target_path = canonicalize(relative_target_path);
         if let Err(target_err) = abs_target_path {
             if target_err.raw_os_error().unwrap() == 2 {
                 println!("{}", Yellow.paint("The file(s) were already removed..."));

@@ -10,7 +10,7 @@ use crate::{
         config_value::ConfigValue, validation_rules::required::Required,
         validator::validate_named_args,
     },
-    utils::directory::expand_path,
+    utils::directory::{expand_path, get_relative_dir},
 };
 
 pub struct CloneCommand {}
@@ -69,8 +69,8 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir =
-            expand_path(config.config_dir.join(target).to_str().unwrap(), true);
+        let relative_target_dir = get_relative_dir(&config.config_dir, target);
+        let expanded_target_dir = expand_path(relative_target_dir.as_str(), true);
         if let Err(err_expand_dir) = expanded_target_dir {
             return Err(err_expand_dir);
         }
@@ -115,8 +115,8 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir =
-            expand_path(config.config_dir.join(target).to_str().unwrap(), false);
+        let relative_target_dir = get_relative_dir(&config.config_dir, target);
+        let expanded_target_dir = expand_path(relative_target_dir.as_str(), false);
         if let Err(err_expand_target) = expanded_target_dir {
             return Err(err_expand_target);
         }
@@ -148,8 +148,8 @@ impl CommandInterface for CloneCommand {
             .as_str()
             .unwrap();
 
-        let expanded_target_dir =
-            expand_path(config.config_dir.join(target).to_str().unwrap(), true);
+        let relative_target_dir = get_relative_dir(&config.config_dir, target);
+        let expanded_target_dir = expand_path(relative_target_dir.as_str(), true);
         if let Err(err_expand_dir) = expanded_target_dir {
             return Err(err_expand_dir);
         }

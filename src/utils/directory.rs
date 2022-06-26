@@ -39,7 +39,6 @@ fn create_missing_directories(path: &PathArc) -> Result<(), std::io::Error> {
 
 pub fn expand_path(path: &str, create: bool) -> Result<PathArc, String> {
     let expanded_path = expand(path);
-
     if let Err(err_expand_path) = expanded_path {
         return Err(err_expand_path.to_string());
     }
@@ -63,6 +62,14 @@ pub struct Dirs {
     pub src: String,
     pub target: String,
     pub ignore: Vec<ConfigValue>,
+}
+
+pub fn get_relative_dir(root: &PathDir, dir: &str) -> String {
+    if dir.starts_with("~") {
+        return dir.to_string();
+    }
+
+    root.join(dir).to_string()
 }
 
 pub fn get_source_and_target(args: ConfigValue, root: &PathDir) -> Result<Dirs, String> {
@@ -95,12 +102,12 @@ pub fn get_source_and_target(args: ConfigValue, root: &PathDir) -> Result<Dirs, 
         .as_str()
         .unwrap();
 
-    let relative_target_dir = root.join(target_dir).to_string();
+    let relative_target_dir = get_relative_dir(root, target_dir);
     if relative_target_dir.is_empty() {
         return Err(String::from("Target directory cannot be empty"));
     }
 
-    let relative_src_dir = root.join(src_dir).to_string();
+    let relative_src_dir = get_relative_dir(root, src_dir);
 
     let ignore = args
         .as_hash()
@@ -194,6 +201,8 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
 
 #[cfg(test)]
 mod test {
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
@@ -227,7 +236,7 @@ mod test {
 
     #[test]
     fn it_creates_intermediate_dirs_when_needed() {
-        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir = tempdir().unwrap();
         let temp_dir_path = temp_dir.path();
         let target_dir = temp_dir_path.join("test");
 
