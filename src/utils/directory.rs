@@ -65,7 +65,7 @@ pub struct Dirs {
 }
 
 pub fn get_relative_dir(root: &PathDir, dir: &str) -> String {
-    if dir.starts_with("~") {
+    if dir.starts_with('~') {
         return dir.to_string();
     }
 
