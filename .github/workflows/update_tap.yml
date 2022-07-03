@@ -13,7 +13,6 @@ jobs:
         shell: bash
 
       - uses: mislav/bump-homebrew-formula-action@v2
-        if: "!contains(github.ref, '-')"
         with:
           formula-name: "${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}"
           homebrew-tap: Chroma91/homebrew-repo
