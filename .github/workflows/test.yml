@@ -1,6 +1,6 @@
 on: [push, pull_request]
 
-name: "Machine Setup"
+name: Run Tests
 
 jobs:
   check:
@@ -8,7 +8,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
+      - uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -27,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -46,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1

@@ -1,0 +1,21 @@
+on:
+  workflow_run:
+    workflows: ["Build binaries"]
+    types:
+      - completed
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - id: get_repository_name
+        run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
+        shell: bash
+
+      - uses: mislav/bump-homebrew-formula-action@v2
+        if: "!contains(github.ref, '-')"
+        with:
+          formula-name: "${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}"
+          homebrew-tap: Chroma91/homebrew-repo
+        env:
+          COMMITTER_TOKEN: "${{ secrets.REPO_TOKEN }}"
