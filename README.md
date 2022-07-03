@@ -1,6 +1,6 @@
 # Machine Setup
 
-[![Tests](https://github.com/Chroma91/machine-setup/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/Chroma91/machine-setup/actions/workflows/run_tests.yml) [![Crates.io](https://img.shields.io/crates/v/machine_setup)](https://crates.io/crates/machine_setup)
+[![Tests](https://github.com/Chroma91/machine-setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Chroma91/machine-setup/actions/workflows/test.yml) [![Crates.io](https://img.shields.io/crates/v/machine_setup)](https://crates.io/crates/machine_setup)
 
 The idea is to be able to replicate a certain setup (when reseting your machine or using a completely new machine).
 Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.
