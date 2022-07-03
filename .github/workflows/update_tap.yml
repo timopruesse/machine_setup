@@ -4,6 +4,8 @@ on:
     types:
       - completed
 
+name: Update Tap
+
 jobs:
   check:
     runs-on: ubuntu-latest
