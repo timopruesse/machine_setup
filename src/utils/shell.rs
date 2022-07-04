@@ -1,14 +1,10 @@
 use core::fmt;
 use std::{
-    env,
     fs::{File, Permissions},
-    os::unix::prelude::PermissionsExt,
     str::FromStr,
 };
 
 use ergo_fs::IoWrite;
-
-use crate::config::os::Os;
 
 use super::temp_storage::create_temp_file;
 
@@ -42,14 +38,16 @@ impl FromStr for Shell {
 const BASH_STR: &str = "#!/bin/bash\nsource $HOME/.bashrc\n";
 const ZSH_STR: &str = "#!/bin/zsh\nsource $HOME/.zshrc\n";
 
+#[cfg(target_family = "windows")]
 fn make_executable(file: &mut File) -> Result<(), String> {
     // TODO: How to set permissions for Windows?
-    let current_os = Os::from_str(env::consts::OS).unwrap();
-    if current_os == Os::Windows {
-        return Ok(());
-    }
+    Ok(())
+}
 
-    let perm_result = file.set_permissions(Permissions::from_mode(0o755));
+#[cfg(target_family = "unix")]
+fn make_executable(file: &mut File) -> Result<(), String> {
+    let perm_result = file
+        .set_permissions(<Permissions as std::os::unix::prelude::PermissionsExt>::from_mode(0o755));
     if let Err(err_perm) = perm_result {
         return Err(err_perm.to_string());
     }
