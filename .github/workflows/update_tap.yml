@@ -1,6 +1,6 @@
 on:
   repository_dispatch:
-    types: [update-top]
+    types: [update-tap]
 
 name: Update Homebrew tap
 
