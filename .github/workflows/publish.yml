@@ -23,7 +23,7 @@ jobs:
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "machine_setup-x86_64-apple-darwin-${{ github.event.client_payload.version }}.zip,machine_setup-x86_64-pc-windows-msvc-${{ github.event.client_payload.version }}.zip,machine_setup-x86_64-unknown-linux-gnu-${{ github.event.client_payload.version }}.zip"
+          artifacts: "./machine_setup-x86_64-apple-darwin-${{ github.event.client_payload.version }}.zip,./machine_setup-x86_64-pc-windows-msvc-${{ github.event.client_payload.version }}.zip,./machine_setup-x86_64-unknown-linux-gnu-${{ github.event.client_payload.version }}.zip"
           tag: ${{ github.event.client_payload.version }}
           token: ${{ secrets.REPO_TOKEN }}
 
