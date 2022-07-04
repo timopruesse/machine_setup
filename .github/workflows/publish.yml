@@ -26,3 +26,10 @@ jobs:
           artifacts: "**/*.zip"
           tag: ${{ github.event.client_payload.version }}
           token: ${{ secrets.REPO_TOKEN }}
+
+      - name: Update Homebrew tap
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.REPO_TOKEN }}
+          event-type: update-tap
+          client-payload: '{"version": "${{ github.event.client_payload.version }}"}'

@@ -1,10 +1,8 @@
 on:
-  workflow_run:
-    workflows: ["Publish"]
-    types:
-      - completed
+  repository_dispatch:
+    types: [update-top]
 
-name: Update Tap
+name: Update Homebrew tap
 
 jobs:
   check:
@@ -16,6 +14,7 @@ jobs:
 
       - uses: mislav/bump-homebrew-formula-action@v2
         with:
+          tag-name: ${{ github.event.client_payload.version }}
           formula-name: "${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}"
           homebrew-tap: Chroma91/homebrew-repo
         env:
