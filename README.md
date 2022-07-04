@@ -13,7 +13,7 @@ You can also use it for other tasks such as making the onboarding process of a n
 
 ## Install
 
-For now, only `cargo install` is supported.
+Install via `cargo` or download a binary from the [release page](https://github.com/Chroma91/machine_setup/releases).
 
 ```bash
 cargo install machine_setup
@@ -233,14 +233,10 @@ updatable_multiline_command:
 
 ## TODOs
 
-### 1.0.0
-
-- Add other binaries and installation options
-- Improve the terminal output
-  - hide most of it behind a `--verbose` flag
-
 ### 1.1.0
 
+- Improve the terminal output
+  - hide most of it behind a `--verbose` flag
 - make it possible to specify that all commands in a task should be run in parallel (this might be useful when cloning/updating a chunk of repos for example)
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 
