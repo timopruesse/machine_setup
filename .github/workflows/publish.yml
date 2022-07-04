@@ -11,18 +11,10 @@ jobs:
     name: Publish
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - id: get_repository_name
-        run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
-        shell: bash
-
       - uses: dawidd6/action-download-artifact@v2
         with:
+          github_token: ${{secrets.REPO_TOKEN}}
           workflow: build.yml
-          workflow_conclusion: success
-          branch: main
 
       - uses: softprops/action-gh-release@v1
         with:
