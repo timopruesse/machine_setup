@@ -3,7 +3,7 @@ on:
     tags:
       - "*"
 
-name: Build
+name: Builds
 
 jobs:
   build:
