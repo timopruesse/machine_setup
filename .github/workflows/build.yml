@@ -8,6 +8,8 @@ jobs:
   build:
     name: Build
     runs-on: "${{ matrix.os }}"
+    env:
+      VERSION: ${{ github.event.client_payload.ref.replace(/\/refs\/tags\//, '') }}
     strategy:
       matrix:
         include:
@@ -51,7 +53,7 @@ jobs:
 
       - uses: actions-rs/cargo@v1
         env:
-          VERSION: "${{ github.event.client_payload.ref.replace(/\/refs\/tags\//, '') }}"
+          VERSION: "$VERSION"
           REPOSITORY_NAME: "${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}"
         with:
           command: build
@@ -67,4 +69,4 @@ jobs:
         with:
           token: ${{ secrets.REPO_TOKEN }}
           event-type: create-release
-          client-payload: '{"version": "${{ github.event.client_payload.ref.replace(/\/refs\/tags\//, '') }}"}'
+          client-payload: '{"version": "$VERSION"}'
