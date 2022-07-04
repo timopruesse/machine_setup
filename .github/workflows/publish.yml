@@ -1,8 +1,6 @@
 on:
-  workflow_run:
-    workflows: ["Builds"]
-    types:
-      - completed
+  repository_dispatch:
+    types: [create-release]
 
 name: Publish
 
@@ -22,13 +20,9 @@ jobs:
           github_token: ${{secrets.REPO_TOKEN}}
           workflow: build.yml
 
-      - id: get_version
-        run: 'echo ::set-output "name=VERSION::$(cat ./version/version)"'
-        shell: bash
-
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
           artifacts: "**.zip"
-          tag: ${{ steps.get_version.outputs.VERSION }}
+          tag: ${{ github.event.client_payload.version }}
           token: ${{ secrets.REPO_TOKEN }}
