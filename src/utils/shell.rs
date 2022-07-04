@@ -1,8 +1,5 @@
 use core::fmt;
-use std::{
-    fs::{File, Permissions},
-    str::FromStr,
-};
+use std::{fs::File, str::FromStr};
 
 use ergo_fs::IoWrite;
 
@@ -46,8 +43,9 @@ fn make_executable(file: &mut File) -> Result<(), String> {
 
 #[cfg(target_family = "unix")]
 fn make_executable(file: &mut File) -> Result<(), String> {
-    let perm_result = file
-        .set_permissions(<Permissions as std::os::unix::prelude::PermissionsExt>::from_mode(0o755));
+    let perm_result = file.set_permissions(
+        <std::fs::Permissions as std::os::unix::prelude::PermissionsExt>::from_mode(0o755),
+    );
     if let Err(err_perm) = perm_result {
         return Err(err_perm.to_string());
     }
