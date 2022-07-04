@@ -27,7 +27,7 @@ jobs:
         shell: bash
 
       - name: Create release
-        uses: softprops/action-gh-release@v1
+        uses: ncipollo/release-action@v1
         with:
           artifacts: "**.zip"
           tag: ${{ steps.get_version.outputs.VERSION }}
