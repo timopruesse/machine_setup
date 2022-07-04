@@ -4,7 +4,7 @@ on:
     types:
       - completed
 
-name: Publish binaries
+name: Publish
 
 jobs:
   publish:

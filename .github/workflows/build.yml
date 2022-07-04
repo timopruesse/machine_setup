@@ -3,7 +3,7 @@ on:
     tags:
       - "*"
 
-name: Build binaries
+name: Build
 
 jobs:
   build:
