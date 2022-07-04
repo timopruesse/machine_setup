@@ -19,6 +19,7 @@ jobs:
         with:
           github_token: ${{secrets.REPO_TOKEN}}
           workflow: build.yml
+          skip_unpack: true
 
       - name: Create release
         uses: ncipollo/release-action@v1
