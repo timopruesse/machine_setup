@@ -1,7 +1,14 @@
 use core::fmt;
-use std::{fs::Permissions, os::unix::prelude::PermissionsExt, str::FromStr};
+use std::{
+    env,
+    fs::{File, Permissions},
+    os::unix::prelude::PermissionsExt,
+    str::FromStr,
+};
 
 use ergo_fs::IoWrite;
+
+use crate::config::os::Os;
 
 use super::temp_storage::create_temp_file;
 
@@ -35,6 +42,21 @@ impl FromStr for Shell {
 const BASH_STR: &str = "#!/bin/bash\nsource $HOME/.bashrc\n";
 const ZSH_STR: &str = "#!/bin/zsh\nsource $HOME/.zshrc\n";
 
+fn make_executable(file: &mut File) -> Result<(), String> {
+    // TODO: How to set permissions for Windows?
+    let current_os = Os::from_str(env::consts::OS).unwrap();
+    if current_os == Os::Windows {
+        return Ok(());
+    }
+
+    let perm_result = file.set_permissions(Permissions::from_mode(0o755));
+    if let Err(err_perm) = perm_result {
+        return Err(err_perm.to_string());
+    }
+
+    Ok(())
+}
+
 pub fn create_script_file(
     shell: Shell,
     commands: Vec<String>,
@@ -57,9 +79,9 @@ pub fn create_script_file(
         file.write_all(format!("{}\n", command).as_bytes()).unwrap();
     }
 
-    let perm_result = file.set_permissions(Permissions::from_mode(0o755));
+    let perm_result = make_executable(&mut file);
     if let Err(err_perm) = perm_result {
-        return Err(err_perm.to_string());
+        return Err(err_perm);
     }
 
     Ok(path)
