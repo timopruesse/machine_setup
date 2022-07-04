@@ -23,6 +23,6 @@ jobs:
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "**.zip"
+          artifacts: "**/*.zip"
           tag: ${{ github.event.client_payload.version }}
           token: ${{ secrets.REPO_TOKEN }}
