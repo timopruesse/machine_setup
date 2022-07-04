@@ -8,8 +8,6 @@ jobs:
   build:
     name: Build
     runs-on: "${{ matrix.os }}"
-    env:
-      VERSION: ${{ github.event.client_payload.ref.replace(/\/refs\/tags\//, '') }}
     strategy:
       matrix:
         include:
@@ -25,6 +23,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+
+      - id: get_version
+        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        env:
+          GITHUB_REF: ${{ github.event.client_payload.ref }}
 
       - id: get_repository_name
         run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
@@ -53,7 +56,7 @@ jobs:
 
       - uses: actions-rs/cargo@v1
         env:
-          VERSION: "$VERSION"
+          VERSION: "${{ steps.get_version.outputs.VERSION }}"
           REPOSITORY_NAME: "${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}"
         with:
           command: build
@@ -69,4 +72,4 @@ jobs:
         with:
           token: ${{ secrets.REPO_TOKEN }}
           event-type: create-release
-          client-payload: '{"version": "$VERSION"}'
+          client-payload: '{"version": "${{ steps.get_version.outputs.VERSION }}"}'
