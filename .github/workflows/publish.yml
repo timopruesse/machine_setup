@@ -10,12 +10,25 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: dawidd6/action-download-artifact@v2
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Download artifacts
+        uses: dawidd6/action-download-artifact@v2
         with:
           github_token: ${{secrets.REPO_TOKEN}}
           workflow: build.yml
 
-      - uses: softprops/action-gh-release@v1
+      - id: get_version
+        run: 'echo ::set-output "name=VERSION::$(cat ./version/version)"'
+        shell: bash
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
         with:
-          files: "**-x86_64-**"
+          artifacts: "**.zip"
+          tag: ${{ steps.get_version.outputs.VERSION }}
+          token: ${{ secrets.REPO_TOKEN }}

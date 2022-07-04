@@ -64,5 +64,5 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}
+          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}-${{ steps.get_version.outputs.VERSION }}
           path: ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
