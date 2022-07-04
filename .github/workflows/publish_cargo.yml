@@ -1,10 +1,10 @@
 on:
   workflow_run:
-    workflows: ["Build binaries"]
+    workflows: ["Builds"]
     types:
       - completed
 
-name: Publish to cargo
+name: Cargo Release
 
 jobs:
   publish:
