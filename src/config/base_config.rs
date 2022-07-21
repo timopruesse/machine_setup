@@ -20,6 +20,7 @@ pub struct Task {
     pub name: String,
     pub commands: Vec<Command>,
     pub os: Vec<Os>,
+    pub parallel: bool,
 }
 
 #[derive(Debug)]
@@ -27,6 +28,7 @@ pub struct TaskList {
     pub tasks: Vec<Task>,
     pub temp_dir: String,
     pub default_shell: Shell,
+    pub num_threads: usize,
 }
 
 pub trait BaseConfig {

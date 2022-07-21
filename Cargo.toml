@@ -26,6 +26,7 @@ clap = { version = "3", features = ["derive", "wrap_help"] }
 clap_complete = "3"
 
 [dependencies]
+num_cpus = "1"
 rand = "0.8"
 ergo_fs = "0.2"
 yaml-rust = "0.4"

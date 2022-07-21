@@ -144,8 +144,12 @@ pub fn run(
         return Ok(());
     }
 
+    println!("NUM: {}", task_list.num_threads);
+
     let mut errored_tasks = vec![];
     for task in task_list.tasks {
+        println!("parallel? -> {:?}", task.parallel);
+
         let task_result = run_task(&task, &mode, &command_config);
 
         if task_result.is_err() {

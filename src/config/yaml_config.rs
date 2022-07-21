@@ -3,7 +3,10 @@ extern crate yaml_rust;
 use ansi_term::Color::White;
 use yaml_rust::{Yaml, YamlLoader};
 
-use crate::{config::base_config::*, utils::shell::Shell};
+use crate::{
+    config::base_config::*,
+    utils::{shell::Shell, threads::get_thread_number},
+};
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
 
 use super::{config_value::ConfigValue, os::Os};
@@ -145,6 +148,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
             name: key.as_str().unwrap().to_string(),
             os: os_list,
             commands,
+            parallel: value["parallel"].as_bool().unwrap_or(false),
         };
         tasks.push(task);
     }
@@ -169,6 +173,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
         tasks,
         temp_dir,
         default_shell,
+        num_threads: get_thread_number(entries["num_threads"].as_i64()),
     })
 }
 
