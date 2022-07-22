@@ -6,9 +6,9 @@ use ergo_fs::Path;
 use ergo_fs::PathDir;
 
 use crate::config::base_config::get_config;
-use crate::config::base_config::Task;
 use crate::task::get_task_names;
 use crate::task::select_task;
+use crate::task::Task;
 use crate::task_runner;
 use crate::task_runner::TaskRunnerMode;
 

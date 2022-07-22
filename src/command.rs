@@ -8,6 +8,7 @@ use crate::{
     utils::shell::Shell,
 };
 
+#[derive(Debug, Clone)]
 pub struct CommandConfig {
     pub config_dir: PathDir,
     pub temp_dir: String,

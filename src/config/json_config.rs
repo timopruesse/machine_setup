@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use crate::{
     config::base_config::*,
+    task::Task,
     utils::{shell::Shell, threads::get_thread_number},
 };
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
@@ -150,11 +151,14 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
     }
     let default_shell = default_shell.unwrap();
 
+    let parallel = config["parallel"].as_bool().unwrap_or(false);
+
     Ok(TaskList {
         tasks,
         temp_dir,
         default_shell,
         num_threads: get_thread_number(config["num_threads"].as_i64()),
+        parallel,
     })
 }
 

@@ -1,26 +1,17 @@
 use ergo_fs::Path;
 
-use crate::utils::shell::Shell;
+use crate::{task::Task, utils::shell::Shell};
 
 use super::{
     config_value::ConfigValue,
     json_config::{JsonConfig, ALLOWED_JSON_EXTENSIONS},
-    os::Os,
     yaml_config::{YamlConfig, ALLOWED_YAML_EXTENSIONS},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Command {
     pub name: String,
     pub args: ConfigValue,
-}
-
-#[derive(Debug)]
-pub struct Task {
-    pub name: String,
-    pub commands: Vec<Command>,
-    pub os: Vec<Os>,
-    pub parallel: bool,
 }
 
 #[derive(Debug)]
@@ -29,6 +20,7 @@ pub struct TaskList {
     pub temp_dir: String,
     pub default_shell: Shell,
     pub num_threads: usize,
+    pub parallel: bool,
 }
 
 pub trait BaseConfig {

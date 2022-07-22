@@ -1,17 +1,11 @@
-use ansi_term::Color::{Green, Red, White, Yellow};
+use ansi_term::Color::{Red, White};
 use core::fmt;
 use ergo_fs::PathDir;
+use std::sync::{Arc, Mutex};
 
-use crate::{
-    command::{get_command, CommandConfig, CommandInterface},
-    config::{
-        base_config::{Task, TaskList},
-        config_value::ConfigValue,
-    },
-    task::should_skip_task,
-};
+use crate::{command::CommandConfig, config::base_config::TaskList, utils::threads::ThreadPool};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum TaskRunnerMode {
     Install,
     Update,
@@ -28,80 +22,6 @@ impl fmt::Display for TaskRunnerMode {
 
         write!(f, "{}", mode)
     }
-}
-
-fn run_command(
-    command: Box<dyn CommandInterface>,
-    args: ConfigValue,
-    mode: &TaskRunnerMode,
-    config: &CommandConfig,
-) -> Result<(), String> {
-    match mode {
-        TaskRunnerMode::Install => command.install(args, config),
-        TaskRunnerMode::Update => command.update(args, config),
-        TaskRunnerMode::Uninstall => command.uninstall(args, config),
-    }
-}
-
-fn run_task(task: &Task, mode: &TaskRunnerMode, config: &CommandConfig) -> Result<(), ()> {
-    if should_skip_task(task) {
-        println!(
-            "{}",
-            Yellow.bold().paint(format!(
-                "Skipping task \"{}\" due to OS condition ...",
-                task.name
-            ))
-        );
-
-        return Ok(());
-    }
-
-    println!(
-        "\nRunning task {} ...\n",
-        White.bold().paint(task.name.to_string())
-    );
-
-    let commands = &task.commands;
-    for command in commands {
-        let resolved_command = get_command(&command.name);
-        if resolved_command.is_err() {
-            eprintln!(
-                "{} {} {}",
-                Red.paint("Command"),
-                White.on(Red).paint(format!(" {} ", command.name)),
-                Red.paint("not found")
-            );
-            return Err(());
-        }
-
-        let result = run_command(
-            resolved_command.unwrap(),
-            command.args.clone(),
-            mode,
-            config,
-        );
-
-        if let Err(err_result) = result {
-            eprintln!(
-                "{}: {}",
-                White.bold().paint(command.name.to_string()),
-                Red.paint("ERROR")
-            );
-            err_result
-                .split('\n')
-                .for_each(|err| eprintln!("{} {}", Red.bold().paint("|>"), Red.paint(err)));
-
-            return Err(());
-        }
-
-        println!(
-            "\n{}: {}",
-            White.bold().paint(command.name.to_string()),
-            Green.bold().paint("OK")
-        );
-    }
-
-    Ok(())
 }
 
 pub fn run(
@@ -132,7 +52,7 @@ pub fn run(
             ));
         }
 
-        let task_result = run_task(task.unwrap(), &mode, &command_config);
+        let task_result = task.unwrap().run(&mode, &command_config);
         if task_result.is_err() {
             return Err(format!(
                 "\nTask {} {}",
@@ -144,27 +64,53 @@ pub fn run(
         return Ok(());
     }
 
-    println!("NUM: {}", task_list.num_threads);
+    let mut num_threads = if task_list.parallel {
+        task_list.num_threads
+    } else {
+        1
+    };
 
-    let mut errored_tasks = vec![];
-    for task in task_list.tasks {
-        println!("parallel? -> {:?}", task.parallel);
-
-        let task_result = run_task(&task, &mode, &command_config);
-
-        if task_result.is_err() {
-            errored_tasks.push(task.name.to_string());
-        }
+    if num_threads > task_list.tasks.len() {
+        num_threads = task_list.tasks.len();
     }
 
-    let num_errored = errored_tasks.len();
+    if task_list.parallel {
+        println!(
+            "Running tasks in parallel ({} threads)...",
+            White.bold().paint(num_threads.to_string())
+        );
+    }
+
+    let thread_pool = ThreadPool::new(num_threads);
+    let errored_tasks = Arc::new(Mutex::new(vec![]));
+
+    for task in task_list.tasks {
+        let config = command_config.clone();
+        let task_clone = task.clone();
+        let errors = Arc::clone(&errored_tasks);
+
+        let execute = move || {
+            let task_result = task_clone.run(&mode, &config);
+            if task_result.is_err() {
+                let mut e = errors.lock().unwrap();
+                e.push(task_clone.name.to_string());
+                drop(e);
+            }
+        };
+
+        thread_pool.execute(execute);
+    }
+
+    let errors = errored_tasks.lock().unwrap();
+    let num_errored = errors.len();
     if num_errored > 0 {
         return Err(format!(
             "\n{} {} {}\n{}",
             Red.paint("Errors occurred in"),
             Red.bold().underline().paint(num_errored.to_string()),
             Red.paint("tasks:"),
-            errored_tasks
+            errors
+                .clone()
                 .into_iter()
                 .map(|e| format!("> {}", e))
                 .collect::<Vec<String>>()
@@ -207,6 +153,7 @@ mod test {
             ],
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
+            num_threads: 1,
         };
 
         let result = run(
@@ -226,6 +173,7 @@ mod test {
             tasks: vec![],
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
+            num_threads: 1,
         };
 
         let result = run(
@@ -258,6 +206,7 @@ mod test {
             ],
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
+            num_threads: 1,
         };
 
         let result = run(
@@ -293,6 +242,7 @@ mod test {
             ],
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
+            num_threads: 1,
         };
 
         let result = run(
@@ -330,6 +280,7 @@ mod test {
             }],
             temp_dir: temp_dir().to_str().unwrap().to_string(),
             default_shell: Shell::Bash,
+            num_threads: 1,
         };
 
         let result = run(
