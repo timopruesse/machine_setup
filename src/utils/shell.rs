@@ -58,11 +58,7 @@ pub fn create_script_file(
     commands: Vec<String>,
     temp_dir: &str,
 ) -> Result<String, String> {
-    let temp_file = create_temp_file("sh", temp_dir);
-    if let Err(err_temp_file) = temp_file {
-        return Err(err_temp_file);
-    }
-    let temp_file = temp_file.unwrap();
+    let temp_file = create_temp_file("sh", temp_dir)?;
     let mut file = temp_file.file;
     let path = temp_file.path;
 
@@ -75,10 +71,7 @@ pub fn create_script_file(
         file.write_all(format!("{}\n", command).as_bytes()).unwrap();
     }
 
-    let perm_result = make_executable(&mut file);
-    if let Err(err_perm) = perm_result {
-        return Err(err_perm);
-    }
+    make_executable(&mut file)?;
 
     Ok(path)
 }

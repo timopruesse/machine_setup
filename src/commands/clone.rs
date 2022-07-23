@@ -41,17 +41,13 @@ impl CommandInterface for CloneCommand {
     fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
         let rules = vec![&Required {}];
 
-        let validation = validate_named_args(
+        validate_named_args(
             args.to_owned(),
             HashMap::from([
                 (String::from("url"), rules.clone()),
                 (String::from("target"), rules.clone()),
             ]),
-        );
-
-        if let Err(err_validation) = validation {
-            return Err(err_validation);
-        }
+        )?;
 
         let url = args
             .as_hash()
@@ -70,11 +66,7 @@ impl CommandInterface for CloneCommand {
             .unwrap();
 
         let relative_target_dir = get_relative_dir(&config.config_dir, target);
-        let expanded_target_dir = expand_path(relative_target_dir.as_str(), true);
-        if let Err(err_expand_dir) = expanded_target_dir {
-            return Err(err_expand_dir);
-        }
-        let expanded_target_dir = expanded_target_dir.unwrap();
+        let expanded_target_dir = expand_path(relative_target_dir.as_str(), true)?;
 
         if is_repo_installed(url, &expanded_target_dir) {
             println!(
@@ -82,30 +74,17 @@ impl CommandInterface for CloneCommand {
                 Yellow.paint("The repository was already cloned."),
                 Yellow.bold().paint("Updating...")
             );
-            let update_result = self.update(args, config);
-            if let Err(err_update) = update_result {
-                return Err(err_update);
-            }
-            return Ok(());
+            return self.update(args, config);
         }
 
-        let result = clone_repository(url, &expanded_target_dir);
-        if let Err(err_result) = result {
-            return Err(err_result);
-        }
-
-        Ok(())
+        clone_repository(url, &expanded_target_dir)
     }
 
     fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        let validation = validate_named_args(
+        validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from("target"), vec![&Required {}])]),
-        );
-
-        if let Err(err_validation) = validation {
-            return Err(err_validation);
-        }
+        )?;
 
         let target = args
             .as_hash()
@@ -116,29 +95,16 @@ impl CommandInterface for CloneCommand {
             .unwrap();
 
         let relative_target_dir = get_relative_dir(&config.config_dir, target);
-        let expanded_target_dir = expand_path(relative_target_dir.as_str(), false);
-        if let Err(err_expand_target) = expanded_target_dir {
-            return Err(err_expand_target);
-        }
-        let expanded_target_dir = expanded_target_dir.unwrap();
+        let expanded_target_dir = expand_path(relative_target_dir.as_str(), false)?;
 
-        let result = remove_repository(&expanded_target_dir);
-        if let Err(err_result) = result {
-            return Err(err_result);
-        }
-
-        Ok(())
+        remove_repository(&expanded_target_dir)
     }
 
     fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        let validation = validate_named_args(
+        validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from("target"), vec![&Required {}])]),
-        );
-
-        if let Err(err_validation) = validation {
-            return Err(err_validation);
-        }
+        )?;
 
         let target = args
             .as_hash()
@@ -149,18 +115,9 @@ impl CommandInterface for CloneCommand {
             .unwrap();
 
         let relative_target_dir = get_relative_dir(&config.config_dir, target);
-        let expanded_target_dir = expand_path(relative_target_dir.as_str(), true);
-        if let Err(err_expand_dir) = expanded_target_dir {
-            return Err(err_expand_dir);
-        }
-        let expanded_target_dir = expanded_target_dir.unwrap();
+        let expanded_target_dir = expand_path(relative_target_dir.as_str(), true)?;
 
-        let result = update_repository(&expanded_target_dir);
-        if let Err(err_result) = result {
-            return Err(err_result);
-        }
-
-        Ok(())
+        update_repository(&expanded_target_dir)
     }
 }
 

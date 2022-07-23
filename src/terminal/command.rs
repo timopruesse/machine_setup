@@ -117,6 +117,7 @@ mod test {
             name: "test".to_string(),
             commands: vec![],
             os: vec![],
+            parallel: false,
         }];
 
         let task_name = get_task_from_args(&args, &tasks);
@@ -137,6 +138,7 @@ mod test {
             name: "test".to_string(),
             commands: vec![],
             os: vec![],
+            parallel: false,
         }];
 
         let task_name = get_task_from_args(&args, &tasks);

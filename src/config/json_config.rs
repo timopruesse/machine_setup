@@ -114,17 +114,8 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
 
         let values = value.as_object().unwrap();
 
-        let commands = get_commands(&values["commands"]);
-        if let Err(commands_err) = commands {
-            return Err(commands_err);
-        }
-        let commands = commands.unwrap();
-
-        let os_list = get_os_list(values.get("os").unwrap_or(&Value::Null));
-        if let Err(os_err) = os_list {
-            return Err(os_err);
-        }
-        let os_list = os_list.unwrap();
+        let commands = get_commands(&values["commands"])?;
+        let os_list = get_os_list(values.get("os").unwrap_or(&Value::Null))?;
 
         let task = Task {
             name: key.to_string(),

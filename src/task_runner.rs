@@ -52,7 +52,7 @@ pub fn run(
             ));
         }
 
-        let task_result = task.unwrap().run(&mode, &command_config);
+        let task_result = task.unwrap().run(mode, &command_config);
         if task_result.is_err() {
             return Err(format!(
                 "\nTask {} {}",
@@ -61,7 +61,7 @@ pub fn run(
             ));
         }
 
-        return Ok(());
+        return task_result;
     }
 
     let mut num_threads = if task_list.parallel {
@@ -81,24 +81,26 @@ pub fn run(
         );
     }
 
-    let thread_pool = ThreadPool::new(num_threads);
     let errored_tasks = Arc::new(Mutex::new(vec![]));
+    {
+        let thread_pool = ThreadPool::new(num_threads);
 
-    for task in task_list.tasks {
-        let config = command_config.clone();
-        let task_clone = task.clone();
-        let errors = Arc::clone(&errored_tasks);
+        for task in task_list.tasks {
+            let config = command_config.clone();
+            let task_clone = task.clone();
+            let errors = Arc::clone(&errored_tasks);
 
-        let execute = move || {
-            let task_result = task_clone.run(&mode, &config);
-            if task_result.is_err() {
-                let mut e = errors.lock().unwrap();
-                e.push(task_clone.name.to_string());
-                drop(e);
-            }
-        };
+            let execute = move || {
+                let task_result = task_clone.run(mode, &config);
+                if task_result.is_err() {
+                    let mut e = errors.lock().unwrap();
+                    e.push(task_clone.name.to_string());
+                    drop(e);
+                }
+            };
 
-        thread_pool.execute(execute);
+            thread_pool.execute(execute);
+        }
     }
 
     let errors = errored_tasks.lock().unwrap();
@@ -125,7 +127,11 @@ pub fn run(
 mod test {
     use std::{collections::HashMap, env::temp_dir};
 
-    use crate::{config::base_config::Command, utils::shell::Shell};
+    use crate::{
+        config::{base_config::Command, config_value::ConfigValue},
+        task::Task,
+        utils::shell::Shell,
+    };
 
     use super::*;
 
@@ -144,16 +150,19 @@ mod test {
                         args: ConfigValue::Array(vec![]),
                     }],
                     os: vec![],
+                    parallel: false,
                 },
                 Task {
                     name: "task_two".to_string(),
                     commands: vec![],
                     os: vec![],
+                    parallel: false,
                 },
             ],
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
             num_threads: 1,
+            parallel: false,
         };
 
         let result = run(
@@ -164,7 +173,7 @@ mod test {
         );
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("task_one"));
+        assert!(result.unwrap_err().contains("task_one"));
     }
 
     #[test]
@@ -174,6 +183,7 @@ mod test {
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
             num_threads: 1,
+            parallel: false,
         };
 
         let result = run(
@@ -184,7 +194,7 @@ mod test {
         );
 
         assert!(result.is_err());
-        let error_message = result.unwrap_err().to_string();
+        let error_message = result.unwrap_err();
         assert!(error_message.contains("test"));
         assert!(error_message.contains("not found"));
     }
@@ -197,16 +207,19 @@ mod test {
                     name: "task_one".to_string(),
                     commands: vec![],
                     os: vec![],
+                    parallel: false,
                 },
                 Task {
                     name: "task_two".to_string(),
                     commands: vec![],
                     os: vec![],
+                    parallel: false,
                 },
             ],
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
             num_threads: 1,
+            parallel: false,
         };
 
         let result = run(
@@ -230,6 +243,7 @@ mod test {
                         args: ConfigValue::Array(vec![]),
                     }],
                     os: vec![],
+                    parallel: false,
                 },
                 Task {
                     name: "task_two".to_string(),
@@ -238,11 +252,13 @@ mod test {
                         args: ConfigValue::Array(vec![]),
                     }],
                     os: vec![],
+                    parallel: false,
                 },
             ],
             temp_dir: "".to_string(),
             default_shell: Shell::Bash,
             num_threads: 1,
+            parallel: false,
         };
 
         let result = run(
@@ -253,7 +269,7 @@ mod test {
         );
 
         assert!(result.is_err());
-        let error_message = result.unwrap_err().to_string();
+        let error_message = result.unwrap_err();
         assert!(error_message.contains("Errors occurred in"));
         assert!(error_message.contains("task_one"));
         assert!(error_message.contains("task_two"));
@@ -277,10 +293,12 @@ mod test {
                 name: "task_one".to_string(),
                 commands: vec![command],
                 os: vec![],
+                parallel: false,
             }],
             temp_dir: temp_dir().to_str().unwrap().to_string(),
             default_shell: Shell::Bash,
             num_threads: 1,
+            parallel: false,
         };
 
         let result = run(

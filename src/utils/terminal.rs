@@ -24,12 +24,8 @@ fn parse_environment_variables(args: ConfigValue) -> Result<Option<ConfigValue>,
 }
 
 pub fn set_environment_variables(args: &ConfigValue) -> Result<(), String> {
-    let env = parse_environment_variables(args.to_owned());
-    if let Err(err_env) = env {
-        return Err(err_env);
-    }
+    let env = parse_environment_variables(args.to_owned())?;
 
-    let env = env.unwrap();
     if let Some(env) = env {
         println!("Environment");
         println!("-----------------------------");

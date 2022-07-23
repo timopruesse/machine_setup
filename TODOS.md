@@ -1,16 +1,10 @@
 # TODOs
 
-## Step 1
-
-- make it possible to specify that all commands in a task should be run in parallel (this might be useful when cloning/updating a chunk of repos for example)
-
-## Step 2
-
-- make it possible to run tasks in parallel (not only commands inside)
 - Improve the terminal output
-  - hide most of it behind a `--verbose` flag
+  - use https://crates.io/crates/indicatif for task/command progress
+  - use https://docs.rs/pretty_env_logger/0.4.0/pretty_env_logger/ for messages/logging
 
-## Step 3
+---
 
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 

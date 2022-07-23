@@ -27,35 +27,15 @@ fn should_force(args: ConfigValue) -> bool {
 
 impl CommandInterface for SymlinkCommand {
     fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        let dirs = get_source_and_target(args.clone(), &config.config_dir);
-        if let Err(err_dirs) = dirs {
-            return Err(err_dirs);
-        }
-        let dirs = dirs.unwrap();
+        let dirs = get_source_and_target(args.clone(), &config.config_dir)?;
 
-        let result = create_symlink(&dirs.src, &dirs.target, dirs.ignore, should_force(args));
-
-        if let Err(err_result) = result {
-            return Err(err_result);
-        }
-
-        Ok(())
+        create_symlink(&dirs.src, &dirs.target, dirs.ignore, should_force(args))
     }
 
     fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        let dirs = get_source_and_target(args, &config.config_dir);
-        if dirs.is_err() {
-            return Err(dirs.err().unwrap());
-        }
-        let dirs = dirs.unwrap();
+        let dirs = get_source_and_target(args, &config.config_dir)?;
 
-        let result = remove_symlink(&dirs.src, &dirs.target);
-
-        if let Err(err_result) = result {
-            return Err(err_result);
-        }
-
-        Ok(())
+        remove_symlink(&dirs.src, &dirs.target)
     }
 
     fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
@@ -76,7 +56,7 @@ fn link_files(
         White.bold().paint(destination_dir.to_str().unwrap())
     );
 
-    let result = walk_files(source_dir, destination_dir, ignore, |src, target| {
+    walk_files(source_dir, destination_dir, ignore, |src, target| {
         println!(
             "Linking {} to {} ...",
             White.bold().paint(src.to_str().unwrap()),
@@ -95,13 +75,7 @@ fn link_files(
         symlink_file(src, target)
             .map_err(|e| format!("Failed to link file: {}", Red.paint(e.to_string())))
             .ok();
-    });
-
-    if let Err(err_result) = result {
-        return Err(err_result);
-    }
-
-    Ok(())
+    })
 }
 
 fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), String> {
@@ -110,7 +84,7 @@ fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), Stri
         White.bold().paint(destination_dir.to_str().unwrap())
     );
 
-    let result = walk_files(source_dir, destination_dir, vec![], |_src, target| {
+    walk_files(source_dir, destination_dir, vec![], |_src, target| {
         println!(
             "Unlinking {} ...",
             White.bold().paint(target.to_str().unwrap())
@@ -118,13 +92,7 @@ fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), Stri
         remove_symlink_file(target)
             .map_err(|e| format!("Failed to unlink file: {}", Red.paint(e.to_string())))
             .ok();
-    });
-
-    if let Err(err_result) = result {
-        return Err(err_result);
-    }
-
-    Ok(())
+    })
 }
 
 pub fn create_symlink(
@@ -133,21 +101,13 @@ pub fn create_symlink(
     ignore: Vec<ConfigValue>,
     force: bool,
 ) -> Result<(), String> {
-    let expanded_source = expand_path(source, false);
-    if let Err(err_expand_src) = expanded_source {
-        return Err(err_expand_src);
-    }
-    let source_dir = expanded_source.to_owned().unwrap();
+    let source_dir = expand_path(source, false)?;
 
     if !source_dir.exists() {
         return Err(format!("Source directory does not exist: {}", source));
     }
 
-    let expanded_destination = expand_path(destination, true);
-    if let Err(err_expand_dest) = expanded_destination {
-        return Err(err_expand_dest);
-    }
-    let destination_dir = expanded_destination.unwrap();
+    let destination_dir = expand_path(destination, true)?;
 
     if source_dir.to_string() == destination_dir.to_string() {
         return Err(format!(
@@ -156,35 +116,14 @@ pub fn create_symlink(
         ));
     }
 
-    let result = link_files(&source_dir, &destination_dir, ignore, force);
-
-    if let Err(err_result) = result {
-        return Err(err_result);
-    }
-
-    Ok(())
+    link_files(&source_dir, &destination_dir, ignore, force)
 }
 
 pub fn remove_symlink(source: &str, destination: &str) -> Result<(), String> {
-    let expanded_source = expand_path(source, false);
-    if let Err(err_expand_src) = expanded_source {
-        return Err(err_expand_src);
-    }
-    let source_dir = expanded_source.to_owned().unwrap();
+    let source_dir = expand_path(source, false)?;
+    let destination_dir = expand_path(destination, false)?;
 
-    let expanded_destination = expand_path(destination, false);
-    if let Err(err_expand_dest) = expanded_destination {
-        return Err(err_expand_dest);
-    }
-    let destination_dir = expanded_destination.unwrap();
-
-    let result = unlink_files(&source_dir, &destination_dir);
-
-    if let Err(err_result) = result {
-        return Err(err_result);
-    }
-
-    Ok(())
+    unlink_files(&source_dir, &destination_dir)
 }
 
 #[cfg(test)]

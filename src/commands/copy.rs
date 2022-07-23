@@ -20,29 +20,16 @@ pub struct CopyDirCommand {}
 
 impl CommandInterface for CopyDirCommand {
     fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        let dirs = get_source_and_target(args, &config.config_dir);
-        if let Err(err_dirs) = dirs {
-            return Err(err_dirs);
-        }
-        let dirs = dirs.unwrap();
+        let dirs = get_source_and_target(args, &config.config_dir)?;
 
-        let result = copy_dir(&dirs.src, &dirs.target, dirs.ignore);
-        if let Err(err_result) = result {
-            return Err(err_result);
-        }
-
-        Ok(())
+        copy_dir(&dirs.src, &dirs.target, dirs.ignore)
     }
 
     fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        let validation = validate_named_args(
+        validate_named_args(
             args.to_owned(),
             HashMap::from([(String::from(DIR_TARGET), vec![&Required {}])]),
-        );
-
-        if let Err(err_validation) = validation {
-            return Err(format!("{}", Red.paint(err_validation)));
-        }
+        )?;
 
         let target_dir = args
             .as_hash()
@@ -68,12 +55,7 @@ impl CommandInterface for CopyDirCommand {
             return Err(format!("{}", Red.paint("cannot delete config_dir")));
         }
 
-        let result = remove_dir(&abs_target_path);
-        if let Err(err_result) = result {
-            return Err(format!("{}", Red.paint(err_result)));
-        }
-
-        Ok(())
+        remove_dir(&abs_target_path)
     }
 
     fn update(&self, _args: ConfigValue, _config: &CommandConfig) -> Result<(), String> {
@@ -107,7 +89,7 @@ fn copy_files(
         White.bold().paint(destination_dir.to_str().unwrap())
     );
 
-    let result = walk_files(source_dir, destination_dir, ignore, |src, target| {
+    walk_files(source_dir, destination_dir, ignore, |src, target| {
         if target_file_is_newer(src, target) {
             eprintln!(
                 "{} {}: {}",
@@ -131,27 +113,12 @@ fn copy_files(
         fs::copy(src, target)
             .map_err(|e| format!("Failed to copy file: {}", Red.paint(e.to_string())))
             .ok();
-    });
-
-    if let Err(err_result) = result {
-        return Err(err_result);
-    }
-
-    Ok(())
+    })
 }
 
 pub fn copy_dir(source: &str, destination: &str, ignore: Vec<ConfigValue>) -> Result<(), String> {
-    let expanded_source = expand_path(source, false);
-    if let Err(err_expand_src) = expanded_source {
-        return Err(err_expand_src);
-    }
-    let source_dir = expanded_source.to_owned().unwrap();
-
-    let expanded_destination = expand_path(destination, true);
-    if let Err(err_expand_dest) = expanded_destination {
-        return Err(err_expand_dest);
-    }
-    let destination_dir = expanded_destination.to_owned().unwrap();
+    let source_dir = expand_path(source, false)?;
+    let destination_dir = expand_path(destination, true)?;
 
     if source_dir.to_string() == destination_dir.to_string() {
         return Err(format!(

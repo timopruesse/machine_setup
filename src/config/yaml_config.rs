@@ -121,11 +121,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
             ));
         }
 
-        let commands = get_commands(&value["commands"]);
-        if let Err(commands_err) = commands {
-            return Err(commands_err);
-        }
-        let commands = commands.unwrap();
+        let commands = get_commands(&value["commands"])?;
 
         let map = value.as_hash();
         if map.is_none() {
@@ -139,11 +135,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
         let os_list = get_os_list(
             map.get(&Yaml::String(String::from("os")))
                 .unwrap_or(&Yaml::Null),
-        );
-        if let Err(os_err) = os_list {
-            return Err(os_err);
-        }
-        let os_list = os_list.unwrap();
+        )?;
 
         let task = Task {
             name: key.as_str().unwrap().to_string(),

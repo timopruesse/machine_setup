@@ -75,16 +75,13 @@ pub fn get_relative_dir(root: &PathDir, dir: &str) -> String {
 pub fn get_source_and_target(args: ConfigValue, root: &PathDir) -> Result<Dirs, String> {
     let rules = vec![&Required {}];
 
-    let validation = validate_named_args(
+    validate_named_args(
         args.to_owned(),
         HashMap::from([
             (String::from(DIR_SRC), rules.clone()),
             (String::from(DIR_TARGET), rules.clone()),
         ]),
-    );
-    if let Err(err_validation) = validation {
-        return Err(err_validation);
-    }
+    )?;
 
     let src_dir = args
         .as_hash()

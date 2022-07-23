@@ -101,7 +101,7 @@ impl Drop for ThreadPool {
         }
 
         for worker in &mut self.workers {
-            // println!("Terminating worker {}", worker.id);
+            println!("Terminating worker {}", worker.id);
 
             if let Some(thread) = worker.thread.take() {
                 thread.join().unwrap();

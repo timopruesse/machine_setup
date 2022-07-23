@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::{env, str::FromStr};
 
 use ansi_term::Color::{Green, Red, White, Yellow};
@@ -32,7 +34,7 @@ pub struct Task {
 }
 
 impl Task {
-    pub fn run(&self, mode: &TaskRunnerMode, config: &CommandConfig) -> Result<(), ()> {
+    pub fn run(&self, mode: TaskRunnerMode, config: &CommandConfig) -> Result<(), String> {
         if should_skip_task(self) {
             println!(
                 "{}",
@@ -61,47 +63,60 @@ impl Task {
             );
         }
 
-        let thread_pool = ThreadPool::new(num_threads);
+        let has_errors = Arc::new(AtomicBool::new(false));
+        {
+            let thread_pool = ThreadPool::new(num_threads);
 
-        for command in commands.clone() {
-            let m = mode.clone();
-            let c = config.clone();
+            for command in commands.clone() {
+                let c = config.clone();
+                let errors = Arc::clone(&has_errors);
 
-            let run = move || {
-                let resolved_command = get_command(&command.name);
-                if resolved_command.is_err() {
-                    eprintln!(
-                        "{} {} {}",
-                        Red.paint("Command"),
-                        White.on(Red).paint(format!(" {} ", command.name)),
-                        Red.paint("not found")
-                    );
-                }
+                let run = move || {
+                    let resolved_command = get_command(&command.name);
+                    if resolved_command.is_err() {
+                        eprintln!(
+                            "{} {} {}",
+                            Red.paint("Command"),
+                            White.on(Red).paint(format!(" {} ", command.name)),
+                            Red.paint("not found")
+                        );
 
-                let result = run_command(resolved_command.unwrap(), command.args.clone(), &m, &c);
+                        errors.store(true, Ordering::Relaxed);
+                        return;
+                    }
 
-                if let Err(err_result) = result {
-                    eprintln!(
-                        "{}: {}",
+                    let result =
+                        run_command(resolved_command.unwrap(), command.args.clone(), &mode, &c);
+
+                    if let Err(err_result) = result {
+                        eprintln!(
+                            "{}: {}",
+                            White.bold().paint(command.name.to_string()),
+                            Red.paint("ERROR")
+                        );
+                        err_result.split('\n').for_each(|err| {
+                            eprintln!("{} {}", Red.bold().paint("|>"), Red.paint(err))
+                        });
+
+                        errors.store(true, Ordering::Relaxed);
+                    }
+
+                    println!(
+                        "\n{}: {}",
                         White.bold().paint(command.name.to_string()),
-                        Red.paint("ERROR")
+                        Green.bold().paint("OK")
                     );
-                    err_result
-                        .split('\n')
-                        .for_each(|err| eprintln!("{} {}", Red.bold().paint("|>"), Red.paint(err)));
-                }
+                };
 
-                println!(
-                    "\n{}: {}",
-                    White.bold().paint(command.name.to_string()),
-                    Green.bold().paint("OK")
-                );
-            };
-
-            thread_pool.execute(run);
+                thread_pool.execute(run);
+            }
         }
 
-        Ok(())
+        if has_errors.load(Ordering::Relaxed) {
+            Err(format!("{}", Red.paint("Task has errors")))
+        } else {
+            Ok(())
+        }
     }
 }
 
