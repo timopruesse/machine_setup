@@ -171,7 +171,7 @@ mod test {
             ConfigValue::String(String::from("command2")),
         ]);
 
-        let commands = get_commands(commands.clone(), TaskRunnerMode::Install);
+        let commands = get_commands(commands, TaskRunnerMode::Install);
         assert!(commands.is_ok());
         assert_eq!(
             commands.unwrap(),
