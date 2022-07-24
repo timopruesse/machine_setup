@@ -4,6 +4,7 @@ use ansi_term::Color::{Red, White};
 use ergo_fs::expand;
 use ergo_fs::Path;
 use ergo_fs::PathDir;
+use tracing::error;
 
 use crate::config::base_config::get_config;
 use crate::task::get_task_names;
@@ -14,7 +15,6 @@ use crate::task_runner::TaskRunnerMode;
 
 use super::cli::Args;
 use super::cli::SubCommand;
-use clap::Parser;
 
 fn get_task_runner_mode(subcommand: SubCommand) -> TaskRunnerMode {
     match subcommand {
@@ -42,19 +42,17 @@ fn get_task_from_args(args: &Args, tasks: &[Task]) -> Result<Option<String>, Str
     Ok(task_name)
 }
 
-pub fn execute_command() {
-    let args = Args::parse();
-
+pub fn execute_command(args: Args) {
     let config_path = expand(&args.config);
     if let Err(err_config_path) = config_path {
-        eprintln!("{}", Red.paint(err_config_path.to_string()));
+        error!("{}", Red.paint(err_config_path.to_string()));
         return;
     }
     let config_path = config_path.unwrap();
 
     let config = get_config(&config_path);
     if let Err(err_config) = config {
-        eprintln!("{}", Red.paint(err_config));
+        error!("{}", Red.paint(err_config));
         return;
     }
 
@@ -65,7 +63,7 @@ pub fn execute_command() {
             let task_name = get_task_from_args(&args, &task_list.tasks);
 
             if let Err(err_task_name) = task_name {
-                eprintln!("{}", Red.paint(err_task_name));
+                error!("{}", Red.paint(err_task_name));
                 return;
             }
 
@@ -83,7 +81,7 @@ pub fn execute_command() {
             );
 
             if run.is_err() {
-                eprintln!("{}", Red.paint(run.unwrap_err()));
+                error!("{}", Red.paint(run.unwrap_err()));
             }
         }
         SubCommand::List => {
@@ -102,6 +100,8 @@ pub fn execute_command() {
 
 #[cfg(test)]
 mod test {
+    use tracing::Level;
+
     use super::*;
 
     #[test]
@@ -111,6 +111,8 @@ mod test {
             config: "./machine_setup.yaml".to_string(),
             task: Some("test".to_string()),
             select: false,
+            level: Level::INFO,
+            debug: true,
         };
 
         let tasks = vec![Task {
@@ -132,6 +134,8 @@ mod test {
             config: "./machine_setup.yaml".to_string(),
             task: Some("test".to_string()),
             select: true,
+            level: Level::INFO,
+            debug: true,
         };
 
         let tasks = vec![Task {

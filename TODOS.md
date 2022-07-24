@@ -1,7 +1,6 @@
 # TODOs
 
 - Improve the terminal output
-  - use https://crates.io/crates/indicatif for task/command progress
   - use https://docs.rs/pretty_env_logger/0.4.0/pretty_env_logger/ for messages/logging
 
 ---

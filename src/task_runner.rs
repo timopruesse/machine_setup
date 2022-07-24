@@ -1,6 +1,7 @@
 use ansi_term::Color::{Red, White};
 use core::fmt;
 use ergo_fs::PathDir;
+use indicatif::MultiProgress;
 use std::sync::{Arc, Mutex};
 
 use crate::{command::CommandConfig, config::base_config::TaskList, utils::threads::ThreadPool};
@@ -42,6 +43,8 @@ pub fn run(
         default_shell: task_list.default_shell,
     };
 
+    let multi_progress = Arc::new(MultiProgress::new());
+
     if let Some(task_name) = task_name {
         let task = task_list.tasks.iter().find(|t| t.name == task_name);
         if task.is_none() {
@@ -52,7 +55,7 @@ pub fn run(
             ));
         }
 
-        let task_result = task.unwrap().run(mode, &command_config);
+        let task_result = task.unwrap().run(mode, &command_config, &multi_progress);
         if task_result.is_err() {
             return Err(format!(
                 "\nTask {} {}",
@@ -82,6 +85,7 @@ pub fn run(
     }
 
     let errored_tasks = Arc::new(Mutex::new(vec![]));
+
     {
         let thread_pool = ThreadPool::new(num_threads);
 
@@ -89,9 +93,11 @@ pub fn run(
             let config = command_config.clone();
             let task_clone = task.clone();
             let errors = Arc::clone(&errored_tasks);
+            let mp = Arc::clone(&multi_progress);
 
             let execute = move || {
-                let task_result = task_clone.run(mode, &config);
+                let task_result = task_clone.run(mode, &config, &mp);
+
                 if task_result.is_err() {
                     let mut e = errors.lock().unwrap();
                     e.push(task_clone.name.to_string());
@@ -119,6 +125,8 @@ pub fn run(
                 .join("\n")
         ));
     }
+
+    multi_progress.join().unwrap();
 
     Ok(())
 }

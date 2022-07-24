@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::{env, str::FromStr};
 
-use ansi_term::Color::{Green, Red, White, Yellow};
+use ansi_term::Color::{Red, White, Yellow};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::{
     command::{get_command, CommandConfig, CommandInterface},
@@ -34,7 +35,12 @@ pub struct Task {
 }
 
 impl Task {
-    pub fn run(&self, mode: TaskRunnerMode, config: &CommandConfig) -> Result<(), String> {
+    pub fn run(
+        &self,
+        mode: TaskRunnerMode,
+        config: &CommandConfig,
+        mp: &MultiProgress,
+    ) -> Result<(), String> {
         if should_skip_task(self) {
             println!(
                 "{}",
@@ -47,11 +53,6 @@ impl Task {
             return Ok(());
         }
 
-        println!(
-            "\nRunning task {} ...\n",
-            White.bold().paint(self.name.to_string())
-        );
-
         let commands = &self.commands;
 
         let num_threads = if self.parallel { commands.len() } else { 1 };
@@ -63,13 +64,24 @@ impl Task {
             );
         }
 
+        let pb = ProgressBar::new(commands.len().try_into().unwrap()).with_style(
+            ProgressStyle::default_bar()
+                .template("[{pos}/{len}] {bar:50.green/white} | {elapsed} | {msg}")
+                .progress_chars("##-"),
+        );
+        pb.println(format!("Task: {}", White.bold().paint(&self.name)));
+        let added_pb = mp.add(pb);
+
+        let progress_bar = Arc::new(Mutex::new(added_pb));
         let has_errors = Arc::new(AtomicBool::new(false));
+
         {
             let thread_pool = ThreadPool::new(num_threads);
 
             for command in commands.clone() {
                 let c = config.clone();
                 let errors = Arc::clone(&has_errors);
+                let progress = Arc::clone(&progress_bar);
 
                 let run = move || {
                     let resolved_command = get_command(&command.name);
@@ -82,6 +94,11 @@ impl Task {
                         );
 
                         errors.store(true, Ordering::Relaxed);
+
+                        let p = progress.lock().unwrap();
+                        p.inc(1);
+                        drop(p);
+
                         return;
                     }
 
@@ -101,11 +118,9 @@ impl Task {
                         errors.store(true, Ordering::Relaxed);
                     }
 
-                    println!(
-                        "\n{}: {}",
-                        White.bold().paint(command.name.to_string()),
-                        Green.bold().paint("OK")
-                    );
+                    let p = progress.lock().unwrap();
+                    p.inc(1);
+                    drop(p);
                 };
 
                 thread_pool.execute(run);
@@ -113,8 +128,18 @@ impl Task {
         }
 
         if has_errors.load(Ordering::Relaxed) {
+            progress_bar
+                .lock()
+                .unwrap()
+                .finish_with_message(String::from("ERR"));
+
             Err(format!("{}", Red.paint("Task has errors")))
         } else {
+            progress_bar
+                .lock()
+                .unwrap()
+                .finish_with_message(String::from("OK"));
+
             Ok(())
         }
     }

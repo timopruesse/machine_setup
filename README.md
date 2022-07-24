@@ -35,13 +35,15 @@ Supported file formats are: `yaml`, `yml`, and `json`.
 
 ### Command line parameters
 
-| flag             | value                                       | example                                           |
-| ---------------- | ------------------------------------------- | ------------------------------------------------- |
-| -c<br> --config  | specify a different path to the config file | `machine_setup install -c ./config/my_setup.yaml` |
-| -t<br> --task    | only run the specified task                 | `machine_setup install -t my_task2`               |
-| -s<br> --select  | select a task to run                        | `machine_setup install -s`                        |
-| -h<br> --help    | display help information                    | `machine_setup --help`                            |
-| -v<br> --version | display version information                 | `machine_setup --version`                         |
+| flag             | value                                             | example                                           |
+| ---------------- | ------------------------------------------------- | ------------------------------------------------- |
+| -c<br> --config  | specify a different path to the config file       | `machine_setup install -c ./config/my_setup.yaml` |
+| -t<br> --task    | only run the specified task                       | `machine_setup install -t my_task2`               |
+| -s<br> --select  | select a task to run                              | `machine_setup install -s`                        |
+| -h<br> --help    | display help information                          | `machine_setup --help`                            |
+| -v<br> --version | display version information                       | `machine_setup --version`                         |
+| -d<br> --debug   | print additional debug information                | `machine_setup install --debug`                   |
+| -l<br> --level   | set a log level (info, warn, error, debug, trace) | `machine_setup install --level=info`              |
 
 ### Supported config file formats
 
