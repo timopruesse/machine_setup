@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{env, str::FromStr};
 
-use ansi_term::Color::{Red, White, Yellow};
+use ansi_term::Color::{Green, Red, White, Yellow};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use tracing::{error, info};
 
@@ -71,7 +71,7 @@ impl Task {
                 .unwrap()
                 .progress_chars("##-"),
         );
-        pb.println(format!("Task: {}", White.bold().paint(&self.name)));
+        pb.println(format!("{}", White.bold().paint(self.name.clone())));
         let added_pb = mp.add(pb);
 
         let progress_bar = Arc::new(Mutex::new(added_pb));
@@ -99,6 +99,7 @@ impl Task {
 
                         let p = progress.lock().unwrap();
                         p.inc(1);
+                        p.set_message(format!("❌ - {}", Red.paint(&command.name)));
                         drop(p);
 
                         return;
@@ -122,6 +123,7 @@ impl Task {
 
                     let p = progress.lock().unwrap();
                     p.inc(1);
+                    p.set_message(format!("✅ - {}", Green.paint(&command.name)));
                     drop(p);
                 };
 
@@ -140,7 +142,7 @@ impl Task {
             progress_bar
                 .lock()
                 .unwrap()
-                .finish_with_message(String::from("OK"));
+                .finish_with_message(String::from("✅"));
 
             Ok(())
         }

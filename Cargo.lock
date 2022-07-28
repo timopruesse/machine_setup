@@ -348,6 +348,7 @@ dependencies = [
  "git_commands",
  "indicatif",
  "num_cpus",
+ "once_cell",
  "rand 0.8.5",
  "serde_json",
  "symlink",

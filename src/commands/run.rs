@@ -5,6 +5,8 @@ use std::{
     str::FromStr,
 };
 
+use tracing::Level;
+
 use crate::{
     command::{CommandConfig, CommandInterface},
     config::{
@@ -17,6 +19,7 @@ use crate::{
         shell::{create_script_file, Shell},
         terminal::set_environment_variables,
     },
+    LOG_LEVEL,
 };
 
 pub struct RunCommand {}
@@ -71,11 +74,23 @@ fn run_commands(
         temp_dir,
     )?;
 
+    let print = Level::INFO
+        .cmp(LOG_LEVEL.get().unwrap_or(&Level::WARN))
+        .is_le();
+
     let command = Command::new(shell)
         .arg("-c")
         .arg(&temp_script)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stdout(if print {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        })
+        .stderr(if print {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        })
         .output();
 
     remove_file(temp_script).ok();
