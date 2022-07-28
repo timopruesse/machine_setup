@@ -1,10 +1,5 @@
 # TODOs
 
-- Improve the terminal output
-  - use https://docs.rs/pretty_env_logger/0.4.0/pretty_env_logger/ for messages/logging
-
----
-
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 
 ## 2.0.0
