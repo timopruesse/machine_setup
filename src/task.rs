@@ -65,13 +65,14 @@ impl Task {
             );
         }
 
+        let task_name = self.name.clone();
+
         let pb = ProgressBar::new(commands.len().try_into().unwrap()).with_style(
             ProgressStyle::default_bar()
-                .template("[{pos}/{len}] {bar:50.green/white} | {elapsed} | {msg}")
+                .template("[{bar:50.green/white}] {pos}/{len}: {msg}")
                 .unwrap()
-                .progress_chars("##-"),
+                .progress_chars("=> "),
         );
-        pb.println(format!("{}", White.bold().paint(self.name.clone())));
         let added_pb = mp.add(pb);
 
         let progress_bar = Arc::new(Mutex::new(added_pb));
@@ -84,8 +85,16 @@ impl Task {
                 let c = config.clone();
                 let errors = Arc::clone(&has_errors);
                 let progress = Arc::clone(&progress_bar);
+                let task = task_name.clone();
 
                 let run = move || {
+                    let p = progress.lock().unwrap();
+                    p.set_message(format!(
+                        "⏳ {}: {}",
+                        &task,
+                        White.bold().paint(&command.name)
+                    ));
+
                     let resolved_command = get_command(&command.name);
                     if resolved_command.is_err() {
                         error!(
@@ -97,9 +106,12 @@ impl Task {
 
                         errors.store(true, Ordering::Relaxed);
 
-                        let p = progress.lock().unwrap();
+                        p.set_message(format!(
+                            "❌ {}: {}",
+                            Red.paint(&task),
+                            Red.paint(&command.name)
+                        ));
                         p.inc(1);
-                        p.set_message(format!("❌ - {}", Red.paint(&command.name)));
                         drop(p);
 
                         return;
@@ -111,7 +123,7 @@ impl Task {
                     if let Err(err_result) = result {
                         error!(
                             "{}: {}",
-                            White.bold().paint(command.name.to_string()),
+                            White.bold().paint(&command.name),
                             Red.paint("ERROR")
                         );
                         err_result.split('\n').for_each(|err| {
@@ -121,9 +133,12 @@ impl Task {
                         errors.store(true, Ordering::Relaxed);
                     }
 
-                    let p = progress.lock().unwrap();
+                    p.set_message(format!(
+                        "✅ {}: {}",
+                        Green.paint(&task),
+                        Green.paint(&command.name)
+                    ));
                     p.inc(1);
-                    p.set_message(format!("✅ - {}", Green.paint(&command.name)));
                     drop(p);
                 };
 
@@ -132,17 +147,19 @@ impl Task {
         }
 
         if has_errors.load(Ordering::Relaxed) {
-            progress_bar
-                .lock()
-                .unwrap()
-                .finish_with_message(String::from("ERR"));
+            progress_bar.lock().unwrap().finish_with_message(format!(
+                "❌ {} ➡️ {}",
+                Red.paint(&task_name),
+                Red.bold().paint("ERR")
+            ));
 
             Err(format!("{}", Red.paint("Task has errors")))
         } else {
-            progress_bar
-                .lock()
-                .unwrap()
-                .finish_with_message(String::from("✅"));
+            progress_bar.lock().unwrap().finish_with_message(format!(
+                "✅ {} ➡️ {}",
+                Green.paint(&task_name),
+                Green.bold().paint("OK")
+            ));
 
             Ok(())
         }
