@@ -5,6 +5,8 @@ use std::{
     str::FromStr,
 };
 
+use tracing::Level;
+
 use crate::{
     command::{CommandConfig, CommandInterface},
     config::{
@@ -17,6 +19,7 @@ use crate::{
         shell::{create_script_file, Shell},
         terminal::set_environment_variables,
     },
+    LOG_LEVEL,
 };
 
 pub struct RunCommand {}
@@ -42,12 +45,7 @@ fn get_commands(args: ConfigValue, mode: TaskRunnerMode) -> Result<Vec<String>, 
     let method_name = mode.to_string();
 
     if arguments_are_named(Some(&args)) {
-        let validation =
-            validate_named_args(args.clone(), HashMap::from([(method_name.clone(), rules)]));
-
-        if let Err(err_validation) = validation {
-            return Err(err_validation);
-        }
+        validate_named_args(args.clone(), HashMap::from([(method_name.clone(), rules)]))?;
 
         return Ok(get_commands_from_yaml(
             args.as_hash()
@@ -58,10 +56,7 @@ fn get_commands(args: ConfigValue, mode: TaskRunnerMode) -> Result<Vec<String>, 
         ));
     }
 
-    let validation = validate_args(Some(&args), rules);
-    if let Err(err_validation) = validation {
-        return Err(err_validation);
-    }
+    validate_args(Some(&args), rules)?;
 
     Ok(get_commands_from_yaml(args))
 }
@@ -72,28 +67,30 @@ fn run_commands(
     mode: TaskRunnerMode,
     temp_dir: &str,
 ) -> Result<String, String> {
-    let parsed_commands = get_commands(commands.clone(), mode);
-    if let Err(err) = parsed_commands {
-        return Err(err);
-    }
-    let parsed_commands = parsed_commands.unwrap();
-
+    let parsed_commands = get_commands(commands.clone(), mode)?;
     let temp_script = create_script_file(
         Shell::from_str(shell).unwrap_or(Shell::Bash),
         parsed_commands,
         temp_dir,
-    );
+    )?;
 
-    if let Err(err) = temp_script {
-        return Err(err);
-    }
-    let temp_script = temp_script.unwrap();
+    let print = Level::INFO
+        .cmp(LOG_LEVEL.get().unwrap_or(&Level::WARN))
+        .is_le();
 
     let command = Command::new(shell)
         .arg("-c")
         .arg(&temp_script)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stdout(if print {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        })
+        .stderr(if print {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        })
         .output();
 
     remove_file(temp_script).ok();
@@ -104,10 +101,7 @@ fn run_commands(
 
     let output = command.unwrap();
 
-    let mut stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
-    if stdout.is_empty() {
-        stdout = String::from("\n");
-    }
+    let stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
 
     if !output.status.success() {
         let error_msg = String::from_utf8(output.stderr).unwrap_or_else(|e| e.to_string());
@@ -142,18 +136,13 @@ fn run_task(mode: TaskRunnerMode, args: ConfigValue, config: &CommandConfig) -> 
         .as_str()
         .unwrap();
 
-    if let Err(err_env) = set_environment_variables(&args) {
-        return Err(err_env);
+    set_environment_variables(&args)?;
+
+    let result = run_commands(param_commands, param_shell, mode, &config.temp_dir)?;
+
+    if !result.is_empty() {
+        result.split('\n').for_each(|line| println!("{}", line));
     }
-
-    let result = run_commands(param_commands, param_shell, mode, &config.temp_dir);
-    if let Err(err_result) = result {
-        return Err(err_result);
-    }
-
-    let result = result.unwrap();
-
-    result.split('\n').for_each(|line| println!("{}", line));
 
     Ok(())
 }
@@ -196,7 +185,7 @@ mod test {
             ConfigValue::String(String::from("command2")),
         ]);
 
-        let commands = get_commands(commands.clone(), TaskRunnerMode::Install);
+        let commands = get_commands(commands, TaskRunnerMode::Install);
         assert!(commands.is_ok());
         assert_eq!(
             commands.unwrap(),

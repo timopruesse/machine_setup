@@ -34,7 +34,7 @@ _machine_setup() {
 
     case "${cmd}" in
         machine_setup)
-            opts="-h -V -c -t -s --help --version --config --task --select install update uninstall list help"
+            opts="-h -V -c -t -s -d -l --help --version --config --task --select --debug --level install update uninstall list help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -56,6 +56,14 @@ _machine_setup() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
+                --level)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -l)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;
@@ -64,7 +72,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__help)
-            opts="-c -t -s --config --task --select <SUBCOMMAND>..."
+            opts="-c -t -s -d -l --config --task --select --debug --level <SUBCOMMAND>..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -83,6 +91,14 @@ _machine_setup() {
                     return 0
                     ;;
                 -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --level)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -l)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -94,7 +110,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__install)
-            opts="-h -V -c -t -s --help --version --config --task --select"
+            opts="-h -V -c -t -s -d -l --help --version --config --task --select --debug --level"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -113,6 +129,14 @@ _machine_setup() {
                     return 0
                     ;;
                 -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --level)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -l)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -124,7 +148,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__list)
-            opts="-h -V -c -t -s --help --version --config --task --select"
+            opts="-h -V -c -t -s -d -l --help --version --config --task --select --debug --level"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -143,6 +167,14 @@ _machine_setup() {
                     return 0
                     ;;
                 -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --level)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -l)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -154,7 +186,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__uninstall)
-            opts="-h -V -c -t -s --help --version --config --task --select"
+            opts="-h -V -c -t -s -d -l --help --version --config --task --select --debug --level"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -173,6 +205,14 @@ _machine_setup() {
                     return 0
                     ;;
                 -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --level)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -l)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -184,7 +224,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__update)
-            opts="-h -V -c -t -s --help --version --config --task --select"
+            opts="-h -V -c -t -s -d -l --help --version --config --task --select --debug --level"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -203,6 +243,14 @@ _machine_setup() {
                     return 0
                     ;;
                 -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --level)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -l)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

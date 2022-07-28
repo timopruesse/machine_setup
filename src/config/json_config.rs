@@ -1,7 +1,12 @@
 use ansi_term::Color::White;
 use serde_json::Value;
+use tracing::info;
 
-use crate::{config::base_config::*, utils::shell::Shell};
+use crate::{
+    config::base_config::*,
+    task::Task,
+    utils::{shell::Shell, threads::get_thread_number},
+};
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
 
 use super::{config_value::ConfigValue, os::Os};
@@ -110,22 +115,14 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
 
         let values = value.as_object().unwrap();
 
-        let commands = get_commands(&values["commands"]);
-        if let Err(commands_err) = commands {
-            return Err(commands_err);
-        }
-        let commands = commands.unwrap();
-
-        let os_list = get_os_list(values.get("os").unwrap_or(&Value::Null));
-        if let Err(os_err) = os_list {
-            return Err(os_err);
-        }
-        let os_list = os_list.unwrap();
+        let commands = get_commands(&values["commands"])?;
+        let os_list = get_os_list(values.get("os").unwrap_or(&Value::Null))?;
 
         let task = Task {
             name: key.to_string(),
             os: os_list,
             commands,
+            parallel: values["parallel"].as_bool().unwrap_or(false),
         };
         tasks.push(task);
     }
@@ -146,10 +143,14 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
     }
     let default_shell = default_shell.unwrap();
 
+    let parallel = config["parallel"].as_bool().unwrap_or(false);
+
     Ok(TaskList {
         tasks,
         temp_dir,
         default_shell,
+        num_threads: get_thread_number(config["num_threads"].as_i64()),
+        parallel,
     })
 }
 
@@ -165,7 +166,7 @@ impl BaseConfig for JsonConfig {
             return Err(format!("File {} is not a JSON file", path));
         }
 
-        println!("Reading config from {} ...", White.bold().paint(path));
+        info!("Reading config from {} ...", White.bold().paint(path));
 
         parse_json(json_path)
     }

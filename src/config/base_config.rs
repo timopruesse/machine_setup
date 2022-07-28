@@ -1,25 +1,17 @@
 use ergo_fs::Path;
 
-use crate::utils::shell::Shell;
+use crate::{task::Task, utils::shell::Shell};
 
 use super::{
     config_value::ConfigValue,
     json_config::{JsonConfig, ALLOWED_JSON_EXTENSIONS},
-    os::Os,
     yaml_config::{YamlConfig, ALLOWED_YAML_EXTENSIONS},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Command {
     pub name: String,
     pub args: ConfigValue,
-}
-
-#[derive(Debug)]
-pub struct Task {
-    pub name: String,
-    pub commands: Vec<Command>,
-    pub os: Vec<Os>,
 }
 
 #[derive(Debug)]
@@ -27,6 +19,8 @@ pub struct TaskList {
     pub tasks: Vec<Task>,
     pub temp_dir: String,
     pub default_shell: Shell,
+    pub num_threads: usize,
+    pub parallel: bool,
 }
 
 pub trait BaseConfig {
@@ -82,28 +76,13 @@ pub fn get_config(config_path: &str) -> Result<TaskList, String> {
     let mut file_ending = get_file_ending(config_path);
 
     if !is_valid_file_ending(&file_ending) {
-        let config_file = find_config_file(config_path);
-
-        if let Err(config_err) = config_file {
-            return Err(config_err);
-        }
-        file_path = config_file.unwrap();
+        file_path = find_config_file(config_path)?;
         file_ending = get_file_ending(&file_path);
     }
 
-    let config = get_config_handler(&file_ending);
-    if config.is_err() {
-        return Err(config.err().unwrap());
-    }
-    let config = config.unwrap();
+    let config = get_config_handler(&file_ending)?;
 
-    let result = config.read(&file_path);
-
-    if let Err(err_result) = result {
-        return Err(err_result);
-    }
-
-    Ok(result.unwrap())
+    config.read(&file_path)
 }
 
 #[cfg(test)]

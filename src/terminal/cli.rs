@@ -1,5 +1,8 @@
+extern crate tracing;
+
 use clap::{Parser, Subcommand};
 use std::str::FromStr;
+use tracing::Level;
 
 #[derive(Subcommand, Debug)]
 pub enum SubCommand {
@@ -53,4 +56,14 @@ pub struct Args {
     #[clap(short, long)]
     #[clap(global = true)]
     pub select: bool,
+
+    /// Add debug information
+    #[clap(short, long)]
+    #[clap(global = true)]
+    pub debug: bool,
+
+    /// Set log level
+    #[clap(short, long, default_value = "warn")]
+    #[clap(global = true)]
+    pub level: Level,
 }

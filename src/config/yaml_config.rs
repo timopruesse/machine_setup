@@ -1,9 +1,14 @@
 extern crate yaml_rust;
 
 use ansi_term::Color::White;
+use tracing::info;
 use yaml_rust::{Yaml, YamlLoader};
 
-use crate::{config::base_config::*, utils::shell::Shell};
+use crate::{
+    config::base_config::*,
+    task::Task,
+    utils::{shell::Shell, threads::get_thread_number},
+};
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr};
 
 use super::{config_value::ConfigValue, os::Os};
@@ -117,11 +122,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
             ));
         }
 
-        let commands = get_commands(&value["commands"]);
-        if let Err(commands_err) = commands {
-            return Err(commands_err);
-        }
-        let commands = commands.unwrap();
+        let commands = get_commands(&value["commands"])?;
 
         let map = value.as_hash();
         if map.is_none() {
@@ -135,16 +136,13 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
         let os_list = get_os_list(
             map.get(&Yaml::String(String::from("os")))
                 .unwrap_or(&Yaml::Null),
-        );
-        if let Err(os_err) = os_list {
-            return Err(os_err);
-        }
-        let os_list = os_list.unwrap();
+        )?;
 
         let task = Task {
             name: key.as_str().unwrap().to_string(),
             os: os_list,
             commands,
+            parallel: value["parallel"].as_bool().unwrap_or(false),
         };
         tasks.push(task);
     }
@@ -165,10 +163,14 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
     }
     let default_shell = default_shell.unwrap();
 
+    let parallel = entries["parallel"].as_bool().unwrap_or(false);
+
     Ok(TaskList {
         tasks,
         temp_dir,
         default_shell,
+        num_threads: get_thread_number(entries["num_threads"].as_i64()),
+        parallel,
     })
 }
 
@@ -184,7 +186,7 @@ impl BaseConfig for YamlConfig {
             return Err(format!("File {} is not a YAML file", path));
         }
 
-        println!("Reading config from {} ...", White.bold().paint(path));
+        info!("Reading config from {} ...", White.bold().paint(path));
 
         parse_yaml(yaml_path)
     }

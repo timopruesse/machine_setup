@@ -19,12 +19,16 @@ _machine_setup() {
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
+'-l+[Set log level]:LEVEL: ' \
+'--level=[Set log level]:LEVEL: ' \
 '-h[Print help information]' \
 '--help[Print help information]' \
 '-V[Print version information]' \
 '--version[Print version information]' \
 '-s[Select a task to run]' \
 '--select[Select a task to run]' \
+'-d[Add debug information]' \
+'--debug[Add debug information]' \
 ":: :_machine_setup_commands" \
 "*::: :->machine_setup" \
 && ret=0
@@ -40,12 +44,16 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
+'-l+[Set log level]:LEVEL: ' \
+'--level=[Set log level]:LEVEL: ' \
 '-h[Print help information]' \
 '--help[Print help information]' \
 '-V[Print version information]' \
 '--version[Print version information]' \
 '-s[Select a task to run]' \
 '--select[Select a task to run]' \
+'-d[Add debug information]' \
+'--debug[Add debug information]' \
 && ret=0
 ;;
 (update)
@@ -54,12 +62,16 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
+'-l+[Set log level]:LEVEL: ' \
+'--level=[Set log level]:LEVEL: ' \
 '-h[Print help information]' \
 '--help[Print help information]' \
 '-V[Print version information]' \
 '--version[Print version information]' \
 '-s[Select a task to run]' \
 '--select[Select a task to run]' \
+'-d[Add debug information]' \
+'--debug[Add debug information]' \
 && ret=0
 ;;
 (uninstall)
@@ -68,12 +80,16 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
+'-l+[Set log level]:LEVEL: ' \
+'--level=[Set log level]:LEVEL: ' \
 '-h[Print help information]' \
 '--help[Print help information]' \
 '-V[Print version information]' \
 '--version[Print version information]' \
 '-s[Select a task to run]' \
 '--select[Select a task to run]' \
+'-d[Add debug information]' \
+'--debug[Add debug information]' \
 && ret=0
 ;;
 (list)
@@ -82,12 +98,16 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
+'-l+[Set log level]:LEVEL: ' \
+'--level=[Set log level]:LEVEL: ' \
 '-h[Print help information]' \
 '--help[Print help information]' \
 '-V[Print version information]' \
 '--version[Print version information]' \
 '-s[Select a task to run]' \
 '--select[Select a task to run]' \
+'-d[Add debug information]' \
+'--debug[Add debug information]' \
 && ret=0
 ;;
 (help)
@@ -96,8 +116,12 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
+'-l+[Set log level]:LEVEL: ' \
+'--level=[Set log level]:LEVEL: ' \
 '-s[Select a task to run]' \
 '--select[Select a task to run]' \
+'-d[Add debug information]' \
+'--debug[Add debug information]' \
 '*::subcommand -- The subcommand whose help message to display:' \
 && ret=0
 ;;
