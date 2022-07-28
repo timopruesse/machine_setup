@@ -127,8 +127,6 @@ pub fn run(
         ));
     }
 
-    multi_progress.join().unwrap();
-
     Ok(())
 }
 

@@ -86,10 +86,7 @@ fn run_commands(
 
     let output = command.unwrap();
 
-    let mut stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
-    if stdout.is_empty() {
-        stdout = String::from("\n");
-    }
+    let stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
 
     if !output.status.success() {
         let error_msg = String::from_utf8(output.stderr).unwrap_or_else(|e| e.to_string());
@@ -128,7 +125,9 @@ fn run_task(mode: TaskRunnerMode, args: ConfigValue, config: &CommandConfig) -> 
 
     let result = run_commands(param_commands, param_shell, mode, &config.temp_dir)?;
 
-    result.split('\n').for_each(|line| println!("{}", line));
+    if !result.is_empty() {
+        result.split('\n').for_each(|line| println!("{}", line));
+    }
 
     Ok(())
 }

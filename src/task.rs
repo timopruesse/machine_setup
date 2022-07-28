@@ -68,6 +68,7 @@ impl Task {
         let pb = ProgressBar::new(commands.len().try_into().unwrap()).with_style(
             ProgressStyle::default_bar()
                 .template("[{pos}/{len}] {bar:50.green/white} | {elapsed} | {msg}")
+                .unwrap()
                 .progress_chars("##-"),
         );
         pb.println(format!("Task: {}", White.bold().paint(&self.name)));
