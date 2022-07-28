@@ -6,6 +6,8 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+use tracing::trace;
+
 pub fn get_thread_number(num_config: Option<i64>) -> usize {
     if num_config.is_none() {
         return num_cpus::get_physical() - 1;
@@ -39,18 +41,18 @@ struct Worker {
 
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<Receiver<Message>>>) -> Worker {
-        // println!("Worker {} started...", id);
+        trace!("Worker {} started...", id);
 
         let thread = thread::spawn(move || loop {
             let message = receiver.lock().unwrap().recv().unwrap();
 
             match message {
                 Message::NewJob(job) => {
-                    // println!("Worker {} executing job...", id);
+                    trace!("Worker {} executing job...", id);
                     job.call_box();
                 }
                 Message::Terminate => {
-                    // println!("Worker {} is being terminated...", id);
+                    trace!("Worker {} is being terminated...", id);
                     break;
                 }
             }
@@ -101,7 +103,7 @@ impl Drop for ThreadPool {
         }
 
         for worker in &mut self.workers {
-            println!("Terminating worker {}", worker.id);
+            trace!("Terminating worker {}", worker.id);
 
             if let Some(thread) = worker.thread.take() {
                 thread.join().unwrap();

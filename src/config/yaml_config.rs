@@ -1,6 +1,7 @@
 extern crate yaml_rust;
 
 use ansi_term::Color::White;
+use tracing::info;
 use yaml_rust::{Yaml, YamlLoader};
 
 use crate::{
@@ -185,7 +186,7 @@ impl BaseConfig for YamlConfig {
             return Err(format!("File {} is not a YAML file", path));
         }
 
-        println!("Reading config from {} ...", White.bold().paint(path));
+        info!("Reading config from {} ...", White.bold().paint(path));
 
         parse_yaml(yaml_path)
     }

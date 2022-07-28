@@ -4,6 +4,7 @@ use std::{env, str::FromStr};
 
 use ansi_term::Color::{Red, White, Yellow};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use tracing::{error, info};
 
 use crate::{
     command::{get_command, CommandConfig, CommandInterface},
@@ -42,7 +43,7 @@ impl Task {
         mp: &MultiProgress,
     ) -> Result<(), String> {
         if should_skip_task(self) {
-            println!(
+            info!(
                 "{}",
                 Yellow.bold().paint(format!(
                     "Skipping task \"{}\" due to OS condition ...",
@@ -58,7 +59,7 @@ impl Task {
         let num_threads = if self.parallel { commands.len() } else { 1 };
 
         if self.parallel {
-            println!(
+            info!(
                 "Executing commands in parallel ({} threads)...",
                 White.bold().paint(num_threads.to_string())
             );
@@ -86,7 +87,7 @@ impl Task {
                 let run = move || {
                     let resolved_command = get_command(&command.name);
                     if resolved_command.is_err() {
-                        eprintln!(
+                        error!(
                             "{} {} {}",
                             Red.paint("Command"),
                             White.on(Red).paint(format!(" {} ", command.name)),
@@ -106,13 +107,13 @@ impl Task {
                         run_command(resolved_command.unwrap(), command.args.clone(), &mode, &c);
 
                     if let Err(err_result) = result {
-                        eprintln!(
+                        error!(
                             "{}: {}",
                             White.bold().paint(command.name.to_string()),
                             Red.paint("ERROR")
                         );
                         err_result.split('\n').for_each(|err| {
-                            eprintln!("{} {}", Red.bold().paint("|>"), Red.paint(err))
+                            error!("{} {}", Red.bold().paint("|>"), Red.paint(err))
                         });
 
                         errors.store(true, Ordering::Relaxed);

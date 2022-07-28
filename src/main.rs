@@ -2,7 +2,6 @@ extern crate tracing;
 
 use clap::Parser;
 use terminal::{cli::Args, command::execute_command};
-use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
 pub mod command;
@@ -17,7 +16,7 @@ fn main() {
     let args = Args::parse();
 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::WARN)
+        .with_max_level(args.level)
         .pretty()
         .with_level(args.debug)
         .with_line_number(args.debug)

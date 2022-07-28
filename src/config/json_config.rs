@@ -1,5 +1,6 @@
 use ansi_term::Color::White;
 use serde_json::Value;
+use tracing::info;
 
 use crate::{
     config::base_config::*,
@@ -165,7 +166,7 @@ impl BaseConfig for JsonConfig {
             return Err(format!("File {} is not a JSON file", path));
         }
 
-        println!("Reading config from {} ...", White.bold().paint(path));
+        info!("Reading config from {} ...", White.bold().paint(path));
 
         parse_json(json_path)
     }

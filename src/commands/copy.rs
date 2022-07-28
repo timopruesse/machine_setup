@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     fs::{self, canonicalize},
 };
+use tracing::{error, info, warn};
 
 use crate::{
     command::{CommandConfig, CommandInterface},
@@ -43,7 +44,7 @@ impl CommandInterface for CopyDirCommand {
         let abs_target_path = canonicalize(relative_target_path);
         if let Err(target_err) = abs_target_path {
             if target_err.raw_os_error().unwrap() == 2 {
-                println!("{}", Yellow.paint("The file(s) were already removed..."));
+                info!("{}", Yellow.paint("The file(s) were already removed..."));
                 return Ok(());
             }
 
@@ -59,7 +60,7 @@ impl CommandInterface for CopyDirCommand {
     }
 
     fn update(&self, _args: ConfigValue, _config: &CommandConfig) -> Result<(), String> {
-        println!(
+        warn!(
             "{}",
             Yellow.paint("update not implemented for copy command")
         );
@@ -83,7 +84,7 @@ fn copy_files(
     destination_dir: &Path,
     ignore: Vec<ConfigValue>,
 ) -> Result<(), String> {
-    println!(
+    info!(
         "Copying files from {} to {} ...",
         White.bold().paint(source_dir.to_string()),
         White.bold().paint(destination_dir.to_str().unwrap())
@@ -91,7 +92,7 @@ fn copy_files(
 
     walk_files(source_dir, destination_dir, ignore, |src, target| {
         if target_file_is_newer(src, target) {
-            eprintln!(
+            error!(
                 "{} {}: {}",
                 Yellow.paint("! Skipping !"),
                 Yellow
@@ -104,7 +105,7 @@ fn copy_files(
             return;
         }
 
-        println!(
+        info!(
             "Copying {} to {} ...",
             White.bold().paint(src.to_str().unwrap()),
             White.bold().paint(target.to_str().unwrap())

@@ -2,6 +2,7 @@ use ansi_term::Color::{Green, Red, White, Yellow};
 use ergo_fs::{Path, PathArc};
 use std::fs::remove_file;
 use symlink::{remove_symlink_file, symlink_file};
+use tracing::info;
 
 use crate::{
     command::{CommandConfig, CommandInterface},
@@ -49,22 +50,22 @@ fn link_files(
     ignore: Vec<ConfigValue>,
     force: bool,
 ) -> Result<(), String> {
-    println!(
-        "Creating symlinks: {} {} {} ...\n",
+    info!(
+        "Creating symlinks: {} {} {} ...",
         White.bold().paint(source_dir.to_string()),
         Green.bold().paint("->"),
         White.bold().paint(destination_dir.to_str().unwrap())
     );
 
     walk_files(source_dir, destination_dir, ignore, |src, target| {
-        println!(
+        info!(
             "Linking {} to {} ...",
             White.bold().paint(src.to_str().unwrap()),
             White.bold().paint(target.to_str().unwrap())
         );
 
         if force && target.is_file() {
-            println!(
+            info!(
                 "{}",
                 Yellow.paint("Replacing exisiting file with symlink (force) ...")
             );
@@ -79,13 +80,13 @@ fn link_files(
 }
 
 fn unlink_files(source_dir: &PathArc, destination_dir: &Path) -> Result<(), String> {
-    println!(
+    info!(
         "Unlinking files in {} ...",
         White.bold().paint(destination_dir.to_str().unwrap())
     );
 
     walk_files(source_dir, destination_dir, vec![], |_src, target| {
-        println!(
+        info!(
             "Unlinking {} ...",
             White.bold().paint(target.to_str().unwrap())
         );

@@ -85,12 +85,11 @@ pub fn execute_command(args: Args) {
             }
         }
         SubCommand::List => {
-            println!("\nTasks:");
             println!(
-                "{}",
+                "\n\tTasks\n\t--------------------------------\n{}\n\t--------------------------------",
                 get_task_names(&task_list.tasks)
                     .into_iter()
-                    .map(|t| format!("\t> {}", White.bold().paint(t)))
+                    .map(|t| format!("\t|> {}", White.bold().paint(t)))
                     .collect::<Vec<String>>()
                     .join("\n")
             );

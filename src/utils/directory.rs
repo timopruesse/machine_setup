@@ -1,5 +1,6 @@
 use ergo_fs::{expand, Path, PathArc, PathDir, WalkDir};
 use std::{collections::HashMap, fs::create_dir_all};
+use tracing::info;
 
 use crate::config::{
     config_value::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
@@ -176,7 +177,7 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
         let source_path = dir_entry.path();
 
         if is_ignored(source_path, source, &ignore) {
-            println!("Skipping {} ...", source_path.to_string_lossy());
+            info!("Skipping {} ...", source_path.to_string_lossy());
             continue;
         }
 

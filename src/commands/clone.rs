@@ -1,5 +1,6 @@
 use ansi_term::Color::{White, Yellow};
 use std::collections::HashMap;
+use tracing::info;
 
 use ergo_fs::PathArc;
 use git_commands::git;
@@ -69,7 +70,7 @@ impl CommandInterface for CloneCommand {
         let expanded_target_dir = expand_path(relative_target_dir.as_str(), true)?;
 
         if is_repo_installed(url, &expanded_target_dir) {
-            println!(
+            info!(
                 "{} {}",
                 Yellow.paint("The repository was already cloned."),
                 Yellow.bold().paint("Updating...")
@@ -122,7 +123,7 @@ impl CommandInterface for CloneCommand {
 }
 
 pub fn clone_repository(url: &str, target: &PathArc) -> Result<(), String> {
-    println!(
+    info!(
         "Cloning {} into {} ...",
         White.bold().paint(url),
         White.bold().paint(target.to_str().unwrap())
@@ -137,7 +138,7 @@ pub fn clone_repository(url: &str, target: &PathArc) -> Result<(), String> {
 }
 
 pub fn remove_repository(target: &PathArc) -> Result<(), String> {
-    println!(
+    info!(
         "Removing {} ...",
         White.bold().paint(target.to_str().unwrap())
     );
@@ -151,7 +152,7 @@ pub fn remove_repository(target: &PathArc) -> Result<(), String> {
 }
 
 pub fn update_repository(target: &PathArc) -> Result<(), String> {
-    println!(
+    info!(
         "Updating {} ...",
         White.bold().paint(target.to_str().unwrap())
     );

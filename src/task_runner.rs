@@ -3,6 +3,7 @@ use core::fmt;
 use ergo_fs::PathDir;
 use indicatif::MultiProgress;
 use std::sync::{Arc, Mutex};
+use tracing::info;
 
 use crate::{command::CommandConfig, config::base_config::TaskList, utils::threads::ThreadPool};
 
@@ -32,9 +33,9 @@ pub fn run(
     config_dir: PathDir,
 ) -> Result<(), String> {
     match mode {
-        TaskRunnerMode::Install => println!("{}", White.bold().paint("\nInstalling...")),
-        TaskRunnerMode::Update => println!("{}", White.bold().paint("\nUpdating...")),
-        TaskRunnerMode::Uninstall => println!("{}", White.bold().paint("\nUninstalling...")),
+        TaskRunnerMode::Install => info!("{}", White.bold().paint("Installing...")),
+        TaskRunnerMode::Update => info!("{}", White.bold().paint("Updating...")),
+        TaskRunnerMode::Uninstall => info!("{}", White.bold().paint("Uninstalling...")),
     }
 
     let command_config = CommandConfig {
@@ -49,7 +50,7 @@ pub fn run(
         let task = task_list.tasks.iter().find(|t| t.name == task_name);
         if task.is_none() {
             return Err(format!(
-                "\nTask {} {}",
+                "Task {} {}",
                 White.on(Red).paint(format!(" {} ", task_name)),
                 Red.paint("not found")
             ));
@@ -58,7 +59,7 @@ pub fn run(
         let task_result = task.unwrap().run(mode, &command_config, &multi_progress);
         if task_result.is_err() {
             return Err(format!(
-                "\nTask {} {}",
+                "Task {} {}",
                 White.on(Red).paint(format!(" {} ", task_name)),
                 Red.paint("failed")
             ));
@@ -78,7 +79,7 @@ pub fn run(
     }
 
     if task_list.parallel {
-        println!(
+        info!(
             "Running tasks in parallel ({} threads)...",
             White.bold().paint(num_threads.to_string())
         );
@@ -113,7 +114,7 @@ pub fn run(
     let num_errored = errors.len();
     if num_errored > 0 {
         return Err(format!(
-            "\n{} {} {}\n{}",
+            "{} {} {}\n{}",
             Red.paint("Errors occurred in"),
             Red.bold().underline().paint(num_errored.to_string()),
             Red.paint("tasks:"),
