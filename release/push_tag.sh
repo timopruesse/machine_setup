@@ -9,7 +9,6 @@ echo "\nCreating release for version $version..."
 
 sed -i "s/^version.*/version = \"$version\"/" Cargo.toml
 
-# test
 ${VISUAL:-${EDITOR:-vi}} "release_notes.md"
 
 git add Cargo.toml
