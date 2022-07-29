@@ -2,10 +2,6 @@
 
 - Add first class support for extending/including other configs (currently, output is not shown with default log level when doing it "interception" style)
 - Add release script (Makefile) that automatically tags, etc.
-- Fix `run` command issue.
-
-  - E.g. when `install` is defined and `update` isn't and one tries to run `update`, the validation fails (oneOf: array|string).
-  - If a key is not defined (`install`, `update`, `uninstall`), ignore command...
 
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 

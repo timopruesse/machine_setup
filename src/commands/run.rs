@@ -5,7 +5,8 @@ use std::{
     str::FromStr,
 };
 
-use tracing::Level;
+use ansi_term::Color::White;
+use tracing::{info, Level};
 
 use crate::{
     command::{CommandConfig, CommandInterface},
@@ -45,7 +46,16 @@ fn get_commands(args: ConfigValue, mode: TaskRunnerMode) -> Result<Vec<String>, 
     let method_name = mode.to_string();
 
     if arguments_are_named(Some(&args)) {
-        validate_named_args(args.clone(), HashMap::from([(method_name.clone(), rules)]))?;
+        let named_args = args.clone();
+        let method = method_name.clone();
+
+        if !named_args.as_hash().unwrap().contains_key(&method) {
+            info!("{} is not defined...", White.bold().paint(&method));
+
+            return Ok(vec![]);
+        }
+
+        validate_named_args(named_args, HashMap::from([(method, rules)]))?;
 
         return Ok(get_commands_from_yaml(
             args.as_hash()
@@ -125,7 +135,7 @@ fn run_task(mode: TaskRunnerMode, args: ConfigValue, config: &CommandConfig) -> 
 
     let param_commands = parameters.get("commands");
     if param_commands.is_none() {
-        return Err(String::from("\"commands\" is missing in args"));
+        return Err(String::from("\"commands\" key is missing in args"));
     }
     let param_commands = param_commands.unwrap();
 
