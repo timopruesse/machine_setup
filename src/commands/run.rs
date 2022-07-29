@@ -306,7 +306,7 @@ mod test {
     }
 
     #[test]
-    fn it_fails_when_method_is_not_defined() {
+    fn it_skips_command_when_method_is_not_defined() {
         let mut commands = HashMap::new();
         commands.insert(
             "invalid".to_string(),
@@ -314,10 +314,7 @@ mod test {
         );
 
         let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Install);
-        assert!(commands.is_err());
-        assert_eq!(
-            commands.unwrap_err(),
-            String::from("install: OneOf: argument must be an array | argument must be a string")
-        );
+
+        assert_eq!(commands.unwrap(), vec![] as Vec<String>);
     }
 }
