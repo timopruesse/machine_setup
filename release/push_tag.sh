@@ -9,12 +9,14 @@ echo "\nCreating release for version $version..."
 
 sed -i "s/^version.*/version = \"$version\"/" Cargo.toml
 
-
-echo 'Release notes:'
-read -r notes
+# test
+${VISUAL:-${EDITOR:-vi}} "release_notes.md"
 
 git add Cargo.toml
-git commit -m "Bump version"
-git tag -a v$version -m "$notes"
+git commit -m "Bump version ($version)"
+
+git tag -a -f v$version -m "$(cat release_notes.md)"
+
+rm release_notes.md
 
 git push --atomic origin main v$version
