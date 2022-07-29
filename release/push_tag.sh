@@ -15,7 +15,7 @@ ${VISUAL:-${EDITOR:-vi}} "release_notes.md"
 git add Cargo.toml
 git commit -m "Bump version ($version)"
 
-git tag -a -f v$version -m "$(cat release_notes.md)"
+git tag --cleanup=whitespace -a -f v$version -F release_notes.md
 
 rm release_notes.md
 
