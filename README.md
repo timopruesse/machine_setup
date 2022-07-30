@@ -237,3 +237,20 @@ updatable_multiline_command:
         - "sudo apt-get -y uninstall git"
         - ...
 ```
+
+#### machine_setup
+
+With this command it's possible to include other `machine_setup` configuration files.
+
+| argument | description                             | required | example                  |
+| -------- | --------------------------------------- | :------: | ------------------------ |
+| config   | path to the other config file           |    ✅    | "./my_other_config.yaml" |
+| task     | define a single task that should be run |    ➖    | "my_other_task"          |
+
+##### example
+
+```yaml
+machine_setup:
+  config: "./my_other_config.yaml"
+  task: "my_other_task"
+```
