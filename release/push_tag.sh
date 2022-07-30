@@ -16,7 +16,6 @@ git commit -m "Bump version ($version)"
 ${VISUAL:-${EDITOR:-vi}} "release_notes.md"
 
 git tag --cleanup=whitespace -a -f v$version -F release_notes.md
+git push --atomic origin main v$version
 
 rm release_notes.md
-
-git push --atomic origin main v$version
