@@ -9,8 +9,9 @@ use tracing::{error, info, warn};
 use crate::{
     command::{CommandConfig, CommandInterface},
     config::{
-        config_value::ConfigValue, validation_rules::required::Required,
-        validator::validate_named_args,
+        config_value::ConfigValue,
+        validation_rules::required::Required,
+        validator::{validate_named_args, ValidationRule},
     },
     utils::directory::{
         expand_path, get_relative_dir, get_source_and_target, walk_files, DIR_TARGET,
@@ -27,9 +28,11 @@ impl CommandInterface for CopyDirCommand {
     }
 
     fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        let rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
+
         validate_named_args(
             args.to_owned(),
-            HashMap::from([(String::from(DIR_TARGET), vec![&Required {}])]),
+            HashMap::from([(String::from(DIR_TARGET), rules)]),
         )?;
 
         let target_dir = args

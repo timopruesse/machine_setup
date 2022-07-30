@@ -8,8 +8,9 @@ use git_commands::git;
 use crate::{
     command::{CommandConfig, CommandInterface},
     config::{
-        config_value::ConfigValue, validation_rules::required::Required,
-        validator::validate_named_args,
+        config_value::ConfigValue,
+        validation_rules::required::Required,
+        validator::{validate_named_args, ValidationRule},
     },
     utils::directory::{expand_path, get_relative_dir},
 };
@@ -40,13 +41,14 @@ fn is_repo_installed(url: &str, target_dir: &PathArc) -> bool {
 
 impl CommandInterface for CloneCommand {
     fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        let rules = vec![&Required {}];
+        let url_rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
+        let target_rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
 
         validate_named_args(
             args.to_owned(),
             HashMap::from([
-                (String::from("url"), rules.clone()),
-                (String::from("target"), rules.clone()),
+                (String::from("url"), url_rules),
+                (String::from("target"), target_rules),
             ]),
         )?;
 
@@ -82,9 +84,11 @@ impl CommandInterface for CloneCommand {
     }
 
     fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        let rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
+
         validate_named_args(
             args.to_owned(),
-            HashMap::from([(String::from("target"), vec![&Required {}])]),
+            HashMap::from([(String::from("target"), rules)]),
         )?;
 
         let target = args
@@ -102,9 +106,11 @@ impl CommandInterface for CloneCommand {
     }
 
     fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+        let rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
+
         validate_named_args(
             args.to_owned(),
-            HashMap::from([(String::from("target"), vec![&Required {}])]),
+            HashMap::from([(String::from("target"), rules)]),
         )?;
 
         let target = args

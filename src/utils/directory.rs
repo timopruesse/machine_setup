@@ -3,7 +3,9 @@ use std::{collections::HashMap, fs::create_dir_all};
 use tracing::info;
 
 use crate::config::{
-    config_value::ConfigValue, validation_rules::required::Required, validator::validate_named_args,
+    config_value::ConfigValue,
+    validation_rules::required::Required,
+    validator::{validate_named_args, ValidationRule},
 };
 
 pub fn is_file_path(path: &PathArc) -> bool {
@@ -74,13 +76,14 @@ pub fn get_relative_dir(root: &PathDir, dir: &str) -> String {
 }
 
 pub fn get_source_and_target(args: ConfigValue, root: &PathDir) -> Result<Dirs, String> {
-    let rules = vec![&Required {}];
+    let src_rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
+    let target_rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
 
     validate_named_args(
         args.to_owned(),
         HashMap::from([
-            (String::from(DIR_SRC), rules.clone()),
-            (String::from(DIR_TARGET), rules.clone()),
+            (String::from(DIR_SRC), src_rules),
+            (String::from(DIR_TARGET), target_rules),
         ]),
     )?;
 

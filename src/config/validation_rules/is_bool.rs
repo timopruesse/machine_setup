@@ -1,8 +1,8 @@
 use crate::config::{config_value::ConfigValue, validator::ValidationRule};
 
-pub struct IsString {}
+pub struct IsBool {}
 
-impl ValidationRule for IsString {
+impl ValidationRule for IsBool {
     fn validate(&self, input: Option<&ConfigValue>) -> bool {
         if input.is_none() {
             return true;
@@ -10,7 +10,7 @@ impl ValidationRule for IsString {
 
         let value = input.unwrap_or(&ConfigValue::Invalid);
 
-        if let ConfigValue::String(_) = value {
+        if let ConfigValue::Boolean(_) = value {
             return true;
         }
 
@@ -18,7 +18,7 @@ impl ValidationRule for IsString {
     }
 
     fn to_string(&self) -> String {
-        String::from("argument must be a string")
+        String::from("argument must be a boolean")
     }
 }
 
@@ -27,8 +27,8 @@ mod test {
     use super::*;
 
     #[test]
-    fn it_fails_when_input_is_not_a_string() {
-        let rule = IsString {};
+    fn it_fails_when_input_is_not_a_boolean() {
+        let rule = IsBool {};
         let input = ConfigValue::Array(vec![ConfigValue::Integer(1)]);
 
         assert!(!rule.validate(Some(&input)));
@@ -36,15 +36,15 @@ mod test {
 
     #[test]
     fn it_returns_true_when_value_is_a_string() {
-        let rule = IsString {};
-        let input = ConfigValue::String(String::from("test"));
+        let rule = IsBool {};
+        let input = ConfigValue::Boolean(true);
 
         assert!(rule.validate(Some(&input)));
     }
 
     #[test]
     fn it_returns_true_when_value_is_none() {
-        let rule = IsString {};
+        let rule = IsBool {};
 
         assert!(rule.validate(None));
     }

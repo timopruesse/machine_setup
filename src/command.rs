@@ -2,7 +2,8 @@ use ergo_fs::PathDir;
 
 use crate::{
     commands::{
-        clone::CloneCommand, copy::CopyDirCommand, run::RunCommand, symlink::SymlinkCommand,
+        clone::CloneCommand, copy::CopyDirCommand, machine_setup::MachineSetupCommand,
+        run::RunCommand, symlink::SymlinkCommand,
     },
     config::config_value::ConfigValue,
     utils::shell::Shell,
@@ -27,6 +28,7 @@ pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {
         "symlink" => Ok(Box::new(SymlinkCommand {})),
         "clone" => Ok(Box::new(CloneCommand {})),
         "run" => Ok(Box::new(RunCommand {})),
+        "machine_setup" => Ok(Box::new(MachineSetupCommand {})),
         _ => Err(format!("Unknown command: {}", name)),
     }
 }

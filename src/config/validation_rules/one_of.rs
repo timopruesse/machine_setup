@@ -6,6 +6,10 @@ pub struct OneOf {
 
 impl ValidationRule for OneOf {
     fn validate(&self, input: Option<&ConfigValue>) -> bool {
+        if input.is_none() {
+            return true;
+        }
+
         for rule in &self.rules {
             if rule.validate(input) {
                 return true;
@@ -49,5 +53,14 @@ mod test {
         };
 
         assert!(!rule.validate(Some(&ConfigValue::String(String::from("")))));
+    }
+
+    #[test]
+    fn it_returns_true_when_value_is_none() {
+        let rule = OneOf {
+            rules: vec![Box::new(Required {})],
+        };
+
+        assert!(rule.validate(None));
     }
 }

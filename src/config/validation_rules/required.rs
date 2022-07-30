@@ -8,7 +8,7 @@ impl ValidationRule for Required {
             return false;
         }
 
-        let value = input.unwrap();
+        let value = input.unwrap_or(&ConfigValue::Invalid);
 
         if value.is_invalid() || value.is_null() {
             return false;

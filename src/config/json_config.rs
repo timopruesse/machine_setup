@@ -122,7 +122,11 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
             name: key.to_string(),
             os: os_list,
             commands,
-            parallel: values["parallel"].as_bool().unwrap_or(false),
+            parallel: values
+                .get("parallel")
+                .unwrap_or(&Value::Bool(false))
+                .as_bool()
+                .unwrap(),
         };
         tasks.push(task);
     }

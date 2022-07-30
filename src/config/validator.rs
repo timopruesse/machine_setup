@@ -13,7 +13,7 @@ pub fn arguments_are_named(args: Option<&ConfigValue>) -> bool {
 
 pub fn validate_args(
     args: Option<&ConfigValue>,
-    rules: Vec<&impl ValidationRule>,
+    rules: Vec<Box<dyn ValidationRule>>,
 ) -> Result<(), String> {
     if arguments_are_named(args) {
         return Err("Expected positional arguments, got named arguments".to_string());
@@ -30,7 +30,7 @@ pub fn validate_args(
 
 pub fn validate_named_args(
     args: ConfigValue,
-    rules: HashMap<String, Vec<&impl ValidationRule>>,
+    rules: HashMap<String, Vec<Box<dyn ValidationRule>>>,
 ) -> Result<(), String> {
     let named_args = args.as_hash();
 
@@ -61,8 +61,8 @@ mod test {
 
     #[test]
     fn it_returns_ok_when_all_rules_pass() {
-        let mut rules = HashMap::new();
-        rules.insert("foo".to_string(), vec![&Required {}]);
+        let mut rules: HashMap<String, Vec<Box<dyn ValidationRule>>> = HashMap::new();
+        rules.insert("foo".to_string(), vec![Box::new(Required {})]);
 
         let mut hash = HashMap::new();
         hash.insert("foo".to_string(), ConfigValue::String("bar".to_string()));
@@ -74,8 +74,8 @@ mod test {
 
     #[test]
     fn it_returns_an_error_when_a_rule_is_failing() {
-        let mut rules = HashMap::new();
-        rules.insert("foo".to_string(), vec![&Required {}]);
+        let mut rules: HashMap<String, Vec<Box<dyn ValidationRule>>> = HashMap::new();
+        rules.insert("foo".to_string(), vec![Box::new(Required {})]);
 
         let mut hash = HashMap::new();
         hash.insert("foo".to_string(), ConfigValue::Null);

@@ -13,7 +13,7 @@ use crate::{
     config::{
         config_value::ConfigValue,
         validation_rules::{is_array::IsArray, is_string::IsString, one_of::OneOf},
-        validator::{arguments_are_named, validate_args, validate_named_args},
+        validator::{arguments_are_named, validate_args, validate_named_args, ValidationRule},
     },
     task_runner::TaskRunnerMode,
     utils::{
@@ -38,10 +38,10 @@ fn get_commands_from_yaml(args: ConfigValue) -> Vec<String> {
 }
 
 fn get_commands(args: ConfigValue, mode: TaskRunnerMode) -> Result<Vec<String>, String> {
-    let is_str_or_array = OneOf {
+    let is_str_or_array = Box::new(OneOf {
         rules: vec![Box::new(IsArray {}), Box::new(IsString {})],
-    };
-    let rules = vec![&is_str_or_array];
+    });
+    let rules: Vec<Box<dyn ValidationRule>> = vec![is_str_or_array];
 
     let method_name = mode.to_string();
 
