@@ -69,7 +69,7 @@ mod test {
 
         let args = ConfigValue::Hash(hash);
 
-        assert!(validate_named_args(args, rules).is_ok());
+        validate_named_args(args, rules).unwrap();
     }
 
     #[test]
@@ -82,6 +82,6 @@ mod test {
 
         let args = ConfigValue::Hash(hash);
 
-        assert!(validate_named_args(args, rules).is_err());
+        validate_named_args(args, rules).unwrap_err();
     }
 }

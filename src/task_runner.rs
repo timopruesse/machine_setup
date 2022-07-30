@@ -236,7 +236,7 @@ mod test {
             get_temp_path_dir(),
         );
 
-        assert!(result.is_ok());
+        result.unwrap();
     }
 
     #[test]
@@ -315,6 +315,6 @@ mod test {
             get_temp_path_dir(),
         );
 
-        assert!(result.is_ok());
+        result.unwrap();
     }
 }

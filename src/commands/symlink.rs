@@ -158,7 +158,7 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(create_symlink(src, dest, vec![], false).is_ok());
+        create_symlink(src, dest, vec![], false).unwrap();
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.is_symlink())
@@ -177,7 +177,7 @@ mod test {
 
         File::create(&dest_path).unwrap();
 
-        assert!(create_symlink(src, dest, vec![], true).is_ok());
+        create_symlink(src, dest, vec![], true).unwrap();
 
         assert!(dest_path.is_symlink());
     }
@@ -192,12 +192,12 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(create_symlink(src, dest, vec![], false).is_ok());
+        create_symlink(src, dest, vec![], false).unwrap();
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());
 
-        assert!(remove_symlink(src, dest).is_ok());
+        remove_symlink(src, dest).unwrap();
 
         assert!(!dest_path.exists());
     }

@@ -203,14 +203,14 @@ mod test {
     fn it_fails_when_config_file_is_missing() {
         let config = YamlConfig {};
         let result = config.read("/tmp/missing.yaml");
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[test]
     fn it_fails_when_config_file_is_not_yaml() {
         let config = YamlConfig {};
         let result = config.read("/tmp/test.txt");
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[test]

@@ -178,7 +178,7 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        assert!(copy_dir(src, dest, vec![]).is_ok());
+        copy_dir(src, dest, vec![]).unwrap();
 
         let dest_file = dest_dir.path().join(src_file.path().file_name().unwrap());
 
@@ -190,7 +190,7 @@ mod test {
         let dir = tempdir().unwrap();
         let path = dir.path().to_str().unwrap();
 
-        assert!(remove_dir(&PathArc::new(path)).is_ok());
+        remove_dir(&PathArc::new(path)).unwrap();
         assert!(!dir.path().exists());
     }
 

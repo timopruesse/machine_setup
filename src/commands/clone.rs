@@ -175,7 +175,7 @@ mod test {
         let target_path = target.path().to_str().unwrap();
 
         let result = remove_repository(&PathArc::new(target_path));
-        assert!(result.is_ok());
+        result.unwrap();
         assert!(!target.path().exists());
     }
 }

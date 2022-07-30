@@ -208,7 +208,7 @@ mod test {
         let source = PathArc::new("/tmp/does_not_exist");
         let target = PathArc::new("/tmp/target");
 
-        assert!(walk_files(&source, &target, vec![], |_, _| {}).is_err());
+        walk_files(&source, &target, vec![], |_, _| {}).unwrap_err();
     }
 
     #[test]
