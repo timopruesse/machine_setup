@@ -27,6 +27,7 @@ fn main() {
         .with_line_number(args.debug)
         .with_file(args.debug)
         .with_target(args.debug)
+        .with_thread_ids(args.debug)
         .without_time()
         .finish();
 
