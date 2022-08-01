@@ -1,6 +1,6 @@
 # TODOs
 
-- Return a falsy error code when there were errors
+- Return a falsy error code when there were errors (in more cases)
 - Fix homebrew/tap setup
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 
