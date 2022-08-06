@@ -19,6 +19,29 @@ Install via `cargo` or download a binary from the [release page](https://github.
 cargo install machine_setup
 ```
 
+### Install Shell Completions
+
+#### zsh
+
+> This might differ for your setup.
+
+1. Download the shell completions and put them in the appropriate folder that is in your `fpath`
+
+```bash
+sudo wget -P /usr/local/share/zsh/site-functions/ https://raw.githubusercontent.com/Chroma91/machine_setup/main/completions/_machine_setup
+```
+
+2. Reload zsh
+
+```bash
+exec zsh
+```
+
+#### other
+
+The shell completions for other shells such as fish can be found in [completions](https://github.com/Chroma91/machine_setup/tree/main/completions).  
+You're welcome to submit a PR with installation instructions for your favorite shell. 😇
+
 ## Run
 
 ### Subcommands
