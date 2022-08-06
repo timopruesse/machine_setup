@@ -15,3 +15,7 @@
 
 - conditional tasks
   - add the ability to add requirements for a task, e.g. only run if a certain file doesn't exist
+
+### Low priority tasks
+
+- create command that installs (or updates) shell completions
