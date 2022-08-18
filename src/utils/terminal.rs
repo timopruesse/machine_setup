@@ -30,6 +30,10 @@ pub fn set_environment_variables(args: &ConfigValue) -> Result<(), String> {
         println!("Environment");
         println!("-----------------------------");
 
+        if !env.is_hash() {
+            return Err(String::from("Environment needs to be defined as a map"));
+        }
+
         for (key, value) in env.as_hash().unwrap() {
             let env_value_raw = value.as_str().unwrap();
 
