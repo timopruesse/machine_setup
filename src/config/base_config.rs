@@ -44,7 +44,7 @@ fn is_valid_file_ending(file_ending: &str) -> bool {
 fn find_config_file(config_path: &str) -> Result<String, String> {
     let priorities = get_valid_file_endings();
 
-    for ending in priorities {
+    for ending in &priorities {
         let file_path = [config_path, ending].join(".");
         if Path::new(&file_path).exists() {
             return Ok(file_path);
@@ -52,8 +52,9 @@ fn find_config_file(config_path: &str) -> Result<String, String> {
     }
 
     Err(format!(
-        ".{} is not a supported config file type.",
-        get_file_ending(config_path)
+        "Could not find a valid config file {}.{{{}}}",
+        &config_path,
+        &priorities.join(",")
     ))
 }
 
@@ -62,22 +63,45 @@ fn get_config_handler(file_ending: &str) -> Result<Box<dyn BaseConfig>, String> 
         file_ending if ALLOWED_YAML_EXTENSIONS.contains(&file_ending) => {
             Ok(Box::new(YamlConfig {}))
         }
-        "json" => Ok(Box::new(JsonConfig {})),
+        file_ending if ALLOWED_JSON_EXTENSIONS.contains(&file_ending) => {
+            Ok(Box::new(JsonConfig {}))
+        }
         _ => Err(format!("Unsupported config file type: {}", file_ending)),
     }
 }
 
-fn get_file_ending(path: &str) -> String {
-    path.split('.').last().unwrap().to_owned()
+static FILE_ENDING_SEP: char = '.';
+
+fn get_file_ending(path: &str) -> Option<String> {
+    let mut path_str = path.to_string();
+
+    let first_char = path.chars().next().unwrap_or_default();
+    if first_char == FILE_ENDING_SEP {
+        path_str.remove(0);
+    }
+
+    if !path_str.contains(FILE_ENDING_SEP) {
+        return None;
+    }
+
+    Some(path_str.split(FILE_ENDING_SEP).last().unwrap().to_owned())
 }
 
 pub fn get_config(config_path: &str) -> Result<TaskList, String> {
     let mut file_path = config_path.to_owned();
     let mut file_ending = get_file_ending(config_path);
 
-    if !is_valid_file_ending(&file_ending) {
+    if file_ending.is_none() {
         file_path = find_config_file(config_path)?;
         file_ending = get_file_ending(&file_path);
+    }
+    let file_ending = file_ending.unwrap_or_else(|| String::from(""));
+
+    if !is_valid_file_ending(&file_ending) {
+        return Err(format!(
+            ".{} is not a supported config file type.",
+            &file_ending
+        ));
     }
 
     let config = get_config_handler(&file_ending)?;
@@ -115,5 +139,11 @@ mod test {
         assert!(config
             .unwrap_err()
             .contains(".js is not a supported config file type."));
+    }
+
+    #[test]
+    fn it_fails_if_no_default_config_is_found() {
+        let err = find_config_file("./test").unwrap_err();
+        assert!(err.contains("Could not find a valid config file"));
     }
 }
