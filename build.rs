@@ -1,4 +1,4 @@
-use clap::IntoApp;
+use clap::CommandFactory;
 use clap_complete::{
     generate_to,
     shells::{Bash, Elvish, Fish, PowerShell, Zsh},

@@ -24,14 +24,14 @@ set edit:completion:arg-completer[machine_setup] = {|@words|
             cand --task 'run a single task'
             cand -l 'Set log level'
             cand --level 'Set log level'
-            cand -h 'Print help information'
-            cand --help 'Print help information'
-            cand -V 'Print version information'
-            cand --version 'Print version information'
             cand -s 'Select a task to run'
             cand --select 'Select a task to run'
             cand -d 'Add debug information'
             cand --debug 'Add debug information'
+            cand -h 'Print help information'
+            cand --help 'Print help information'
+            cand -V 'Print version information'
+            cand --version 'Print version information'
             cand install 'Install all of the defined tasks'
             cand update 'Update all of the defined tasks'
             cand uninstall 'Uninstall all of the defined tasks'
@@ -45,14 +45,14 @@ set edit:completion:arg-completer[machine_setup] = {|@words|
             cand --task 'run a single task'
             cand -l 'Set log level'
             cand --level 'Set log level'
-            cand -h 'Print help information'
-            cand --help 'Print help information'
-            cand -V 'Print version information'
-            cand --version 'Print version information'
             cand -s 'Select a task to run'
             cand --select 'Select a task to run'
             cand -d 'Add debug information'
             cand --debug 'Add debug information'
+            cand -h 'Print help information'
+            cand --help 'Print help information'
+            cand -V 'Print version information'
+            cand --version 'Print version information'
         }
         &'machine_setup;update'= {
             cand -c 'path to the config file'
@@ -61,14 +61,14 @@ set edit:completion:arg-completer[machine_setup] = {|@words|
             cand --task 'run a single task'
             cand -l 'Set log level'
             cand --level 'Set log level'
-            cand -h 'Print help information'
-            cand --help 'Print help information'
-            cand -V 'Print version information'
-            cand --version 'Print version information'
             cand -s 'Select a task to run'
             cand --select 'Select a task to run'
             cand -d 'Add debug information'
             cand --debug 'Add debug information'
+            cand -h 'Print help information'
+            cand --help 'Print help information'
+            cand -V 'Print version information'
+            cand --version 'Print version information'
         }
         &'machine_setup;uninstall'= {
             cand -c 'path to the config file'
@@ -77,14 +77,14 @@ set edit:completion:arg-completer[machine_setup] = {|@words|
             cand --task 'run a single task'
             cand -l 'Set log level'
             cand --level 'Set log level'
-            cand -h 'Print help information'
-            cand --help 'Print help information'
-            cand -V 'Print version information'
-            cand --version 'Print version information'
             cand -s 'Select a task to run'
             cand --select 'Select a task to run'
             cand -d 'Add debug information'
             cand --debug 'Add debug information'
+            cand -h 'Print help information'
+            cand --help 'Print help information'
+            cand -V 'Print version information'
+            cand --version 'Print version information'
         }
         &'machine_setup;list'= {
             cand -c 'path to the config file'
@@ -93,26 +93,31 @@ set edit:completion:arg-completer[machine_setup] = {|@words|
             cand --task 'run a single task'
             cand -l 'Set log level'
             cand --level 'Set log level'
+            cand -s 'Select a task to run'
+            cand --select 'Select a task to run'
+            cand -d 'Add debug information'
+            cand --debug 'Add debug information'
             cand -h 'Print help information'
             cand --help 'Print help information'
             cand -V 'Print version information'
             cand --version 'Print version information'
-            cand -s 'Select a task to run'
-            cand --select 'Select a task to run'
-            cand -d 'Add debug information'
-            cand --debug 'Add debug information'
         }
         &'machine_setup;help'= {
-            cand -c 'path to the config file'
-            cand --config 'path to the config file'
-            cand -t 'run a single task'
-            cand --task 'run a single task'
-            cand -l 'Set log level'
-            cand --level 'Set log level'
-            cand -s 'Select a task to run'
-            cand --select 'Select a task to run'
-            cand -d 'Add debug information'
-            cand --debug 'Add debug information'
+            cand install 'Install all of the defined tasks'
+            cand update 'Update all of the defined tasks'
+            cand uninstall 'Uninstall all of the defined tasks'
+            cand list 'List defined tasks'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'machine_setup;help;install'= {
+        }
+        &'machine_setup;help;update'= {
+        }
+        &'machine_setup;help;uninstall'= {
+        }
+        &'machine_setup;help;list'= {
+        }
+        &'machine_setup;help;help'= {
         }
     ]
     $completions[$command]
