@@ -1,19 +1,19 @@
 # Machine Setup
 
-[![Tests](https://github.com/Chroma91/machine-setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Chroma91/machine-setup/actions/workflows/test.yml)
-[![Builds](https://github.com/Chroma91/machine-setup/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Chroma91/machine-setup/actions/workflows/build.yml) [![Crates.io](https://img.shields.io/crates/v/machine_setup)](https://crates.io/crates/machine_setup)
+[![Tests](https://github.com/timopruesse/machine-setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/timopruesse/machine-setup/actions/workflows/test.yml)
+[![Builds](https://github.com/timopruesse/machine-setup/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/timopruesse/machine-setup/actions/workflows/build.yml) [![Crates.io](https://img.shields.io/crates/v/machine_setup)](https://crates.io/crates/machine_setup)
 
 The idea is to be able to replicate a certain setup (when reseting your machine or using a completely new machine).
 Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.
 So, it will help with managing dotfiles, symlinks, etc.
 
-A real world example can be found in my [.dotfiles repository](https://github.com/Chroma91/.dotfiles/blob/main/machine_setup.yaml).
+A real world example can be found in my [.dotfiles repository](https://github.com/timopruesse/.dotfiles/blob/main/machine_setup.yaml).
 
 You can also use it for other tasks such as making the onboarding process of a new colleague easier by providing them a config that installs certain dependencies and checks out important repositories.
 
 ## Install
 
-Install via `cargo` or download a binary from the [release page](https://github.com/Chroma91/machine_setup/releases).
+Install via `cargo` or download a binary from the [release page](https://github.com/timopruesse/machine_setup/releases).
 
 ```bash
 cargo install machine_setup
@@ -28,7 +28,7 @@ cargo install machine_setup
 1. Download the shell completions and put them in the appropriate folder that is in your `fpath`
 
 ```bash
-sudo wget -P /usr/local/share/zsh/site-functions/ https://raw.githubusercontent.com/Chroma91/machine_setup/main/completions/_machine_setup
+sudo wget -P /usr/local/share/zsh/site-functions/ https://raw.githubusercontent.com/timopruesse/machine_setup/main/completions/_machine_setup
 ```
 
 2. Reload zsh
@@ -39,7 +39,7 @@ exec zsh
 
 #### other
 
-The shell completions for other shells such as fish can be found in [completions](https://github.com/Chroma91/machine_setup/tree/main/completions).  
+The shell completions for other shells such as fish can be found in [completions](https://github.com/timopruesse/machine_setup/tree/main/completions).  
 You're welcome to submit a PR with installation instructions for your favorite shell. 😇
 
 ## Run
@@ -165,16 +165,16 @@ copy:
 
 This command clones a git repository to the specified destination.
 
-| argument | value                   | required | example                                     |
-| -------- | ----------------------- | :------: | ------------------------------------------- |
-| url      | URL to a git repository |    ✅    | "git@github.com:Chroma91/machine_setup.git" |
-| target   | target directory        |    ✅    | "~/machine_setup"                           |
+| argument | value                   | required | example                                        |
+| -------- | ----------------------- | :------: | ---------------------------------------------- |
+| url      | URL to a git repository |    ✅    | "git@github.com:timopruesse/machine_setup.git" |
+| target   | target directory        |    ✅    | "~/machine_setup"                              |
 
 ##### example
 
 ```yaml
 clone:
-  url: "git@github.com:Chroma91/machine_setup.git"
+  url: "git@github.com:timopruesse/machine_setup.git"
   target: "~/machine_setup"
 ```
 
