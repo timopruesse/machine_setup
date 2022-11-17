@@ -175,7 +175,7 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
         return Ok(());
     }
 
-    for dir_entry in WalkDir::new(&source).min_depth(1) {
+    for dir_entry in WalkDir::new(source).min_depth(1) {
         let dir_entry = dir_entry.unwrap();
         let source_path = dir_entry.path();
 
@@ -184,7 +184,7 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
             continue;
         }
 
-        let destination_path = target.join(source_path.strip_prefix(&source).unwrap());
+        let destination_path = target.join(source_path.strip_prefix(source).unwrap());
 
         if source_path.is_dir() {
             let create_result = create_dir_all(&destination_path);
