@@ -34,7 +34,7 @@ jobs:
         run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
         shell: bash
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
           key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
@@ -44,7 +44,7 @@ jobs:
           path: ~/.cargo/git
           key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
