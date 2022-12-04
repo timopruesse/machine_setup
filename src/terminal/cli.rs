@@ -28,7 +28,7 @@ impl FromStr for SubCommand {
             "update" => Ok(SubCommand::Update),
             "uninstall" => Ok(SubCommand::Uninstall),
             "list" => Ok(SubCommand::List),
-            _ => Err(format!("Invalid mode: {}", s)),
+            _ => Err(format!("Invalid mode: {s}")),
         }
     }
 }
