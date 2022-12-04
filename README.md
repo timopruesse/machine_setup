@@ -263,5 +263,5 @@ With this command it's possible to include other `machine_setup` configuration f
 ```yaml
 machine_setup:
   config: "./my_other_config.yaml"
-  task: "my_other_task"
+  task: "my_other_task" # optional
 ```
