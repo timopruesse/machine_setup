@@ -29,10 +29,11 @@ fn main() {
         .with_target(args.debug)
         .with_thread_ids(args.debug)
         .without_time()
-        .finish();
+        .try_init();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Could not set default subscriber...");
+    if let Err(sub_err) = subscriber {
+        println!("{:?}", sub_err);
+    }
 
     LOG_LEVEL.set(args.level).unwrap();
     DEBUG_MODE.set(args.debug).unwrap();
