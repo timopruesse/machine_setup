@@ -1,6 +1,7 @@
 use ansi_term::Color::{White, Yellow};
+use indicatif::ProgressBar;
 use std::collections::HashMap;
-use tracing::info;
+use tracing::{debug, info};
 
 use ergo_fs::PathArc;
 use git_commands::git;
@@ -40,7 +41,12 @@ fn is_repo_installed(url: &str, target_dir: &PathArc) -> bool {
 }
 
 impl CommandInterface for CloneCommand {
-    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+    fn install(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String> {
         let url_rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
         let target_rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
 
@@ -77,13 +83,18 @@ impl CommandInterface for CloneCommand {
                 Yellow.paint("The repository was already cloned."),
                 Yellow.bold().paint("Updating...")
             );
-            return self.update(args, config);
+            return self.update(args, config, progress);
         }
 
-        clone_repository(url, &expanded_target_dir)
+        clone_repository(url, &expanded_target_dir, progress)
     }
 
-    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String> {
         let rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
 
         validate_named_args(
@@ -102,10 +113,15 @@ impl CommandInterface for CloneCommand {
         let relative_target_dir = get_relative_dir(&config.config_dir, target);
         let expanded_target_dir = expand_path(relative_target_dir.as_str(), false)?;
 
-        remove_repository(&expanded_target_dir)
+        remove_repository(&expanded_target_dir, progress)
     }
 
-    fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+    fn update(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String> {
         let rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
 
         validate_named_args(
@@ -124,16 +140,19 @@ impl CommandInterface for CloneCommand {
         let relative_target_dir = get_relative_dir(&config.config_dir, target);
         let expanded_target_dir = expand_path(relative_target_dir.as_str(), true)?;
 
-        update_repository(&expanded_target_dir)
+        update_repository(&expanded_target_dir, progress)
     }
 }
 
-pub fn clone_repository(url: &str, target: &PathArc) -> Result<(), String> {
-    info!(
+pub fn clone_repository(url: &str, target: &PathArc, progress: &ProgressBar) -> Result<(), String> {
+    let message = format!(
         "Cloning {} into {} ...",
         White.bold().paint(url),
         White.bold().paint(target.to_str().unwrap())
     );
+
+    debug!(message);
+    progress.set_message(message);
 
     let clone_result = git(&["clone", url, "."], target);
     if let Err(err_clone) = clone_result {
@@ -143,11 +162,14 @@ pub fn clone_repository(url: &str, target: &PathArc) -> Result<(), String> {
     Ok(())
 }
 
-pub fn remove_repository(target: &PathArc) -> Result<(), String> {
-    info!(
+pub fn remove_repository(target: &PathArc, progress: &ProgressBar) -> Result<(), String> {
+    let message = format!(
         "Removing {} ...",
         White.bold().paint(target.to_str().unwrap())
     );
+
+    debug!(message);
+    progress.set_message(message);
 
     let remove_result = std::fs::remove_dir_all(target);
     if let Err(err_remove) = remove_result {
@@ -157,11 +179,14 @@ pub fn remove_repository(target: &PathArc) -> Result<(), String> {
     Ok(())
 }
 
-pub fn update_repository(target: &PathArc) -> Result<(), String> {
-    info!(
+pub fn update_repository(target: &PathArc, progress: &ProgressBar) -> Result<(), String> {
+    let message = format!(
         "Updating {} ...",
         White.bold().paint(target.to_str().unwrap())
     );
+
+    debug!(message);
+    progress.set_message(message);
 
     let update_result = git(&["pull"], target);
     if let Err(err_update) = update_result {

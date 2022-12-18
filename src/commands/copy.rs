@@ -1,10 +1,11 @@
 use ansi_term::Color::{Red, White, Yellow};
 use ergo_fs::{Path, PathArc};
+use indicatif::ProgressBar;
 use std::{
     collections::HashMap,
     fs::{self, canonicalize},
 };
-use tracing::{error, info, warn};
+use tracing::{debug, warn};
 
 use crate::{
     command::{CommandConfig, CommandInterface},
@@ -21,13 +22,23 @@ use crate::{
 pub struct CopyDirCommand {}
 
 impl CommandInterface for CopyDirCommand {
-    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+    fn install(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String> {
         let dirs = get_source_and_target(args, &config.config_dir)?;
 
-        copy_dir(&dirs.src, &dirs.target, dirs.ignore)
+        copy_dir(&dirs.src, &dirs.target, dirs.ignore, progress)
     }
 
-    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        _progress: &ProgressBar,
+    ) -> Result<(), String> {
         let rules: Vec<Box<dyn ValidationRule>> = vec![Box::new(Required {})];
 
         validate_named_args(
@@ -47,7 +58,7 @@ impl CommandInterface for CopyDirCommand {
         let abs_target_path = canonicalize(relative_target_path);
         if let Err(target_err) = abs_target_path {
             if target_err.raw_os_error().unwrap() == 2 {
-                info!("{}", Yellow.paint("The file(s) were already removed..."));
+                warn!("{}", Yellow.paint("The file(s) were already removed..."));
                 return Ok(());
             }
 
@@ -62,7 +73,12 @@ impl CommandInterface for CopyDirCommand {
         remove_dir(&abs_target_path)
     }
 
-    fn update(&self, _args: ConfigValue, _config: &CommandConfig) -> Result<(), String> {
+    fn update(
+        &self,
+        _args: ConfigValue,
+        _config: &CommandConfig,
+        _progress: &ProgressBar,
+    ) -> Result<(), String> {
         warn!(
             "{}",
             Yellow.paint("update not implemented for copy command")
@@ -86,16 +102,20 @@ fn copy_files(
     source_dir: &PathArc,
     destination_dir: &Path,
     ignore: Vec<ConfigValue>,
+    progress: &ProgressBar,
 ) -> Result<(), String> {
-    info!(
+    let message = format!(
         "Copying files from {} to {} ...",
         White.bold().paint(source_dir.to_string()),
         White.bold().paint(destination_dir.to_str().unwrap())
     );
 
+    debug!(message);
+    progress.set_message(message);
+
     walk_files(source_dir, destination_dir, ignore, |src, target| {
         if target_file_is_newer(src, target) {
-            error!(
+            warn!(
                 "{} {}: {}",
                 Yellow.paint("! Skipping !"),
                 Yellow
@@ -108,7 +128,7 @@ fn copy_files(
             return;
         }
 
-        info!(
+        debug!(
             "Copying {} to {} ...",
             White.bold().paint(src.to_str().unwrap()),
             White.bold().paint(target.to_str().unwrap())
@@ -120,7 +140,12 @@ fn copy_files(
     })
 }
 
-pub fn copy_dir(source: &str, destination: &str, ignore: Vec<ConfigValue>) -> Result<(), String> {
+pub fn copy_dir(
+    source: &str,
+    destination: &str,
+    ignore: Vec<ConfigValue>,
+    progress: &ProgressBar,
+) -> Result<(), String> {
     let source_dir = expand_path(source, false)?;
     let destination_dir = expand_path(destination, true)?;
 
@@ -132,7 +157,7 @@ pub fn copy_dir(source: &str, destination: &str, ignore: Vec<ConfigValue>) -> Re
         ));
     }
 
-    copy_files(&source_dir, &destination_dir, ignore)
+    copy_files(&source_dir, &destination_dir, ignore, progress)
 }
 
 pub fn remove_dir(target: &Path) -> Result<(), String> {

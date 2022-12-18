@@ -1,4 +1,5 @@
 use ergo_fs::PathDir;
+use indicatif::ProgressBar;
 
 use crate::{
     commands::{
@@ -17,9 +18,24 @@ pub struct CommandConfig {
 }
 
 pub trait CommandInterface {
-    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String>;
-    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String>;
-    fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String>;
+    fn install(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String>;
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String>;
+    fn update(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String>;
 }
 
 pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {

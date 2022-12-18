@@ -3,7 +3,7 @@ use core::fmt;
 use ergo_fs::PathDir;
 use indicatif::MultiProgress;
 use std::sync::{Arc, Mutex};
-use tracing::info;
+use tracing::debug;
 
 use crate::{command::CommandConfig, config::base_config::TaskList, utils::threads::ThreadPool};
 
@@ -33,9 +33,9 @@ pub fn run(
     config_dir: PathDir,
 ) -> Result<(), String> {
     match mode {
-        TaskRunnerMode::Install => info!("{}", White.bold().paint("Installing...")),
-        TaskRunnerMode::Update => info!("{}", White.bold().paint("Updating...")),
-        TaskRunnerMode::Uninstall => info!("{}", White.bold().paint("Uninstalling...")),
+        TaskRunnerMode::Install => debug!("{}", White.bold().paint("Installing...")),
+        TaskRunnerMode::Update => debug!("{}", White.bold().paint("Updating...")),
+        TaskRunnerMode::Uninstall => debug!("{}", White.bold().paint("Uninstalling...")),
     }
 
     let command_config = CommandConfig {
@@ -79,7 +79,7 @@ pub fn run(
     }
 
     if task_list.parallel {
-        info!(
+        debug!(
             "Running tasks in parallel ({} threads)...",
             White.bold().paint(num_threads.to_string())
         );
