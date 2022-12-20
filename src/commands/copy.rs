@@ -62,7 +62,7 @@ impl CommandInterface for CopyDirCommand {
                 return Ok(());
             }
 
-            return Err(format!("{}", target_err));
+            return Err(format!("{target_err}"));
         }
         let abs_target_path = abs_target_path.unwrap();
 

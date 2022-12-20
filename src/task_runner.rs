@@ -22,7 +22,7 @@ impl fmt::Display for TaskRunnerMode {
             TaskRunnerMode::Uninstall => "uninstall",
         };
 
-        write!(f, "{}", mode)
+        write!(f, "{mode}")
     }
 }
 
@@ -51,7 +51,7 @@ pub fn run(
         if task.is_none() {
             return Err(format!(
                 "Task {} {}",
-                White.on(Red).paint(format!(" {} ", task_name)),
+                White.on(Red).paint(format!(" {task_name} ")),
                 Red.paint("not found")
             ));
         }
@@ -60,7 +60,7 @@ pub fn run(
         if task_result.is_err() {
             return Err(format!(
                 "Task {} {}",
-                White.on(Red).paint(format!(" {} ", task_name)),
+                White.on(Red).paint(format!(" {task_name} ")),
                 Red.paint("failed")
             ));
         }
@@ -121,7 +121,7 @@ pub fn run(
             errors
                 .clone()
                 .into_iter()
-                .map(|e| format!("> {}", e))
+                .map(|e| format!("> {e}"))
                 .collect::<Vec<String>>()
                 .join("\n")
         ));

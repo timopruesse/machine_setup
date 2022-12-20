@@ -63,7 +63,7 @@ fn get_os_list(value: &Yaml) -> Result<Vec<Os>, String> {
         return Ok(vec![]);
     }
 
-    Err(format!("os: {:?}", value))
+    Err(format!("os: {value:?}"))
 }
 
 fn get_commands(value: &Yaml) -> Result<Vec<Command>, String> {
@@ -102,7 +102,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
 
     let config = YamlLoader::load_from_str(&contents);
     if let Err(config_err) = config {
-        return Err(format!("{}", config_err));
+        return Err(format!("{config_err}"));
     }
 
     let config = config.unwrap();
@@ -159,7 +159,7 @@ fn parse_yaml(path: &Path) -> Result<TaskList, String> {
 
     let default_shell = Shell::from_str(&default_shell_str);
     if let Err(err_shell) = default_shell {
-        return Err(format!("default_shell: {}", err_shell));
+        return Err(format!("default_shell: {err_shell}"));
     }
     let default_shell = default_shell.unwrap();
 
@@ -179,11 +179,11 @@ impl BaseConfig for YamlConfig {
         let yaml_path = Path::new(path);
 
         if !yaml_path.exists() {
-            return Err(format!("File {} does not exist", path));
+            return Err(format!("File {path} does not exist"));
         }
 
         if !ALLOWED_YAML_EXTENSIONS.contains(&yaml_path.extension().unwrap().to_str().unwrap()) {
-            return Err(format!("File {} is not a YAML file", path));
+            return Err(format!("File {path} is not a YAML file"));
         }
 
         info!("Reading config from {} ...", White.bold().paint(path));

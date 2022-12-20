@@ -93,9 +93,10 @@ fn run_commands(
         .stdout(Stdio::piped())
         .spawn();
 
-    if command.is_err() {
-        return Err(command.unwrap_err().to_string());
+    if let Err(err_command) = command {
+        return Err(err_command.to_string());
     }
+
     let mut command = command.unwrap();
     let stdout = command.stdout.as_mut().unwrap();
 
@@ -103,7 +104,7 @@ fn run_commands(
     reader
         .lines()
         .filter_map(|line| line.ok())
-        .for_each(|line| progress.set_message(format!("▶️ {}", line)));
+        .for_each(|line| progress.set_message(format!("▶️ {line}")));
 
     let status = command.wait().unwrap();
 

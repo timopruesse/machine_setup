@@ -36,7 +36,7 @@ fn main() {
         .try_init();
 
     if let Err(sub_err) = subscriber {
-        println!("{:?}", sub_err);
+        println!("{sub_err:?}");
     }
 
     LOG_LEVEL.set(args.level).unwrap();

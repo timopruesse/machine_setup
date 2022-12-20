@@ -66,7 +66,7 @@ fn get_config_handler(file_ending: &str) -> Result<Box<dyn BaseConfig>, String> 
         file_ending if ALLOWED_JSON_EXTENSIONS.contains(&file_ending) => {
             Ok(Box::new(JsonConfig {}))
         }
-        _ => Err(format!("Unsupported config file type: {}", file_ending)),
+        _ => Err(format!("Unsupported config file type: {file_ending}")),
     }
 }
 

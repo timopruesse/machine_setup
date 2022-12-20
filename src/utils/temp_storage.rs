@@ -21,7 +21,7 @@ pub fn create_temp_file(file_ending: &str, temp_dir: &str) -> Result<FileInfo, S
     let expanded_temp_dir = expand_path(temp_dir, true)?.to_string();
 
     let file_name = format!("{}.{}", get_random_string(), file_ending);
-    let file_path = format!("{}/{}", expanded_temp_dir, file_name);
+    let file_path = format!("{expanded_temp_dir}/{file_name}");
 
     let file_result = File::create(&file_path);
     if let Err(err_file) = file_result {

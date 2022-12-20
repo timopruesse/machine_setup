@@ -46,7 +46,7 @@ impl FromStr for Os {
             "solaris" => Ok(Os::Solaris),
             "android" => Ok(Os::Android),
             "windows" => Ok(Os::Windows),
-            _ => Err(format!("Unknown OS: {}", s)),
+            _ => Err(format!("Unknown OS: {s}")),
         }
     }
 }

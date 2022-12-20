@@ -27,7 +27,7 @@ impl FromStr for Shell {
         match s {
             "zsh" => Ok(Shell::Zsh),
             "bash" => Ok(Shell::Bash),
-            _ => Err(format!("Unknown shell: {}", s)),
+            _ => Err(format!("Unknown shell: {s}")),
         }
     }
 }
@@ -68,7 +68,7 @@ pub fn create_script_file(
     }
 
     for command in commands {
-        file.write_all(format!("{}\n", command).as_bytes()).unwrap();
+        file.write_all(format!("{command}\n").as_bytes()).unwrap();
     }
 
     make_executable(&mut file)?;

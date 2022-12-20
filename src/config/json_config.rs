@@ -57,7 +57,7 @@ fn get_os_list(value: &Value) -> Result<Vec<Os>, String> {
         return Ok(vec![Os::from_str(value.as_str().unwrap()).unwrap()]);
     }
 
-    Err(format!("{:?} is in the wrong format", value))
+    Err(format!("{value:?} is in the wrong format"))
 }
 
 fn get_commands(value: &Value) -> Result<Vec<Command>, String> {
@@ -96,7 +96,7 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
 
     let config: Result<Value, serde_json::Error> = serde_json::from_str(&contents);
     if let Err(config_err) = config {
-        return Err(format!("{}", config_err));
+        return Err(format!("{config_err}"));
     }
     let config = config.unwrap();
 
@@ -110,7 +110,7 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
         let (key, value) = task;
 
         if !value.is_object() {
-            return Err(format!("{}: task definition is incorrect", key));
+            return Err(format!("{key}: task definition is incorrect"));
         }
 
         let values = value.as_object().unwrap();
@@ -143,7 +143,7 @@ fn parse_json(path: &Path) -> Result<TaskList, String> {
 
     let default_shell = Shell::from_str(&default_shell_str);
     if let Err(err_shell) = default_shell {
-        return Err(format!("default_shell: {}", err_shell));
+        return Err(format!("default_shell: {err_shell}"));
     }
     let default_shell = default_shell.unwrap();
 
@@ -163,11 +163,11 @@ impl BaseConfig for JsonConfig {
         let json_path = Path::new(path);
 
         if !json_path.exists() {
-            return Err(format!("File {} does not exist", path));
+            return Err(format!("File {path} does not exist"));
         }
 
         if json_path.extension().unwrap().to_str().unwrap() != "json" {
-            return Err(format!("File {} is not a JSON file", path));
+            return Err(format!("File {path} is not a JSON file"));
         }
 
         info!("Reading config from {} ...", White.bold().paint(path));

@@ -139,15 +139,14 @@ pub fn create_symlink(
     let source_dir = expand_path(source, false)?;
 
     if !source_dir.exists() {
-        return Err(format!("Source directory does not exist: {}", source));
+        return Err(format!("Source directory does not exist: {source}"));
     }
 
     let destination_dir = expand_path(destination, true)?;
 
     if source_dir.to_string() == destination_dir.to_string() {
         return Err(format!(
-            "Source and destination directories are the same: {}",
-            source
+            "Source and destination directories are the same: {source}"
         ));
     }
 
@@ -175,7 +174,7 @@ mod test {
     fn it_fails_when_dirs_are_the_same() {
         let dir = tempdir().unwrap();
         let src_path = dir.path();
-        File::create(&src_path.join("example.txt")).unwrap();
+        File::create(src_path.join("example.txt")).unwrap();
 
         let src = src_path.to_str().unwrap();
 
@@ -191,7 +190,7 @@ mod test {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
-        File::create(&src_path).unwrap();
+        File::create(src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
@@ -209,7 +208,7 @@ mod test {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
-        File::create(&src_path).unwrap();
+        File::create(src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
@@ -229,7 +228,7 @@ mod test {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path().join("example.txt");
-        File::create(&src_path).unwrap();
+        File::create(src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();

@@ -45,6 +45,6 @@ pub fn get_command(name: &str) -> Result<Box<dyn CommandInterface>, String> {
         "clone" => Ok(Box::new(CloneCommand {})),
         "run" => Ok(Box::new(RunCommand {})),
         "machine_setup" => Ok(Box::new(MachineSetupCommand {})),
-        _ => Err(format!("Unknown command: {}", name)),
+        _ => Err(format!("Unknown command: {name}")),
     }
 }
