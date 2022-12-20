@@ -191,7 +191,9 @@ mod test {
         tempfile_in(&src_path).unwrap();
         let src = src_path.to_str().unwrap();
 
-        assert!(copy_dir(src, src, vec![])
+        let pb = ProgressBar::new(0);
+
+        assert!(copy_dir(src, src, vec![], &pb)
             .unwrap_err()
             .contains("Source and destination directories are the same"));
     }
@@ -206,7 +208,9 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        copy_dir(src, dest, vec![]).unwrap();
+        let pb = ProgressBar::new(0);
+
+        copy_dir(src, dest, vec![], &pb).unwrap();
 
         let dest_file = dest_dir.path().join(src_file.path().file_name().unwrap());
 
@@ -239,6 +243,8 @@ mod test {
             ConfigValue::String(String::from(".")),
         );
 
+        let pb = ProgressBar::new(0);
+
         let result = copy.uninstall(
             ConfigValue::Hash(args),
             &CommandConfig {
@@ -246,6 +252,7 @@ mod test {
                 temp_dir: tempdir().unwrap().path().to_str().unwrap().to_string(),
                 default_shell: Shell::Bash,
             },
+            &pb,
         );
 
         assert!(dir.path().exists());

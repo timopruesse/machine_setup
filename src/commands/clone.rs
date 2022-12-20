@@ -205,7 +205,9 @@ mod test {
         let target = tempfile::tempdir().unwrap();
         let target_path = target.path().to_str().unwrap();
 
-        let result = remove_repository(&PathArc::new(target_path));
+        let pb = ProgressBar::new(0);
+
+        let result = remove_repository(&PathArc::new(target_path), &pb);
         result.unwrap();
         assert!(!target.path().exists());
     }

@@ -179,9 +179,9 @@ mod test {
 
         let src = src_path.to_str().unwrap();
 
-        println!("{:?}", create_symlink(src, src, vec![], false));
+        let pb = ProgressBar::new(0);
 
-        assert!(create_symlink(src, src, vec![], false)
+        assert!(create_symlink(src, src, vec![], false, &pb)
             .unwrap_err()
             .contains("Source and destination directories are the same"));
     }
@@ -196,7 +196,9 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        create_symlink(src, dest, vec![], false).unwrap();
+        let pb = ProgressBar::new(0);
+
+        create_symlink(src, dest, vec![], false, &pb).unwrap();
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.is_symlink())
@@ -215,7 +217,9 @@ mod test {
 
         File::create(&dest_path).unwrap();
 
-        create_symlink(src, dest, vec![], true).unwrap();
+        let pb = ProgressBar::new(0);
+
+        create_symlink(src, dest, vec![], true, &pb).unwrap();
 
         assert!(dest_path.is_symlink());
     }
@@ -230,12 +234,14 @@ mod test {
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
-        create_symlink(src, dest, vec![], false).unwrap();
+        let pb = ProgressBar::new(0);
+
+        create_symlink(src, dest, vec![], false, &pb).unwrap();
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());
 
-        remove_symlink(src, dest).unwrap();
+        remove_symlink(src, dest, &pb).unwrap();
 
         assert!(!dest_path.exists());
     }
