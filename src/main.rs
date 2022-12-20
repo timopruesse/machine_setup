@@ -3,8 +3,9 @@ extern crate tracing;
 use clap::Parser;
 use once_cell::sync::OnceCell;
 use terminal::{cli::Args, command::execute_command};
+use tracing::metadata::LevelFilter;
 use tracing::Level;
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::prelude::*;
 
 pub mod command;
 pub mod commands;
@@ -20,19 +21,23 @@ static DEBUG_MODE: OnceCell<bool> = OnceCell::new();
 fn main() {
     let args = Args::parse();
 
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(args.level)
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .pretty()
         .with_level(args.debug)
         .with_line_number(args.debug)
         .with_file(args.debug)
         .with_target(args.debug)
         .with_thread_ids(args.debug)
-        .without_time()
-        .finish();
+        .without_time();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Could not set default subscriber...");
+    let subscriber = tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(LevelFilter::from_level(args.level))
+        .try_init();
+
+    if let Err(sub_err) = subscriber {
+        println!("{:?}", sub_err);
+    }
 
     LOG_LEVEL.set(args.level).unwrap();
     DEBUG_MODE.set(args.debug).unwrap();

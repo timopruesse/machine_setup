@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use indicatif::ProgressBar;
 use tracing::Level;
 
 use crate::{
@@ -64,15 +65,30 @@ fn execute_config(command: SubCommand, args: ConfigValue) -> Result<(), String> 
 }
 
 impl CommandInterface for MachineSetupCommand {
-    fn install(&self, args: ConfigValue, _config: &CommandConfig) -> Result<(), String> {
+    fn install(
+        &self,
+        args: ConfigValue,
+        _config: &CommandConfig,
+        _progress: &ProgressBar,
+    ) -> Result<(), String> {
         execute_config(SubCommand::Install, args)
     }
 
-    fn uninstall(&self, args: ConfigValue, _config: &CommandConfig) -> Result<(), String> {
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        _config: &CommandConfig,
+        _progress: &ProgressBar,
+    ) -> Result<(), String> {
         execute_config(SubCommand::Uninstall, args)
     }
 
-    fn update(&self, args: ConfigValue, _config: &CommandConfig) -> Result<(), String> {
+    fn update(
+        &self,
+        args: ConfigValue,
+        _config: &CommandConfig,
+        _progress: &ProgressBar,
+    ) -> Result<(), String> {
         execute_config(SubCommand::Update, args)
     }
 }

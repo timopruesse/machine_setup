@@ -4,7 +4,7 @@ use std::{env, str::FromStr};
 
 use ansi_term::Color::{Green, Red, White, Yellow};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::{
     command::{get_command, CommandConfig, CommandInterface},
@@ -19,11 +19,12 @@ fn run_command(
     args: ConfigValue,
     mode: &TaskRunnerMode,
     config: &CommandConfig,
+    progress: &ProgressBar,
 ) -> Result<(), String> {
     match mode {
-        TaskRunnerMode::Install => command.install(args, config),
-        TaskRunnerMode::Update => command.update(args, config),
-        TaskRunnerMode::Uninstall => command.uninstall(args, config),
+        TaskRunnerMode::Install => command.install(args, config, progress),
+        TaskRunnerMode::Update => command.update(args, config, progress),
+        TaskRunnerMode::Uninstall => command.uninstall(args, config, progress),
     }
 }
 
@@ -59,7 +60,7 @@ impl Task {
         let num_threads = if self.parallel { commands.len() } else { 1 };
 
         if self.parallel {
-            info!(
+            debug!(
                 "Executing commands in parallel ({} threads)...",
                 White.bold().paint(num_threads.to_string())
             );
@@ -117,8 +118,13 @@ impl Task {
                         return;
                     }
 
-                    let result =
-                        run_command(resolved_command.unwrap(), command.args.clone(), &mode, &c);
+                    let result = run_command(
+                        resolved_command.unwrap(),
+                        command.args.clone(),
+                        &mode,
+                        &c,
+                        &p,
+                    );
 
                     if let Err(err_result) = result {
                         error!(

@@ -1,12 +1,14 @@
 use std::{
     collections::HashMap,
     fs::remove_file,
+    io::{BufRead, BufReader},
     process::{Command, Stdio},
     str::FromStr,
 };
 
 use ansi_term::Color::White;
-use tracing::{info, Level};
+use indicatif::ProgressBar;
+use tracing::info;
 
 use crate::{
     command::{CommandConfig, CommandInterface},
@@ -20,7 +22,6 @@ use crate::{
         shell::{create_script_file, Shell},
         terminal::set_environment_variables,
     },
-    LOG_LEVEL,
 };
 
 pub struct RunCommand {}
@@ -76,7 +77,8 @@ fn run_commands(
     shell: &str,
     mode: TaskRunnerMode,
     temp_dir: &str,
-) -> Result<String, String> {
+    progress: &ProgressBar,
+) -> Result<(), String> {
     let parsed_commands = get_commands(commands.clone(), mode)?;
     let temp_script = create_script_file(
         Shell::from_str(shell).unwrap_or(Shell::Bash),
@@ -84,49 +86,49 @@ fn run_commands(
         temp_dir,
     )?;
 
-    let print = Level::INFO
-        .cmp(LOG_LEVEL.get().unwrap_or(&Level::WARN))
-        .is_le();
-
     let command = Command::new(shell)
         .arg("-c")
         .arg(&temp_script)
-        .stdout(if print {
-            Stdio::inherit()
-        } else {
-            Stdio::null()
-        })
-        .stderr(if print {
-            Stdio::inherit()
-        } else {
-            Stdio::null()
-        })
-        .output();
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn();
+
+    if command.is_err() {
+        return Err(command.unwrap_err().to_string());
+    }
+    let mut command = command.unwrap();
+    let stdout = command.stdout.as_mut().unwrap();
+
+    let reader = BufReader::new(stdout);
+    reader
+        .lines()
+        .filter_map(|line| line.ok())
+        .for_each(|line| progress.set_message(format!("▶️ {}", line)));
+
+    let status = command.wait().unwrap();
 
     remove_file(temp_script).ok();
 
-    if let Err(err_command) = command {
-        return Err(err_command.to_string());
+    if !status.success() {
+        // let stderr = command.stderr.as_mut().unwrap();
+        //
+        // return Err(if error_msg.is_empty() {
+        //     stdout
+        // } else {
+        //     error_msg
+        // });
+        return Err(String::from("ERR"));
     }
 
-    let output = command.unwrap();
-
-    let stdout = String::from_utf8(output.stdout).unwrap_or_else(|_| String::from("OK"));
-
-    if !output.status.success() {
-        let error_msg = String::from_utf8(output.stderr).unwrap_or_else(|e| e.to_string());
-
-        return Err(if error_msg.is_empty() {
-            stdout
-        } else {
-            error_msg
-        });
-    }
-
-    Ok(stdout)
+    Ok(())
 }
 
-fn run_task(mode: TaskRunnerMode, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
+fn run_task(
+    mode: TaskRunnerMode,
+    args: ConfigValue,
+    config: &CommandConfig,
+    progress: &ProgressBar,
+) -> Result<(), String> {
     let parameters = args.as_hash();
     if parameters.is_none() {
         return Err(String::from("args is not an object"));
@@ -148,26 +150,41 @@ fn run_task(mode: TaskRunnerMode, args: ConfigValue, config: &CommandConfig) -> 
 
     set_environment_variables(&args)?;
 
-    let result = run_commands(param_commands, param_shell, mode, &config.temp_dir)?;
-
-    if !result.is_empty() {
-        result.split('\n').for_each(|line| println!("{}", line));
-    }
-
-    Ok(())
+    run_commands(
+        param_commands,
+        param_shell,
+        mode,
+        &config.temp_dir,
+        progress,
+    )
 }
 
 impl CommandInterface for RunCommand {
-    fn install(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        run_task(TaskRunnerMode::Install, args, config)
+    fn install(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String> {
+        run_task(TaskRunnerMode::Install, args, config, progress)
     }
 
-    fn uninstall(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        run_task(TaskRunnerMode::Uninstall, args, config)
+    fn uninstall(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String> {
+        run_task(TaskRunnerMode::Uninstall, args, config, progress)
     }
 
-    fn update(&self, args: ConfigValue, config: &CommandConfig) -> Result<(), String> {
-        run_task(TaskRunnerMode::Update, args, config)
+    fn update(
+        &self,
+        args: ConfigValue,
+        config: &CommandConfig,
+        progress: &ProgressBar,
+    ) -> Result<(), String> {
+        run_task(TaskRunnerMode::Update, args, config, progress)
     }
 }
 

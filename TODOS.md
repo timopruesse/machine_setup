@@ -21,3 +21,4 @@
 - release script
   - copy markdown changelog from tag to GitHub release automatically
 - create command that installs (or updates) shell completions
+- refactor progress logic
