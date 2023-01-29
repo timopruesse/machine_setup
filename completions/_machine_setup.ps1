@@ -31,10 +31,10 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--select', 'select', [CompletionResultType]::ParameterName, 'Select a task to run')
             [CompletionResult]::new('-d', 'd', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
-            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version information')
-            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version information')
+            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Install all of the defined tasks')
             [CompletionResult]::new('update', 'update', [CompletionResultType]::ParameterValue, 'Update all of the defined tasks')
             [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Uninstall all of the defined tasks')
@@ -53,10 +53,10 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--select', 'select', [CompletionResultType]::ParameterName, 'Select a task to run')
             [CompletionResult]::new('-d', 'd', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
-            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version information')
-            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version information')
+            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }
         'machine_setup;update' {
@@ -70,10 +70,10 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--select', 'select', [CompletionResultType]::ParameterName, 'Select a task to run')
             [CompletionResult]::new('-d', 'd', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
-            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version information')
-            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version information')
+            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }
         'machine_setup;uninstall' {
@@ -87,10 +87,10 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--select', 'select', [CompletionResultType]::ParameterName, 'Select a task to run')
             [CompletionResult]::new('-d', 'd', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
-            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version information')
-            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version information')
+            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }
         'machine_setup;list' {
@@ -104,10 +104,10 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--select', 'select', [CompletionResultType]::ParameterName, 'Select a task to run')
             [CompletionResult]::new('-d', 'd', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
-            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help information')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version information')
-            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version information')
+            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }
         'machine_setup;help' {

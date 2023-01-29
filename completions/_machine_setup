@@ -25,10 +25,10 @@ _machine_setup() {
 '--select[Select a task to run]' \
 '-d[Add debug information]' \
 '--debug[Add debug information]' \
-'-h[Print help information]' \
-'--help[Print help information]' \
-'-V[Print version information]' \
-'--version[Print version information]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
 ":: :_machine_setup_commands" \
 "*::: :->machine_setup" \
 && ret=0
@@ -50,10 +50,10 @@ _arguments "${_arguments_options[@]}" \
 '--select[Select a task to run]' \
 '-d[Add debug information]' \
 '--debug[Add debug information]' \
-'-h[Print help information]' \
-'--help[Print help information]' \
-'-V[Print version information]' \
-'--version[Print version information]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
 && ret=0
 ;;
 (update)
@@ -68,10 +68,10 @@ _arguments "${_arguments_options[@]}" \
 '--select[Select a task to run]' \
 '-d[Add debug information]' \
 '--debug[Add debug information]' \
-'-h[Print help information]' \
-'--help[Print help information]' \
-'-V[Print version information]' \
-'--version[Print version information]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
 && ret=0
 ;;
 (uninstall)
@@ -86,10 +86,10 @@ _arguments "${_arguments_options[@]}" \
 '--select[Select a task to run]' \
 '-d[Add debug information]' \
 '--debug[Add debug information]' \
-'-h[Print help information]' \
-'--help[Print help information]' \
-'-V[Print version information]' \
-'--version[Print version information]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
 && ret=0
 ;;
 (list)
@@ -104,10 +104,10 @@ _arguments "${_arguments_options[@]}" \
 '--select[Select a task to run]' \
 '-d[Add debug information]' \
 '--debug[Add debug information]' \
-'-h[Print help information]' \
-'--help[Print help information]' \
-'-V[Print version information]' \
-'--version[Print version information]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
 && ret=0
 ;;
 (help)
