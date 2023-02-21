@@ -2,6 +2,7 @@ use core::fmt;
 use std::{fs::File, str::FromStr};
 
 use ergo_fs::IoWrite;
+use regex::Regex;
 
 use super::temp_storage::create_temp_file;
 
@@ -76,6 +77,20 @@ pub fn create_script_file(
     Ok(path)
 }
 
+/**
+ * We remove irritating info such as:
+ *   - temp script file name
+ *   - err line number
+ *
+ * The user only needs the actual error output to debug the issue.
+ */
+pub fn strip_line_err_info(err_output: &str) -> String {
+    // /home/timo/.machine_setup/NEUfhJYlnXkG0HzYf67MO5TRV.sh: line 7: sdusads: command not found
+    let re = Regex::new(r"^(.*?)line \d+:\s").unwrap();
+
+    re.replace(err_output, String::from("")).to_string()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -114,5 +129,13 @@ mod test {
         let file = std::fs::read_to_string(script_file).unwrap();
         assert!(file.contains(ZSH_STR));
         assert!(file.contains("echo 'hello world'"));
+    }
+
+    #[test]
+    fn it_replaces_unneeded_err_info() {
+        assert_eq!(
+            strip_line_err_info("/home/test/temp.sh: line 5: some important info"),
+            String::from("some important info")
+        );
     }
 }

@@ -4,6 +4,7 @@ use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
     str::FromStr,
+    thread,
 };
 
 use ansi_term::Color::White;
@@ -19,7 +20,7 @@ use crate::{
     },
     task_runner::TaskRunnerMode,
     utils::{
-        shell::{create_script_file, Shell},
+        shell::{create_script_file, strip_line_err_info, Shell},
         terminal::set_environment_variables,
     },
 };
@@ -98,27 +99,44 @@ fn run_commands(
     }
 
     let mut command = command.unwrap();
-    let stdout = command.stdout.as_mut().unwrap();
+    let stdout_reader = BufReader::new(command.stdout.take().unwrap());
+    let stderr_reader = BufReader::new(command.stderr.take().unwrap());
 
-    let reader = BufReader::new(stdout);
-    reader
-        .lines()
-        .filter_map(|line| line.ok())
-        .for_each(|line| progress.set_message(format!("▶️ {line}")));
+    let mut errors: Vec<String> = vec![];
 
-    let status = command.wait().unwrap();
+    thread::scope(|s| {
+        s.spawn(|| {
+            stdout_reader
+                .lines()
+                .filter_map(|line| line.ok())
+                .for_each(|line| progress.set_message(format!("▶️ {line}")));
+        });
+        s.spawn(|| {
+            stderr_reader
+                .lines()
+                .filter_map(|line| line.ok())
+                .for_each(|line| {
+                    let raw_err = strip_line_err_info(&line);
+
+                    progress.set_message(format!("❌ {raw_err}"));
+                    errors.push(raw_err);
+                });
+        });
+    });
 
     remove_file(temp_script).ok();
 
+    let status = command.wait().unwrap();
+
     if !status.success() {
-        // let stderr = command.stderr.as_mut().unwrap();
-        //
-        // return Err(if error_msg.is_empty() {
-        //     stdout
-        // } else {
-        //     error_msg
-        // });
-        return Err(String::from("ERR"));
+        return Err(format!("Err: Exited with {}", status.code().unwrap_or(-1)));
+    }
+
+    if !errors.is_empty() {
+        return Err(format!(
+            "Command exited with errors: \n{}",
+            errors.join("\n")
+        ));
     }
 
     Ok(())
