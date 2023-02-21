@@ -85,7 +85,6 @@ pub fn create_script_file(
  * The user only needs the actual error output to debug the issue.
  */
 pub fn strip_line_err_info(err_output: &str) -> String {
-    // /home/timo/.machine_setup/NEUfhJYlnXkG0HzYf67MO5TRV.sh: line 7: sdusads: command not found
     let re = Regex::new(r"^(.*?)line \d+:\s").unwrap();
 
     re.replace(err_output, String::from("")).to_string()
