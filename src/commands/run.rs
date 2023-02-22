@@ -209,6 +209,8 @@ impl CommandInterface for RunCommand {
 
 #[cfg(test)]
 mod test {
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
@@ -352,5 +354,65 @@ mod test {
         let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Install);
 
         assert_eq!(commands.unwrap(), vec![] as Vec<String>);
+    }
+
+    #[test]
+    fn it_runs_command() {
+        let command = "echo success";
+        let pb = ProgressBar::new(0);
+        let temp_dir = tempdir().unwrap();
+
+        let result = run_commands(
+            &ConfigValue::String(command.to_string()),
+            &Shell::Bash.to_string(),
+            TaskRunnerMode::Install,
+            temp_dir.path().to_str().unwrap(),
+            &pb,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn it_exits_with_error_code() {
+        let command = "nananana";
+        let pb = ProgressBar::new(0);
+        let temp_dir = tempdir().unwrap();
+
+        let result = run_commands(
+            &ConfigValue::String(command.to_string()),
+            &Shell::Bash.to_string(),
+            TaskRunnerMode::Install,
+            temp_dir.path().to_str().unwrap(),
+            &pb,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), String::from("Err: Exited with 127"))
+    }
+
+    #[test]
+    fn it_logs_command_errors() {
+        let command_fail = "nananana";
+        let command_success = "echo end";
+        let pb = ProgressBar::new(0);
+        let temp_dir = tempdir().unwrap();
+
+        let result = run_commands(
+            &ConfigValue::Array(vec![
+                ConfigValue::String(command_fail.to_string()),
+                ConfigValue::String(command_success.to_string()),
+            ]),
+            &Shell::Bash.to_string(),
+            TaskRunnerMode::Install,
+            temp_dir.path().to_str().unwrap(),
+            &pb,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            format!("Command exited with errors: \n{command_fail}: command not found")
+        )
     }
 }
