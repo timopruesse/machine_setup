@@ -117,7 +117,7 @@ fn run_commands(
                 .filter_map(|line| line.ok())
                 .for_each(|line| {
                     let raw_err = strip_line_err_info(&line);
-                    if raw_err.len() > 0 {
+                    if !raw_err.is_empty() {
                         progress.set_message(format!("❌ {raw_err}"));
                         errors.push(raw_err);
                     }
