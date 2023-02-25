@@ -117,9 +117,10 @@ fn run_commands(
                 .filter_map(|line| line.ok())
                 .for_each(|line| {
                     let raw_err = strip_line_err_info(&line);
-
-                    progress.set_message(format!("❌ {raw_err}"));
-                    errors.push(raw_err);
+                    if raw_err.len() > 0 {
+                        progress.set_message(format!("❌ {raw_err}"));
+                        errors.push(raw_err);
+                    }
                 });
         });
     });

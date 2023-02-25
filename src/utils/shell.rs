@@ -33,8 +33,8 @@ impl FromStr for Shell {
     }
 }
 
-const BASH_STR: &str = "#!/bin/bash\nsource $HOME/.bashrc\n";
-const ZSH_STR: &str = "#!/bin/zsh\nsource $HOME/.zshrc\n";
+const BASH_STR: &str = "#!/bin/bash\nsource $HOME/.bashrc >/dev/null 2>&1\n";
+const ZSH_STR: &str = "#!/bin/zsh\nsource $HOME/.zshrc >/dev/null 2>&1\n";
 
 #[cfg(target_family = "windows")]
 fn make_executable(file: &mut File) -> Result<(), String> {
