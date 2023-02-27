@@ -219,4 +219,8 @@ _machine_setup__update_commands() {
     _describe -t commands 'machine_setup update commands' commands "$@"
 }
 
-_machine_setup "$@"
+if [ "$funcstack[1]" = "_machine_setup" ]; then
+    _machine_setup "$@"
+else
+    compdef _machine_setup machine_setup
+fi
