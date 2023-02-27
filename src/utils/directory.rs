@@ -1,5 +1,8 @@
-use ergo_fs::{expand, Path, PathArc, PathDir, WalkDir};
-use std::{collections::HashMap, fs::create_dir_all};
+use ergo_fs::{expand, Path, PathBuf, PathDir, WalkDir};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::create_dir_all,
+};
 use tracing::info;
 
 use crate::config::{
@@ -8,7 +11,7 @@ use crate::config::{
     validator::{validate_named_args, ValidationRule},
 };
 
-pub fn is_file_path(path: &PathArc) -> bool {
+pub fn is_file_path(path: &Path) -> bool {
     if path.to_str().unwrap().is_empty() {
         return false;
     }
@@ -27,7 +30,7 @@ pub fn is_file_path(path: &PathArc) -> bool {
     dot_index != 0
 }
 
-fn create_missing_directories(path: &PathArc) -> Result<(), std::io::Error> {
+fn create_missing_directories(path: &PathBuf) -> Result<(), std::io::Error> {
     if is_file_path(path) {
         let parent = path.parent();
 
@@ -40,12 +43,9 @@ fn create_missing_directories(path: &PathArc) -> Result<(), std::io::Error> {
     create_dir_all(path)
 }
 
-pub fn expand_path(path: &str, create: bool) -> Result<PathArc, String> {
-    let expanded_path = expand(path);
-    if let Err(err_expand_path) = expanded_path {
-        return Err(err_expand_path.to_string());
-    }
-    let expanded_path = PathArc::new(expanded_path.unwrap().to_string());
+pub fn expand_path(path: &str, create: bool) -> Result<PathBuf, String> {
+    let expanded_path = expand(path).map_err(|err| err.to_string())?;
+    let expanded_path = PathBuf::from(expanded_path.to_string());
 
     if create {
         let create_result = create_missing_directories(&expanded_path);
@@ -64,7 +64,7 @@ pub static DIR_IGNORE: &str = "ignore";
 pub struct Dirs {
     pub src: String,
     pub target: String,
-    pub ignore: Vec<ConfigValue>,
+    pub ignore: HashSet<String>,
 }
 
 pub fn get_relative_dir(root: &PathDir, dir: &str) -> String {
@@ -110,14 +110,16 @@ pub fn get_source_and_target(args: ConfigValue, root: &PathDir) -> Result<Dirs, 
 
     let relative_src_dir = get_relative_dir(root, src_dir);
 
-    let ignore = args
+    let ignore: HashSet<String> = args
         .as_hash()
         .unwrap()
         .get(DIR_IGNORE)
         .unwrap_or(&ConfigValue::Array(vec![]))
         .as_vec()
         .unwrap()
-        .to_owned();
+        .iter()
+        .map(|value| value.as_str().unwrap().to_owned())
+        .collect();
 
     Ok(Dirs {
         src: relative_src_dir,
@@ -127,23 +129,19 @@ pub fn get_source_and_target(args: ConfigValue, root: &PathDir) -> Result<Dirs, 
 }
 
 // TODO: improve this with a better regex approach :)
-fn is_ignored(path: &Path, source: &PathArc, ignore: &[ConfigValue]) -> bool {
-    let path_str = path.strip_prefix(source).unwrap().to_str().unwrap();
-
-    for ignore_path in ignore {
-        let ignore_path = ignore_path.as_str().unwrap();
-        if path_str.starts_with(ignore_path) {
-            return true;
+fn is_ignored(path: &Path, source: &Path, ignore: &HashSet<String>) -> bool {
+    if let Ok(rel_path) = path.strip_prefix(source) {
+        if let Some(rel_str) = rel_path.to_str() {
+            return ignore.contains(rel_str);
         }
     }
-
     false
 }
 
 pub fn walk_files<O: Fn(&Path, &Path)>(
-    source: &PathArc,
+    source: &PathBuf,
     target: &Path,
-    ignore: Vec<ConfigValue>,
+    ignore: HashSet<String>,
     op: O,
 ) -> Result<(), String> {
     if !source.exists() {
@@ -154,28 +152,22 @@ pub fn walk_files<O: Fn(&Path, &Path)>(
     }
 
     if source.is_file() {
-        let source_file_name = source.file_name().unwrap().to_str().unwrap();
-        let source_file_ending = source_file_name.split('.').last().unwrap();
+        let source_ext = source.extension().unwrap_or_default();
+        let target_ext = target.extension().unwrap_or_default();
 
-        let target_file_ending = target
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .split('.')
-            .last()
-            .unwrap();
-
-        if source_file_ending != target_file_ending {
-            op(source, target.join(source_file_name).as_path())
-        } else {
-            op(source, target)
+        match source_ext == target_ext {
+            true => {
+                op(source, target);
+            }
+            false => {
+                op(source, target.join(source.file_name().unwrap()).as_path());
+            }
         }
 
         return Ok(());
     }
 
-    for dir_entry in WalkDir::new(source).min_depth(1) {
+    for dir_entry in WalkDir::new(source).min_depth(1).into_iter() {
         let dir_entry = dir_entry.unwrap();
         let source_path = dir_entry.path();
 
@@ -208,10 +200,10 @@ mod test {
 
     #[test]
     fn it_fails_when_dir_doesnt_exist() {
-        let source = PathArc::new("/tmp/does_not_exist");
-        let target = PathArc::new("/tmp/target");
+        let source = PathBuf::from("/tmp/does_not_exist");
+        let target = PathBuf::from("/tmp/target");
 
-        walk_files(&source, &target, vec![], |_, _| {}).unwrap_err();
+        walk_files(&source, &target, HashSet::new(), |_, _| {}).unwrap_err();
     }
 
     #[test]
@@ -227,12 +219,12 @@ mod test {
 
     #[test]
     fn it_returns_true_if_the_path_is_a_file() {
-        assert!(is_file_path(&PathArc::new("/tmp/test.txt")));
+        assert!(is_file_path(&PathBuf::from("/tmp/test.txt")));
     }
 
     #[test]
     fn it_returns_false_if_the_path_is_a_directory() {
-        assert!(!is_file_path(&PathArc::new("/tmp/test")));
+        assert!(!is_file_path(&PathBuf::from("/tmp/test")));
     }
 
     #[test]

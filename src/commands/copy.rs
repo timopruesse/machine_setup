@@ -1,11 +1,12 @@
 use ansi_term::Color::{Red, White, Yellow};
-use ergo_fs::{Path, PathArc};
+use ergo_fs::{Path, PathBuf};
 use indicatif::ProgressBar;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, canonicalize},
+    time::SystemTime,
 };
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     command::{CommandConfig, CommandInterface},
@@ -88,25 +89,30 @@ impl CommandInterface for CopyDirCommand {
 }
 
 fn target_file_is_newer(file_src: &Path, file_target: &Path) -> bool {
-    if !file_target.exists() {
+    if !matches!(file_target.metadata(), Ok(m) if m.is_file()) {
         return false;
     }
 
-    let file_src_meta = file_src.metadata().unwrap();
-    let file_target_meta = file_target.metadata().unwrap();
-
-    file_target_meta.modified().unwrap() > file_src_meta.modified().unwrap()
+    if let (Ok(file_src_meta), Ok(file_target_meta)) = (file_src.metadata(), file_target.metadata())
+    {
+        file_target_meta
+            .modified()
+            .unwrap_or(SystemTime::UNIX_EPOCH)
+            > file_src_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+    } else {
+        false
+    }
 }
 
 fn copy_files(
-    source_dir: &PathArc,
+    source_dir: &PathBuf,
     destination_dir: &Path,
-    ignore: Vec<ConfigValue>,
+    ignore: HashSet<String>,
     progress: &ProgressBar,
 ) -> Result<(), String> {
     let message = format!(
         "Copying files from {} to {} ...",
-        White.bold().paint(source_dir.to_string()),
+        White.bold().paint(source_dir.to_str().unwrap()),
         White.bold().paint(destination_dir.to_str().unwrap())
     );
 
@@ -115,12 +121,11 @@ fn copy_files(
 
     walk_files(source_dir, destination_dir, ignore, |src, target| {
         if target_file_is_newer(src, target) {
-            warn!(
-                "{} {}: {}",
-                Yellow.paint("! Skipping !"),
-                Yellow
-                    .bold()
-                    .paint(target.file_name().unwrap().to_str().unwrap()),
+            let target_file_name = target.file_name().unwrap().to_str().unwrap();
+            info!(
+                "{}: {}: {}",
+                Yellow.paint("Skipping"),
+                Yellow.bold().paint(target_file_name),
                 Yellow
                     .bold()
                     .paint("The target file is newer than the source file.")
@@ -143,13 +148,13 @@ fn copy_files(
 pub fn copy_dir(
     source: &str,
     destination: &str,
-    ignore: Vec<ConfigValue>,
+    ignore: HashSet<String>,
     progress: &ProgressBar,
 ) -> Result<(), String> {
     let source_dir = expand_path(source, false)?;
     let destination_dir = expand_path(destination, true)?;
 
-    if source_dir.to_string() == destination_dir.to_string() {
+    if source_dir == destination_dir {
         return Err(format!(
             "{} {}",
             Red.paint("Source and destination directories are the same:"),
@@ -188,12 +193,12 @@ mod test {
     fn it_fails_when_dirs_are_the_same() {
         let dir = tempdir().unwrap();
         let src_path = dir.path();
-        tempfile_in(&src_path).unwrap();
+        tempfile_in(src_path).unwrap();
         let src = src_path.to_str().unwrap();
 
         let pb = ProgressBar::new(0);
 
-        assert!(copy_dir(src, src, vec![], &pb)
+        assert!(copy_dir(src, src, HashSet::new(), &pb)
             .unwrap_err()
             .contains("Source and destination directories are the same"));
     }
@@ -203,14 +208,14 @@ mod test {
         let src_dir = tempdir().unwrap();
         let src = src_dir.path().to_str().unwrap();
         let src_path = src_dir.path();
-        let src_file = NamedTempFile::new_in(&src_path).unwrap();
+        let src_file = NamedTempFile::new_in(src_path).unwrap();
 
         let dest_dir = tempdir().unwrap();
         let dest = dest_dir.path().to_str().unwrap();
 
         let pb = ProgressBar::new(0);
 
-        copy_dir(src, dest, vec![], &pb).unwrap();
+        copy_dir(src, dest, HashSet::new(), &pb).unwrap();
 
         let dest_file = dest_dir.path().join(src_file.path().file_name().unwrap());
 
@@ -222,7 +227,7 @@ mod test {
         let dir = tempdir().unwrap();
         let path = dir.path().to_str().unwrap();
 
-        remove_dir(&PathArc::new(path)).unwrap();
+        remove_dir(&PathBuf::from(path)).unwrap();
         assert!(!dir.path().exists());
     }
 

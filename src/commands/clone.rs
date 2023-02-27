@@ -3,7 +3,7 @@ use indicatif::ProgressBar;
 use std::collections::HashMap;
 use tracing::{debug, info};
 
-use ergo_fs::PathArc;
+use ergo_fs::{Path, PathBuf};
 use git_commands::git;
 
 use crate::{
@@ -18,26 +18,23 @@ use crate::{
 
 pub struct CloneCommand {}
 
-fn get_installed_repo_url(target_dir: &PathArc) -> Result<String, String> {
-    let result = git(&["config", "--get", "remote.origin.url"], target_dir);
-    if let Err(err_result) = result {
-        return Err(err_result.to_string());
-    }
+fn get_installed_repo_url(target_dir: &Path) -> Result<PathBuf, String> {
+    let output = git(&["config", "--get", "remote.origin.url"], target_dir)
+        .map_err(|e| e.to_string())?
+        .stdout;
 
-    Ok(String::from_utf8(result.unwrap().stdout)
-        .unwrap()
-        .trim()
-        .to_string())
+    let url = String::from_utf8_lossy(&output).trim().to_string();
+
+    Ok(PathBuf::from(url))
 }
 
-fn is_repo_installed(url: &str, target_dir: &PathArc) -> bool {
-    let installed_repo_url = get_installed_repo_url(target_dir);
-    if installed_repo_url.is_err() {
-        return false;
+fn is_repo_installed(url: &str, target_dir: &Path) -> bool {
+    if let Ok(installed_repo_url) = get_installed_repo_url(target_dir).map(PathBuf::into_os_string)
+    {
+        url.eq(&installed_repo_url)
+    } else {
+        false
     }
-    let installed_repo_url = installed_repo_url.unwrap();
-
-    installed_repo_url == url
 }
 
 impl CommandInterface for CloneCommand {
@@ -144,11 +141,11 @@ impl CommandInterface for CloneCommand {
     }
 }
 
-pub fn clone_repository(url: &str, target: &PathArc, progress: &ProgressBar) -> Result<(), String> {
+pub fn clone_repository(url: &str, target: &Path, progress: &ProgressBar) -> Result<(), String> {
     let message = format!(
         "Cloning {} into {} ...",
         White.bold().paint(url),
-        White.bold().paint(target.to_str().unwrap())
+        White.bold().paint(target.display().to_string())
     );
 
     debug!(message);
@@ -162,27 +159,23 @@ pub fn clone_repository(url: &str, target: &PathArc, progress: &ProgressBar) -> 
     Ok(())
 }
 
-pub fn remove_repository(target: &PathArc, progress: &ProgressBar) -> Result<(), String> {
+pub fn remove_repository(target: &PathBuf, progress: &ProgressBar) -> Result<(), String> {
     let message = format!(
         "Removing {} ...",
-        White.bold().paint(target.to_str().unwrap())
+        White.bold().paint(target.display().to_string())
     );
 
     debug!(message);
     progress.set_message(message);
 
-    let remove_result = std::fs::remove_dir_all(target);
-    if let Err(err_remove) = remove_result {
-        return Err(err_remove.to_string());
-    }
-
+    std::fs::remove_dir_all(target).map_err(|err| err.to_string())?;
     Ok(())
 }
 
-pub fn update_repository(target: &PathArc, progress: &ProgressBar) -> Result<(), String> {
+pub fn update_repository(target: &Path, progress: &ProgressBar) -> Result<(), String> {
     let message = format!(
         "Updating {} ...",
-        White.bold().paint(target.to_str().unwrap())
+        White.bold().paint(target.display().to_string())
     );
 
     debug!(message);
@@ -192,7 +185,6 @@ pub fn update_repository(target: &PathArc, progress: &ProgressBar) -> Result<(),
     if let Err(err_update) = update_result {
         return Err(err_update.to_string());
     }
-
     Ok(())
 }
 
@@ -207,7 +199,7 @@ mod test {
 
         let pb = ProgressBar::new(0);
 
-        let result = remove_repository(&PathArc::new(target_path), &pb);
+        let result = remove_repository(&PathBuf::from(target_path), &pb);
         result.unwrap();
         assert!(!target.path().exists());
     }
