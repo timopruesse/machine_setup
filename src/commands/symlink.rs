@@ -1,7 +1,7 @@
 use ansi_term::Color::{Green, Red, White, Yellow};
-use ergo_fs::{Path, PathArc};
+use ergo_fs::{Path, PathBuf};
 use indicatif::ProgressBar;
-use std::fs::remove_file;
+use std::{collections::HashSet, fs::remove_file};
 use symlink::{remove_symlink_file, symlink_file};
 use tracing::debug;
 
@@ -67,17 +67,17 @@ impl CommandInterface for SymlinkCommand {
 }
 
 fn link_files(
-    source_dir: &PathArc,
+    source_dir: &PathBuf,
     destination_dir: &Path,
-    ignore: Vec<ConfigValue>,
+    ignore: HashSet<String>,
     force: bool,
     progress: &ProgressBar,
 ) -> Result<(), String> {
     let message = format!(
         "Creating symlinks: {} {} {} ...",
-        White.bold().paint(source_dir.to_string()),
+        White.bold().paint(source_dir.display().to_string()),
         Green.bold().paint("->"),
-        White.bold().paint(destination_dir.to_str().unwrap())
+        White.bold().paint(destination_dir.display().to_string())
     );
 
     debug!(message);
@@ -106,33 +106,38 @@ fn link_files(
 }
 
 fn unlink_files(
-    source_dir: &PathArc,
+    source_dir: &PathBuf,
     destination_dir: &Path,
     progress: &ProgressBar,
 ) -> Result<(), String> {
     let message = format!(
         "Unlinking files in {} ...",
-        White.bold().paint(destination_dir.to_str().unwrap())
+        White.bold().paint(destination_dir.display().to_string())
     );
 
     debug!(message);
     progress.set_message(message);
 
-    walk_files(source_dir, destination_dir, vec![], |_src, target| {
-        debug!(
-            "Unlinking {} ...",
-            White.bold().paint(target.to_str().unwrap())
-        );
-        remove_symlink_file(target)
-            .map_err(|e| format!("Failed to unlink file: {}", Red.paint(e.to_string())))
-            .ok();
-    })
+    walk_files(
+        source_dir,
+        destination_dir,
+        HashSet::new(),
+        |_src, target| {
+            debug!(
+                "Unlinking {} ...",
+                White.bold().paint(target.to_str().unwrap())
+            );
+            remove_symlink_file(target)
+                .map_err(|e| format!("Failed to unlink file: {}", Red.paint(e.to_string())))
+                .ok();
+        },
+    )
 }
 
 pub fn create_symlink(
     source: &str,
     destination: &str,
-    ignore: Vec<ConfigValue>,
+    ignore: HashSet<String>,
     force: bool,
     progress: &ProgressBar,
 ) -> Result<(), String> {
@@ -144,7 +149,7 @@ pub fn create_symlink(
 
     let destination_dir = expand_path(destination, true)?;
 
-    if source_dir.to_string() == destination_dir.to_string() {
+    if source_dir == destination_dir {
         return Err(format!(
             "Source and destination directories are the same: {source}"
         ));
@@ -167,7 +172,7 @@ pub fn remove_symlink(
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{fs::File, vec};
+    use std::fs::File;
     use tempfile::tempdir;
 
     #[test]
@@ -180,7 +185,7 @@ mod test {
 
         let pb = ProgressBar::new(0);
 
-        assert!(create_symlink(src, src, vec![], false, &pb)
+        assert!(create_symlink(src, src, HashSet::new(), false, &pb)
             .unwrap_err()
             .contains("Source and destination directories are the same"));
     }
@@ -197,7 +202,7 @@ mod test {
 
         let pb = ProgressBar::new(0);
 
-        create_symlink(src, dest, vec![], false, &pb).unwrap();
+        create_symlink(src, dest, HashSet::new(), false, &pb).unwrap();
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.is_symlink())
@@ -218,7 +223,7 @@ mod test {
 
         let pb = ProgressBar::new(0);
 
-        create_symlink(src, dest, vec![], true, &pb).unwrap();
+        create_symlink(src, dest, HashSet::new(), true, &pb).unwrap();
 
         assert!(dest_path.is_symlink());
     }
@@ -235,7 +240,7 @@ mod test {
 
         let pb = ProgressBar::new(0);
 
-        create_symlink(src, dest, vec![], false, &pb).unwrap();
+        create_symlink(src, dest, HashSet::new(), false, &pb).unwrap();
 
         let dest_path = dest_dir.path().join("example.txt");
         assert!(dest_path.exists());

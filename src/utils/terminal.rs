@@ -1,5 +1,5 @@
 use ansi_term::Color::White;
-use ergo_fs::PathArc;
+use ergo_fs::PathBuf;
 use std::env;
 
 use crate::config::config_value::ConfigValue;
@@ -38,7 +38,7 @@ pub fn set_environment_variables(args: &ConfigValue) -> Result<(), String> {
             let env_value_raw = value.as_str().unwrap();
 
             let expanded_value =
-                expand_path(env_value_raw, false).unwrap_or_else(|_| PathArc::new(env_value_raw));
+                expand_path(env_value_raw, false).unwrap_or_else(|_| PathBuf::from(env_value_raw));
 
             let env_value = expanded_value.to_str().unwrap();
 

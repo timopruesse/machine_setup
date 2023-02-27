@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{fs::File, str::FromStr};
 
-use ergo_fs::IoWrite;
+use ergo_fs::{IoWrite, PathBuf};
 use regex::Regex;
 
 use super::temp_storage::create_temp_file;
@@ -58,18 +58,18 @@ pub fn create_script_file(
     shell: Shell,
     commands: Vec<String>,
     temp_dir: &str,
-) -> Result<String, String> {
+) -> Result<PathBuf, String> {
     let temp_file = create_temp_file("sh", temp_dir)?;
     let mut file = temp_file.file;
     let path = temp_file.path;
 
     match shell {
-        Shell::Bash => file.write_all(String::from(BASH_STR).as_bytes()).unwrap(),
-        Shell::Zsh => file.write_all(String::from(ZSH_STR).as_bytes()).unwrap(),
+        Shell::Bash => write!(file, "{}", BASH_STR).unwrap_or_default(),
+        Shell::Zsh => write!(file, "{}", ZSH_STR).unwrap_or_default(),
     }
 
     for command in commands {
-        file.write_all(format!("{command}\n").as_bytes()).unwrap();
+        writeln!(file, "{}", command).unwrap_or_default();
     }
 
     make_executable(&mut file)?;
@@ -105,7 +105,7 @@ mod test {
         )
         .unwrap();
 
-        assert!(script_file.contains(".sh"));
+        assert!(script_file.to_str().unwrap().contains(".sh"));
 
         let file = std::fs::read_to_string(script_file).unwrap();
         assert!(file.contains(BASH_STR));
@@ -123,7 +123,7 @@ mod test {
         )
         .unwrap();
 
-        assert!(script_file.contains(".sh"));
+        assert!(script_file.to_str().unwrap().contains(".sh"));
 
         let file = std::fs::read_to_string(script_file).unwrap();
         assert!(file.contains(ZSH_STR));
