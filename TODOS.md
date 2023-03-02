@@ -1,6 +1,10 @@
 # TODOs
 
-- Return a falsy error code when there were errors (in more cases)
+- save timestamps (at least for install), so the next install only runs new tasks
+  only update/uninstall should affect already run tasks
+
+---
+
 - Fix homebrew/tap setup
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 
