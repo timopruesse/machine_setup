@@ -149,6 +149,7 @@ mod test {
             select: false,
             level: Level::ERROR,
             debug: false,
+            force: false,
         };
 
         let tasks = vec![Task {
@@ -172,6 +173,7 @@ mod test {
             select: true,
             level: Level::ERROR,
             debug: false,
+            force: false,
         };
 
         let tasks = vec![Task {

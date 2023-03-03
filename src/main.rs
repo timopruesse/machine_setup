@@ -4,7 +4,7 @@ use clap::Parser;
 use once_cell::sync::OnceCell;
 use terminal::{cli::Args, command::execute_command};
 use tracing::metadata::LevelFilter;
-use tracing::Level;
+use tracing::{Level, error};
 use tracing_subscriber::prelude::*;
 
 pub mod command;
@@ -21,6 +21,9 @@ static DEBUG_MODE: OnceCell<bool> = OnceCell::new();
 fn main() {
     let args = Args::parse();
 
+    LOG_LEVEL.set(args.level).unwrap_or_default();
+    DEBUG_MODE.set(args.debug).unwrap_or_default();
+
     let fmt_layer = tracing_subscriber::fmt::layer()
         .pretty()
         .with_level(args.debug)
@@ -36,11 +39,9 @@ fn main() {
         .try_init();
 
     if let Err(sub_err) = subscriber {
-        println!("{sub_err:?}");
+        error!("{sub_err:?}");
     }
 
-    LOG_LEVEL.set(args.level).unwrap();
-    DEBUG_MODE.set(args.debug).unwrap();
 
     execute_command(args)
 }

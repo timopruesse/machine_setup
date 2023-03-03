@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::{command::CommandConfig, config::base_config::TaskList, utils::threads::ThreadPool};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TaskRunnerMode {
     Install,
     Update,

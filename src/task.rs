@@ -1,11 +1,13 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::{env, str::FromStr};
 
 use ansi_term::Color::{Green, Red, White, Yellow};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
+use crate::config::history::{is_logged, update_entry};
 use crate::{
     command::{get_command, CommandConfig, CommandInterface},
     config::{base_config::Command, config_value::ConfigValue, os::Os},
@@ -66,7 +68,13 @@ impl Task {
             );
         }
 
-        let task_name = self.name.clone();
+        // TODO: Implement --force option...
+        if mode != TaskRunnerMode::Update && is_logged(&config.temp_dir, &mode, &self.name)
+        {
+            // TODO: Show something like 'skipped' as status instead of 'OK'
+            debug!("[{}] {}: Command was already run.", &self.name, mode);
+            return Ok(());
+        }
 
         let pb = ProgressBar::new(commands.len().try_into().unwrap()).with_style(
             ProgressStyle::default_bar()
@@ -86,7 +94,7 @@ impl Task {
                 let c = config.clone();
                 let errors = Arc::clone(&has_errors);
                 let progress = Arc::clone(&progress_bar);
-                let task = task_name.clone();
+                let task = self.name.clone();
 
                 let run = move || {
                     let p = progress.lock().unwrap();
@@ -155,7 +163,7 @@ impl Task {
         if has_errors.load(Ordering::Relaxed) {
             progress_bar.lock().unwrap().finish_with_message(format!(
                 "❌ {} ➡️ {}",
-                Red.paint(&task_name),
+                Red.paint(&self.name),
                 Red.bold().paint("ERR")
             ));
 
@@ -163,9 +171,21 @@ impl Task {
         } else {
             progress_bar.lock().unwrap().finish_with_message(format!(
                 "✅ {} ➡️ {}",
-                Green.paint(&task_name),
+                Green.paint(&self.name),
                 Green.bold().paint("OK")
             ));
+
+            // FIXME: Add locks...
+            let temp_dir = config.temp_dir.clone();
+            let task = self.name.clone();
+            thread::spawn(move || {
+                debug!("[{}] Updating history...", task);
+
+                let result = update_entry(&temp_dir, &mode, &task);
+                if let Err(update_err) = result {
+                    warn!("[{}] Couldn't update timestamp\n\t{}", task, update_err);
+                }
+            });
 
             Ok(())
         }

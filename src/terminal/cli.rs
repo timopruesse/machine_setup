@@ -52,18 +52,23 @@ pub struct Args {
     #[clap(global = true)]
     pub task: Option<String>,
 
-    /// Select a task to run
+    /// select a task to run
     #[clap(short, long)]
     #[clap(global = true)]
     pub select: bool,
 
-    /// Add debug information
+    /// add debug information
     #[clap(short, long)]
     #[clap(global = true)]
     pub debug: bool,
 
-    /// Set log level
+    /// set log level
     #[clap(short, long, default_value = "warn")]
     #[clap(global = true)]
     pub level: Level,
+
+    /// force installation/uninstallation
+    #[clap(short, long, default_value_t = false)]
+    #[clap(global = true)]
+    pub force: bool,
 }

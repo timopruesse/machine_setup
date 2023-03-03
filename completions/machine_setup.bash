@@ -49,7 +49,7 @@ _machine_setup() {
 
     case "${cmd}" in
         machine_setup)
-            opts="-c -t -s -d -l -h -V --config --task --select --debug --level --help --version install update uninstall list help"
+            opts="-c -t -s -d -l -f -h -V --config --task --select --debug --level --force --help --version install update uninstall list help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -171,7 +171,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__install)
-            opts="-c -t -s -d -l -h -V --config --task --select --debug --level --help --version"
+            opts="-c -t -s -d -l -f -h -V --config --task --select --debug --level --force --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -209,7 +209,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__list)
-            opts="-c -t -s -d -l -h -V --config --task --select --debug --level --help --version"
+            opts="-c -t -s -d -l -f -h -V --config --task --select --debug --level --force --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -247,7 +247,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__uninstall)
-            opts="-c -t -s -d -l -h -V --config --task --select --debug --level --help --version"
+            opts="-c -t -s -d -l -f -h -V --config --task --select --debug --level --force --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -285,7 +285,7 @@ _machine_setup() {
             return 0
             ;;
         machine_setup__update)
-            opts="-c -t -s -d -l -h -V --config --task --select --debug --level --help --version"
+            opts="-c -t -s -d -l -f -h -V --config --task --select --debug --level --force --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

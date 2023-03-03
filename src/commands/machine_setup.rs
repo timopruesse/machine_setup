@@ -57,6 +57,7 @@ fn execute_config(command: SubCommand, args: ConfigValue) -> Result<(), String> 
         task,
         debug: false,
         level: Level::WARN,
+        force: false,
     };
 
     execute_command(args);

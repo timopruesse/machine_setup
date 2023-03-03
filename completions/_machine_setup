@@ -19,12 +19,14 @@ _machine_setup() {
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
-'-l+[Set log level]:LEVEL: ' \
-'--level=[Set log level]:LEVEL: ' \
-'-s[Select a task to run]' \
-'--select[Select a task to run]' \
-'-d[Add debug information]' \
-'--debug[Add debug information]' \
+'-l+[set log level]:LEVEL: ' \
+'--level=[set log level]:LEVEL: ' \
+'-s[select a task to run]' \
+'--select[select a task to run]' \
+'-d[add debug information]' \
+'--debug[add debug information]' \
+'-f[force installation/uninstallation]' \
+'--force[force installation/uninstallation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
@@ -44,12 +46,14 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
-'-l+[Set log level]:LEVEL: ' \
-'--level=[Set log level]:LEVEL: ' \
-'-s[Select a task to run]' \
-'--select[Select a task to run]' \
-'-d[Add debug information]' \
-'--debug[Add debug information]' \
+'-l+[set log level]:LEVEL: ' \
+'--level=[set log level]:LEVEL: ' \
+'-s[select a task to run]' \
+'--select[select a task to run]' \
+'-d[add debug information]' \
+'--debug[add debug information]' \
+'-f[force installation/uninstallation]' \
+'--force[force installation/uninstallation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
@@ -62,12 +66,14 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
-'-l+[Set log level]:LEVEL: ' \
-'--level=[Set log level]:LEVEL: ' \
-'-s[Select a task to run]' \
-'--select[Select a task to run]' \
-'-d[Add debug information]' \
-'--debug[Add debug information]' \
+'-l+[set log level]:LEVEL: ' \
+'--level=[set log level]:LEVEL: ' \
+'-s[select a task to run]' \
+'--select[select a task to run]' \
+'-d[add debug information]' \
+'--debug[add debug information]' \
+'-f[force installation/uninstallation]' \
+'--force[force installation/uninstallation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
@@ -80,12 +86,14 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
-'-l+[Set log level]:LEVEL: ' \
-'--level=[Set log level]:LEVEL: ' \
-'-s[Select a task to run]' \
-'--select[Select a task to run]' \
-'-d[Add debug information]' \
-'--debug[Add debug information]' \
+'-l+[set log level]:LEVEL: ' \
+'--level=[set log level]:LEVEL: ' \
+'-s[select a task to run]' \
+'--select[select a task to run]' \
+'-d[add debug information]' \
+'--debug[add debug information]' \
+'-f[force installation/uninstallation]' \
+'--force[force installation/uninstallation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
@@ -98,12 +106,14 @@ _arguments "${_arguments_options[@]}" \
 '--config=[path to the config file]:CONFIG: ' \
 '-t+[run a single task]:TASK: ' \
 '--task=[run a single task]:TASK: ' \
-'-l+[Set log level]:LEVEL: ' \
-'--level=[Set log level]:LEVEL: ' \
-'-s[Select a task to run]' \
-'--select[Select a task to run]' \
-'-d[Add debug information]' \
-'--debug[Add debug information]' \
+'-l+[set log level]:LEVEL: ' \
+'--level=[set log level]:LEVEL: ' \
+'-s[select a task to run]' \
+'--select[select a task to run]' \
+'-d[add debug information]' \
+'--debug[add debug information]' \
+'-f[force installation/uninstallation]' \
+'--force[force installation/uninstallation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
