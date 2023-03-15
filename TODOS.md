@@ -1,5 +1,6 @@
 # TODOs
 
+- only show 'run command environment' when log level is info/debug
 - save timestamps (at least for install), so the next install only runs new tasks
   only update/uninstall should affect already run tasks
 
