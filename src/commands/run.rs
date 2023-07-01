@@ -108,13 +108,13 @@ fn run_commands(
         s.spawn(|| {
             stdout_reader
                 .lines()
-                .filter_map(|line| line.ok())
+                .map_while(Result::ok)
                 .for_each(|line| progress.set_message(format!("▶️ {line}")));
         });
         s.spawn(|| {
             stderr_reader
                 .lines()
-                .filter_map(|line| line.ok())
+                .map_while(Result::ok)
                 .for_each(|line| {
                     let raw_err = strip_line_err_info(&line);
                     if !raw_err.is_empty() {
