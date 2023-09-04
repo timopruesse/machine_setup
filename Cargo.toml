@@ -41,4 +41,4 @@ git_commands = "0.2"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 ansi_term = "0.12"
 dialoguer = "0.10"
-regex = "1.9.4"
+regex = "1.9.5"
