@@ -33,7 +33,7 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('-V', 'V ', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Install all of the defined tasks')
             [CompletionResult]::new('update', 'update', [CompletionResultType]::ParameterValue, 'Update all of the defined tasks')
@@ -55,7 +55,7 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('-V', 'V ', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }
@@ -72,7 +72,7 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('-V', 'V ', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }
@@ -89,7 +89,7 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('-V', 'V ', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }
@@ -106,7 +106,7 @@ Register-ArgumentCompleter -Native -CommandName 'machine_setup' -ScriptBlock {
             [CompletionResult]::new('--debug', 'debug', [CompletionResultType]::ParameterName, 'Add debug information')
             [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-V', 'V', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('-V', 'V ', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
             break
         }

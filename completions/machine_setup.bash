@@ -325,4 +325,4 @@ _machine_setup() {
     esac
 }
 
-complete -F _machine_setup -o bashdefault -o default machine_setup
+complete -F _machine_setup -o nosort -o bashdefault -o default machine_setup
