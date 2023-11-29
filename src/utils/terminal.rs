@@ -1,6 +1,7 @@
 use ansi_term::Color::White;
 use ergo_fs::PathBuf;
 use std::env;
+use tracing::info;
 
 use crate::config::config_value::ConfigValue;
 use crate::config::validator::arguments_are_named;
@@ -27,12 +28,11 @@ pub fn set_environment_variables(args: &ConfigValue) -> Result<(), String> {
     let env = parse_environment_variables(args.to_owned())?;
 
     if let Some(env) = env {
-        println!("Environment");
-        println!("-----------------------------");
-
         if !env.is_hash() {
             return Err(String::from("Environment needs to be defined as a map"));
         }
+
+        let mut values: Vec<String> = vec![];
 
         for (key, value) in env.as_hash().unwrap() {
             let env_value_raw = value.as_str().unwrap();
@@ -43,10 +43,14 @@ pub fn set_environment_variables(args: &ConfigValue) -> Result<(), String> {
             let env_value = expanded_value.to_str().unwrap();
 
             env::set_var(key, env_value);
-            println!("{}={}", key, White.bold().paint(env_value));
+
+            values.push(format!("{}={}", key, White.bold().paint(env_value)));
         }
 
-        println!("-----------------------------");
+        info!(
+            "Environment\n-----------------------------\n{}\n-----------------------------",
+            values.join("\n")
+        );
     }
 
     Ok(())

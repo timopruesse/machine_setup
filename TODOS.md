@@ -1,11 +1,7 @@
 # TODOs
 
-- only show 'run command environment' when log level is info/debug
-- save timestamps (at least for install), so the next install only runs new tasks
-  only update/uninstall should affect already run tasks
-
----
-
+- list skipped tasks (additionally to the errors)
+  - return Error struct instead of String from tasks (that can indicate if it's a hard failure or not)
 - Fix homebrew/tap setup
 - Add option to run `copy` and `symlink` as root user (needed to move/link some system files)
 

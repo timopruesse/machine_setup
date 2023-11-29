@@ -9,7 +9,6 @@ use std::{
 
 use ansi_term::Color::White;
 use indicatif::ProgressBar;
-use tracing::info;
 
 use crate::{
     command::{CommandConfig, CommandInterface},
@@ -52,9 +51,7 @@ fn get_commands(args: ConfigValue, mode: TaskRunnerMode) -> Result<Vec<String>, 
         let method = method_name.clone();
 
         if !named_args.as_hash().unwrap().contains_key(&method) {
-            info!("{} is not defined...", White.bold().paint(&method));
-
-            return Ok(vec![]);
+            return Err(format!("{} is not defined...", White.bold().paint(&method)));
         }
 
         validate_named_args(named_args, HashMap::from([(method, rules)]))?;
@@ -354,7 +351,8 @@ mod test {
 
         let commands = get_commands(ConfigValue::Hash(commands.clone()), TaskRunnerMode::Install);
 
-        assert_eq!(commands.unwrap(), vec![] as Vec<String>);
+        assert!(commands.is_err());
+        assert!(commands.unwrap_err().contains("is not defined"));
     }
 
     #[test]
