@@ -18,7 +18,7 @@ strip = true
 lto = true
 
 [dev-dependencies]
-tempfile = "3.9"
+tempfile = "3.10"
 dirs = "5"
 
 [build-dependencies]
