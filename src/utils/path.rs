@@ -1,7 +1,13 @@
 use std::path::{Path, PathBuf};
 
 /// Expand `~` to the user's home directory and resolve relative paths.
+/// Paths starting with `$` (env vars) are left as-is for the shell to resolve.
 pub fn expand_path(path: &str, base_dir: Option<&Path>) -> PathBuf {
+    // Don't touch paths starting with env vars — the shell will resolve them
+    if path.starts_with('$') {
+        return PathBuf::from(path);
+    }
+
     let expanded = if let Some(stripped) = path.strip_prefix('~') {
         if let Some(home) = dirs::home_dir() {
             let rest = stripped.strip_prefix('/').unwrap_or(stripped);
@@ -57,6 +63,22 @@ mod tests {
         let base = Path::new("/home/user/configs");
         let expanded = expand_path("/etc/config", Some(base));
         assert_eq!(expanded, PathBuf::from("/etc/config"));
+    }
+
+    #[test]
+    fn test_env_var_path_unchanged() {
+        let base = Path::new("/home/user/configs");
+        let expanded = expand_path("$DOTFILES/personal_repositories.yaml", Some(base));
+        assert_eq!(
+            expanded,
+            PathBuf::from("$DOTFILES/personal_repositories.yaml")
+        );
+    }
+
+    #[test]
+    fn test_env_var_home_unchanged() {
+        let expanded = expand_path("$HOME/.config", None);
+        assert_eq!(expanded, PathBuf::from("$HOME/.config"));
     }
 
     #[test]
