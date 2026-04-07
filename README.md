@@ -239,16 +239,17 @@ This command executes a shell command.
 | env      | environment variables |    -     |         |                              |
 | shell    | shell that is used    |    -     | "bash"  | "bash", "zsh", "powershell"  |
 
-By default, shell commands will be skipped when updating or uninstalling.
-You can change that by providing `update` and/or `uninstall`.
-
-The following arguments can be passed to `commands`:
+By default, shell commands will only run during `install`.
+You can provide mode-specific commands using `install`, `update`, and `uninstall` instead of `commands`:
 
 | argument  | description              | required | example                         |
 | --------- | ------------------------ | :------: | ------------------------------- |
-| install   | command for installing   |    -     | "sudo apt-get -y install git"   |
-| update    | command for updating     |    -     | "sudo apt-get -y upgrade git"   |
-| uninstall | command for uninstalling |    -     | "sudo apt-get -y uninstall git" |
+| commands  | commands for all modes   |    -     | "sudo apt-get -y install git"   |
+| install   | commands for installing  |    -     | "sudo apt-get -y install git"   |
+| update    | commands for updating    |    -     | "sudo apt-get -y upgrade git"   |
+| uninstall | commands for uninstalling|    -     | "sudo apt-get -y uninstall git" |
+
+> Use either `commands` (runs on install only) or `install`/`update`/`uninstall` for mode-specific behavior. They are all top-level keys under `run`.
 
 ##### example
 
@@ -267,23 +268,21 @@ updatable_command:
   run:
     env:
       SOME_TOKEN: "abc123"
-    commands:
-      install: "sudo apt-get -y install git"
-      update: "sudo apt-get -y upgrade git"
-      uninstall: "sudo apt-get -y uninstall git"
+    install: "sudo apt-get -y install git"
+    update: "sudo apt-get -y upgrade git"
+    uninstall: "sudo apt-get -y uninstall git"
 
 updatable_multiline_command:
   run:
     env:
       SOME_TOKEN: "abc123"
-    commands:
-      install:
-        - "sudo apt update"
-        - "sudo apt-get -y install git"
-      update:
-        - "sudo apt-get -y upgrade git"
-      uninstall:
-        - "sudo apt-get -y uninstall git"
+    install:
+      - "sudo apt update"
+      - "sudo apt-get -y install git"
+    update:
+      - "sudo apt-get -y upgrade git"
+    uninstall:
+      - "sudo apt-get -y uninstall git"
 ```
 
 #### machine_setup
