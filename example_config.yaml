@@ -1,0 +1,69 @@
+# Example machine_setup v2 configuration
+# Demonstrates all command types and features
+
+temp_dir: "~/.machine_setup"
+default_shell: "bash"
+parallel: false
+
+tasks:
+  greet:
+    commands:
+      - run:
+          commands: "echo 'Hello from machine_setup v2!'"
+
+  multi_step:
+    commands:
+      - run:
+          commands:
+            - "echo 'Step 1: Checking environment...'"
+            - "echo 'Step 2: Configuring settings...'"
+            - "echo 'Step 3: All done!'"
+
+  with_env_vars:
+    commands:
+      - run:
+          env:
+            MY_NAME: "machine_setup"
+            VERSION: "2.0"
+          commands: "echo \"Running $MY_NAME v$VERSION\""
+
+  mode_specific:
+    commands:
+      - run:
+          install: "echo 'Installing components...'"
+          update: "echo 'Updating components...'"
+          uninstall: "echo 'Removing components...'"
+
+  windows_task:
+    os: "windows"
+    commands:
+      - run:
+          commands: "echo 'This runs only on Windows'"
+
+  linux_task:
+    os: "linux"
+    commands:
+      - run:
+          commands: "echo 'This runs only on Linux'"
+
+  macos_task:
+    os: "macos"
+    commands:
+      - run:
+          commands: "echo 'This runs only on macOS'"
+
+  cross_platform:
+    os: ["linux", "macos", "windows"]
+    commands:
+      - run:
+          commands: "echo 'This runs on all desktop platforms'"
+
+  parallel_commands:
+    parallel: true
+    commands:
+      - run:
+          commands: "echo 'Command A (parallel)'"
+      - run:
+          commands: "echo 'Command B (parallel)'"
+      - run:
+          commands: "echo 'Command C (parallel)'"
