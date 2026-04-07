@@ -164,6 +164,8 @@ pub struct CopyArgs {
     pub target: String,
     #[serde(default)]
     pub ignore: Vec<String>,
+    #[serde(default)]
+    pub sudo: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +176,8 @@ pub struct SymlinkArgs {
     pub ignore: Vec<String>,
     #[serde(default)]
     pub force: bool,
+    #[serde(default)]
+    pub sudo: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,20 +290,20 @@ impl<'de> Deserialize<'de> for StringOrVec {
 }
 
 impl AppConfig {
-    /// Check if any run commands in the selected tasks contain `sudo`.
+    /// Check if any commands in the selected tasks require sudo.
     pub fn requires_sudo(&self, task_names: &[String]) -> bool {
         self.tasks
             .iter()
             .filter(|(name, _)| task_names.iter().any(|t| t == *name))
             .any(|(_, task)| {
-                task.commands.iter().any(|cmd| {
-                    if let CommandEntry::Run(args) = cmd {
-                        args.all_command_strings()
-                            .iter()
-                            .any(|s| s.contains("sudo"))
-                    } else {
-                        false
-                    }
+                task.commands.iter().any(|cmd| match cmd {
+                    CommandEntry::Run(args) => args
+                        .all_command_strings()
+                        .iter()
+                        .any(|s| s.contains("sudo")),
+                    CommandEntry::Copy(args) => args.sudo,
+                    CommandEntry::Symlink(args) => args.sudo,
+                    _ => false,
                 })
             })
     }
@@ -435,6 +439,7 @@ commands: "echo $MY_VAR"
             src: "./src".to_string(),
             target: "~/dest".to_string(),
             ignore: vec![],
+            sudo: false,
         });
         assert_eq!(format!("{entry}"), "copy: ./src -> ~/dest");
     }

@@ -6,6 +6,7 @@ use crate::config::types::CopyArgs;
 use crate::engine::context::CommandContext;
 use crate::error::{Error, Result};
 use crate::utils::path::{expand_path, should_ignore};
+use crate::utils::sudo;
 
 use super::CommandExecutor;
 
@@ -24,6 +25,7 @@ impl CommandExecutor for CopyCommand {
     async fn install(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+        let use_sudo = self.args.sudo;
 
         if !src.exists() {
             return Err(Error::PathError(format!(
@@ -33,22 +35,19 @@ impl CommandExecutor for CopyCommand {
         }
 
         if src.is_file() {
-            // Source is a single file — determine destination
             let dest = if target.extension().is_some() || !target.is_dir() {
-                // Target looks like a file path (e.g. /etc/wsl.conf)
                 if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent)?;
+                    mkdir(parent, use_sudo)?;
                 }
                 target.clone()
             } else {
-                // Target is a directory — place file inside it
-                std::fs::create_dir_all(&target)?;
+                mkdir(&target, use_sudo)?;
                 target.join(src.file_name().unwrap())
             };
-            copy_file(&src, &dest, ctx)?;
+            copy_file(&src, &dest, use_sudo, ctx)?;
         } else {
-            std::fs::create_dir_all(&target)?;
-            copy_directory(&src, &target, &self.args.ignore, ctx)?;
+            mkdir(&target, use_sudo)?;
+            copy_directory(&src, &target, &self.args.ignore, use_sudo, ctx)?;
         }
 
         Ok(())
@@ -62,6 +61,7 @@ impl CommandExecutor for CopyCommand {
     async fn uninstall(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+        let use_sudo = self.args.sudo;
 
         if src.is_file() {
             let dest = if target.extension().is_some() || !target.is_dir() {
@@ -71,10 +71,9 @@ impl CommandExecutor for CopyCommand {
             };
             if dest.exists() {
                 ctx.log(format!("Removing: {}", dest.display()));
-                std::fs::remove_file(&dest)?;
+                remove_file(&dest, use_sudo)?;
             }
         } else {
-            // Remove files that were copied from src to target
             for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
                 if entry.file_type().is_file() {
                     let relative = entry.path().strip_prefix(&src).unwrap();
@@ -84,7 +83,7 @@ impl CommandExecutor for CopyCommand {
                     let dest = target.join(relative);
                     if dest.exists() {
                         ctx.log(format!("Removing: {}", dest.display()));
-                        std::fs::remove_file(&dest)?;
+                        remove_file(&dest, use_sudo)?;
                     }
                 }
             }
@@ -94,33 +93,67 @@ impl CommandExecutor for CopyCommand {
     }
 
     fn description(&self) -> String {
-        format!("copy: {} -> {}", self.args.src, self.args.target)
+        let prefix = if self.args.sudo {
+            "copy (sudo)"
+        } else {
+            "copy"
+        };
+        format!("{prefix}: {} -> {}", self.args.src, self.args.target)
     }
 }
 
-fn copy_file(src: &Path, dest: &Path, ctx: &CommandContext) -> Result<()> {
+fn mkdir(path: &Path, use_sudo: bool) -> Result<()> {
+    if path.is_dir() {
+        return Ok(());
+    }
+    if use_sudo {
+        sudo::sudo_mkdir(path)
+    } else {
+        std::fs::create_dir_all(path)?;
+        Ok(())
+    }
+}
+
+fn remove_file(path: &Path, use_sudo: bool) -> Result<()> {
+    if use_sudo {
+        sudo::sudo_remove(path)
+    } else {
+        std::fs::remove_file(path)?;
+        Ok(())
+    }
+}
+
+fn copy_file(src: &Path, dest: &Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
     // Skip if target is newer
     if dest.exists() {
-        let src_modified = std::fs::metadata(src)?.modified()?;
-        let dest_modified = std::fs::metadata(dest)?.modified()?;
-        if dest_modified >= src_modified {
-            ctx.log(format!("Skipping (target newer): {}", dest.display()));
-            return Ok(());
+        if let (Ok(src_meta), Ok(dest_meta)) = (std::fs::metadata(src), std::fs::metadata(dest)) {
+            if let (Ok(src_mod), Ok(dest_mod)) = (src_meta.modified(), dest_meta.modified()) {
+                if dest_mod >= src_mod {
+                    ctx.log(format!("Skipping (target newer): {}", dest.display()));
+                    return Ok(());
+                }
+            }
         }
     }
 
     ctx.log(format!("Copying: {} -> {}", src.display(), dest.display()));
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)?;
+
+    if use_sudo {
+        sudo::sudo_copy(src, dest)
+    } else {
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(src, dest)?;
+        Ok(())
     }
-    std::fs::copy(src, dest)?;
-    Ok(())
 }
 
 fn copy_directory(
     src: &Path,
     target: &Path,
     ignore: &[String],
+    use_sudo: bool,
     ctx: &CommandContext,
 ) -> Result<()> {
     for entry in WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
@@ -133,9 +166,9 @@ fn copy_directory(
         let dest = target.join(relative);
 
         if entry.file_type().is_dir() {
-            std::fs::create_dir_all(&dest)?;
+            mkdir(&dest, use_sudo)?;
         } else {
-            copy_file(entry.path(), &dest, ctx)?;
+            copy_file(entry.path(), &dest, use_sudo, ctx)?;
         }
     }
     Ok(())

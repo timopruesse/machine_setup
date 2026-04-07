@@ -5,6 +5,7 @@ use crate::config::types::SymlinkArgs;
 use crate::engine::context::CommandContext;
 use crate::error::{Error, Result};
 use crate::utils::path::{expand_path, should_ignore};
+use crate::utils::sudo;
 
 use super::CommandExecutor;
 
@@ -23,6 +24,7 @@ impl CommandExecutor for SymlinkCommand {
     async fn install(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+        let use_sudo = self.args.sudo;
 
         if !src.exists() {
             return Err(Error::PathError(format!(
@@ -32,23 +34,18 @@ impl CommandExecutor for SymlinkCommand {
         }
 
         if src.is_file() {
-            // Source is a single file — determine destination
             let dest = if target.extension().is_some() || !target.is_dir() {
-                // Target looks like a file path (e.g. /etc/wsl.conf)
-                // Ensure the parent directory exists
                 if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent)?;
+                    mkdir(parent, use_sudo)?;
                 }
                 target.clone()
             } else {
-                // Target is a directory — place file inside it
-                std::fs::create_dir_all(&target)?;
+                mkdir(&target, use_sudo)?;
                 target.join(src.file_name().unwrap())
             };
-            create_symlink(&src, &dest, self.args.force, ctx)?;
+            create_symlink(&src, &dest, self.args.force, use_sudo, ctx)?;
         } else {
-            // Source is a directory — symlink all files into target
-            std::fs::create_dir_all(&target)?;
+            mkdir(&target, use_sudo)?;
             for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
                 let relative = entry.path().strip_prefix(&src).unwrap();
 
@@ -59,9 +56,9 @@ impl CommandExecutor for SymlinkCommand {
                 let dest = target.join(relative);
 
                 if entry.file_type().is_dir() {
-                    std::fs::create_dir_all(&dest)?;
+                    mkdir(&dest, use_sudo)?;
                 } else {
-                    create_symlink(entry.path(), &dest, self.args.force, ctx)?;
+                    create_symlink(entry.path(), &dest, self.args.force, use_sudo, ctx)?;
                 }
             }
         }
@@ -76,6 +73,7 @@ impl CommandExecutor for SymlinkCommand {
     async fn uninstall(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+        let use_sudo = self.args.sudo;
 
         if src.is_file() {
             let dest = if target.extension().is_some() || !target.is_dir() {
@@ -83,7 +81,7 @@ impl CommandExecutor for SymlinkCommand {
             } else {
                 target.join(src.file_name().unwrap())
             };
-            remove_symlink(&dest, ctx)?;
+            remove_symlink(&dest, use_sudo, ctx)?;
         } else {
             for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
                 if entry.file_type().is_file() {
@@ -92,7 +90,7 @@ impl CommandExecutor for SymlinkCommand {
                         continue;
                     }
                     let dest = target.join(relative);
-                    remove_symlink(&dest, ctx)?;
+                    remove_symlink(&dest, use_sudo, ctx)?;
                 }
             }
         }
@@ -101,7 +99,24 @@ impl CommandExecutor for SymlinkCommand {
     }
 
     fn description(&self) -> String {
-        format!("symlink: {} -> {}", self.args.src, self.args.target)
+        let prefix = if self.args.sudo {
+            "symlink (sudo)"
+        } else {
+            "symlink"
+        };
+        format!("{prefix}: {} -> {}", self.args.src, self.args.target)
+    }
+}
+
+fn mkdir(path: &std::path::Path, use_sudo: bool) -> Result<()> {
+    if path.is_dir() {
+        return Ok(());
+    }
+    if use_sudo {
+        sudo::sudo_mkdir(path)
+    } else {
+        std::fs::create_dir_all(path)?;
+        Ok(())
     }
 }
 
@@ -109,12 +124,19 @@ fn create_symlink(
     src: &std::path::Path,
     dest: &std::path::Path,
     force: bool,
+    use_sudo: bool,
     ctx: &CommandContext,
 ) -> Result<()> {
     if dest.exists() || dest.symlink_metadata().is_ok() {
         if force {
             ctx.log(format!("Removing existing: {}", dest.display()));
-            if dest.is_dir() {
+            if use_sudo {
+                if dest.is_dir() {
+                    sudo::sudo_remove_dir(dest)?;
+                } else {
+                    sudo::sudo_remove(dest)?;
+                }
+            } else if dest.is_dir() {
                 std::fs::remove_dir_all(dest)?;
             } else {
                 std::fs::remove_file(dest)?;
@@ -126,35 +148,43 @@ fn create_symlink(
     }
 
     if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)?;
+        mkdir(parent, use_sudo)?;
     }
 
     ctx.log(format!("Symlink: {} -> {}", src.display(), dest.display()));
 
-    #[cfg(unix)]
-    std::os::unix::fs::symlink(src, dest)?;
+    if use_sudo {
+        sudo::sudo_symlink(src, dest)
+    } else {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(src, dest)?;
 
-    #[cfg(windows)]
-    {
-        if src.is_dir() {
-            std::os::windows::fs::symlink_dir(src, dest)?;
-        } else {
-            std::os::windows::fs::symlink_file(src, dest)?;
+        #[cfg(windows)]
+        {
+            if src.is_dir() {
+                std::os::windows::fs::symlink_dir(src, dest)?;
+            } else {
+                std::os::windows::fs::symlink_file(src, dest)?;
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }
 
-fn remove_symlink(dest: &std::path::Path, ctx: &CommandContext) -> Result<()> {
+fn remove_symlink(dest: &std::path::Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
     if dest.symlink_metadata().is_ok() {
         ctx.log(format!("Removing symlink: {}", dest.display()));
-        #[cfg(windows)]
-        if dest.is_dir() {
-            std::fs::remove_dir(dest)?;
-            return Ok(());
+        if use_sudo {
+            sudo::sudo_remove(dest)?;
+        } else {
+            #[cfg(windows)]
+            if dest.is_dir() {
+                std::fs::remove_dir(dest)?;
+                return Ok(());
+            }
+            std::fs::remove_file(dest)?;
         }
-        std::fs::remove_file(dest)?;
     }
     Ok(())
 }
