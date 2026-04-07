@@ -178,6 +178,7 @@ This command copies the contents of a directory to another directory.
 | src      | source directory/file               |    Y     | "./src/files" or "./src/test.txt"      |
 | target   | target directory/file               |    Y     | "/tmp/target" or "/tmp/target/new.txt" |
 | ignore   | list of files/directories to ignore |    -     | ["dist", "package-lock.json"]          |
+| sudo     | run file operations with sudo       |    -     | true                                   |
 
 ##### example
 
@@ -186,6 +187,12 @@ copy:
   src: "./src/files"
   target: "/tmp/target"
   ignore: ["dist", "package-lock.json"]
+
+# Copy to a protected path
+copy:
+  src: "./etc/wsl.conf"
+  target: "/etc/wsl.conf"
+  sudo: true
 ```
 
 #### clone
@@ -215,6 +222,7 @@ This command symlinks all the files from the source directory to the target dire
 | target   | target directory/file               |    Y     | "/tmp/target" or "/tmp/new.txt"   |
 | ignore   | list of files/directories to ignore |    -     | ["dist", "package-lock.json"]     |
 | force    | true/false                          |    -     |                                   |
+| sudo     | run file operations with sudo       |    -     | true                              |
 
 > If `force` is set to `true`, existing files will be **removed** and replaced by the symlinks.
 
@@ -225,6 +233,13 @@ symlink:
   src: "./src/files"
   target: "/tmp/target"
   ignore: ["dist", "package-lock.json"]
+  force: true
+
+# Symlink to a protected path
+symlink:
+  src: "./etc/my.conf"
+  target: "/etc/my.conf"
+  sudo: true
   force: true
 ```
 
