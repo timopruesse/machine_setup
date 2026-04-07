@@ -32,12 +32,22 @@ impl CommandExecutor for CopyCommand {
             )));
         }
 
-        std::fs::create_dir_all(&target)?;
-
         if src.is_file() {
-            let dest = target.join(src.file_name().unwrap());
+            // Source is a single file — determine destination
+            let dest = if target.extension().is_some() || !target.is_dir() {
+                // Target looks like a file path (e.g. /etc/wsl.conf)
+                if let Some(parent) = target.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                target.clone()
+            } else {
+                // Target is a directory — place file inside it
+                std::fs::create_dir_all(&target)?;
+                target.join(src.file_name().unwrap())
+            };
             copy_file(&src, &dest, ctx)?;
         } else {
+            std::fs::create_dir_all(&target)?;
             copy_directory(&src, &target, &self.args.ignore, ctx)?;
         }
 
@@ -54,7 +64,11 @@ impl CommandExecutor for CopyCommand {
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
 
         if src.is_file() {
-            let dest = target.join(src.file_name().unwrap());
+            let dest = if target.extension().is_some() || !target.is_dir() {
+                target.clone()
+            } else {
+                target.join(src.file_name().unwrap())
+            };
             if dest.exists() {
                 ctx.log(format!("Removing: {}", dest.display()));
                 std::fs::remove_file(&dest)?;

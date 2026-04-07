@@ -31,12 +31,24 @@ impl CommandExecutor for SymlinkCommand {
             )));
         }
 
-        std::fs::create_dir_all(&target)?;
-
         if src.is_file() {
-            let dest = target.join(src.file_name().unwrap());
+            // Source is a single file — determine destination
+            let dest = if target.extension().is_some() || !target.is_dir() {
+                // Target looks like a file path (e.g. /etc/wsl.conf)
+                // Ensure the parent directory exists
+                if let Some(parent) = target.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                target.clone()
+            } else {
+                // Target is a directory — place file inside it
+                std::fs::create_dir_all(&target)?;
+                target.join(src.file_name().unwrap())
+            };
             create_symlink(&src, &dest, self.args.force, ctx)?;
         } else {
+            // Source is a directory — symlink all files into target
+            std::fs::create_dir_all(&target)?;
             for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
                 let relative = entry.path().strip_prefix(&src).unwrap();
 
@@ -66,7 +78,11 @@ impl CommandExecutor for SymlinkCommand {
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
 
         if src.is_file() {
-            let dest = target.join(src.file_name().unwrap());
+            let dest = if target.extension().is_some() || !target.is_dir() {
+                target
+            } else {
+                target.join(src.file_name().unwrap())
+            };
             remove_symlink(&dest, ctx)?;
         } else {
             for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
@@ -133,7 +149,6 @@ fn create_symlink(
 fn remove_symlink(dest: &std::path::Path, ctx: &CommandContext) -> Result<()> {
     if dest.symlink_metadata().is_ok() {
         ctx.log(format!("Removing symlink: {}", dest.display()));
-        // On Windows, symlinks to dirs need remove_dir
         #[cfg(windows)]
         if dest.is_dir() {
             std::fs::remove_dir(dest)?;
