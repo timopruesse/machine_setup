@@ -18,6 +18,7 @@ You can also use it for other tasks such as making the onboarding process of a n
 - **Async Engine**: Task execution powered by [tokio](https://tokio.rs/) for proper concurrent I/O (file ops, git, shell commands with streaming output).
 - **Task History**: Tracks install/update/uninstall timestamps in `~/.machine_setup/history.json`. Already-installed tasks are skipped unless `--force` is used.
 - **PowerShell Support**: Use `powershell` as a shell option alongside `bash` and `zsh`.
+- **Remote Configs**: Point directly at a URL instead of a local file — great for bootstrapping a clean machine without cloning first.
 
 ## Install
 
@@ -69,7 +70,7 @@ Supported file formats are: `yaml`, `yml`, and `json`.
 
 | flag              | value                                             | example                                            |
 | ----------------- | ------------------------------------------------- | -------------------------------------------------- |
-| -c<br> --config   | specify a different path to the config file       | `machine_setup install -c ./config/my_setup.yaml`  |
+| -c<br> --config   | path or URL to the config file                    | `machine_setup install -c ./config/my_setup.yaml`  |
 | -t<br> --task     | only run the specified task                       | `machine_setup install -t my_task2`                |
 | -s<br> --select   | select a task to run                              | `machine_setup install -s`                         |
 | -f<br> --force    | force execution (bypass history checks)           | `machine_setup install --force`                    |
@@ -78,6 +79,24 @@ Supported file formats are: `yaml`, `yml`, and `json`.
 | -v<br> --version  | display version information                       | `machine_setup --version`                          |
 | -d<br> --debug    | print additional debug information                | `machine_setup install --debug`                    |
 | -l<br> --level    | set a log level (info, warn, error, debug, trace) | `machine_setup install --level=info`               |
+
+### Remote config files
+
+You can pass a URL instead of a local path — the config is fetched and executed directly. GitHub blob URLs are automatically converted to raw URLs.
+
+```bash
+machine_setup install -c https://github.com/timopruesse/.dotfiles/blob/main/machine_setup.yaml
+```
+
+This is especially useful for setting up a fresh machine without cloning your dotfiles first:
+
+```bash
+# Install machine_setup
+curl -fsSL https://raw.githubusercontent.com/timopruesse/machine_setup/main/install/install.sh | sh
+
+# Run your dotfiles setup directly from GitHub
+machine_setup install -c https://github.com/timopruesse/.dotfiles/blob/main/machine_setup.yaml
+```
 
 ### TUI Dashboard
 
