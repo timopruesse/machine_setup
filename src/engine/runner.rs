@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 
 use crate::cli::Command;
@@ -188,12 +188,12 @@ impl TaskRunner {
         &self.config.tasks
     }
 
-    fn create_context(&self, task_name: &str, temp_dir: &PathBuf) -> CommandContext {
+    fn create_context(&self, task_name: &str, temp_dir: &Path) -> CommandContext {
         CommandContext {
             event_tx: self.event_tx.clone(),
             mode: self.mode,
             config_dir: self.config_dir.clone(),
-            temp_dir: temp_dir.clone(),
+            temp_dir: temp_dir.to_path_buf(),
             default_shell: self.config.default_shell.clone(),
             task_name: task_name.to_string(),
         }
@@ -233,7 +233,6 @@ async fn run_task(
 
         for executor in executors {
             let ctx = ctx.clone();
-            let mode = mode;
             handles.push(tokio::spawn(async move {
                 run_command(executor.as_ref(), &ctx, mode).await
             }));

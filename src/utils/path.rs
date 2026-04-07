@@ -2,9 +2,10 @@ use std::path::{Path, PathBuf};
 
 /// Expand `~` to the user's home directory and resolve relative paths.
 pub fn expand_path(path: &str, base_dir: Option<&Path>) -> PathBuf {
-    let expanded = if path.starts_with('~') {
+    let expanded = if let Some(stripped) = path.strip_prefix('~') {
         if let Some(home) = dirs::home_dir() {
-            home.join(path.strip_prefix("~/").unwrap_or(&path[1..]))
+            let rest = stripped.strip_prefix('/').unwrap_or(stripped);
+            home.join(rest)
         } else {
             PathBuf::from(path)
         }

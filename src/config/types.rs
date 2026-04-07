@@ -32,19 +32,14 @@ fn default_shell() -> Shell {
     Shell::Bash
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Shell {
+    #[default]
     Bash,
     Zsh,
     #[serde(rename = "powershell")]
     PowerShell,
-}
-
-impl Default for Shell {
-    fn default() -> Self {
-        Shell::Bash
-    }
 }
 
 impl std::fmt::Display for Shell {
