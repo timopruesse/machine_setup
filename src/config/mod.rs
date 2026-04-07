@@ -13,10 +13,7 @@ pub fn load_config(path: &Path) -> Result<AppConfig> {
     let resolved = resolve_config_path(path)?;
     let content = std::fs::read_to_string(&resolved)?;
 
-    let ext = resolved
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = resolved.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     match ext {
         "yaml" | "yml" => {

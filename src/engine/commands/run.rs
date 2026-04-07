@@ -113,7 +113,9 @@ async fn execute_script(
     ) {
         if let Some(mut stdin) = child.stdin.take() {
             use tokio::io::AsyncWriteExt;
-            stdin.write_all(script_content.as_bytes()).await
+            stdin
+                .write_all(script_content.as_bytes())
+                .await
                 .map_err(|e| Error::ShellFailed(format!("Failed to write to stdin: {e}")))?;
             // Drop stdin to signal EOF
         }
@@ -164,4 +166,3 @@ async fn execute_script(
 
     Ok(())
 }
-

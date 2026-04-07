@@ -28,10 +28,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                 .add_modifier(Modifier::BOLD),
         ),
         TaskStatus::Completed => Span::styled("completed", Style::default().fg(Color::Green)),
-        TaskStatus::Failed(e) => Span::styled(
-            format!("failed: {e}"),
-            Style::default().fg(Color::Red),
-        ),
+        TaskStatus::Failed(e) => {
+            Span::styled(format!("failed: {e}"), Style::default().fg(Color::Red))
+        }
         TaskStatus::Skipped(r) => Span::styled(
             format!("skipped: {r}"),
             Style::default().fg(Color::DarkGray),

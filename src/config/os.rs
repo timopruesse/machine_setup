@@ -66,9 +66,9 @@ impl OsFilter {
         match self {
             OsFilter::All => true,
             OsFilter::Single(os) => Os::current().as_ref() == Some(os),
-            OsFilter::Multiple(oses) => {
-                Os::current().as_ref().is_some_and(|current| oses.contains(current))
-            }
+            OsFilter::Multiple(oses) => Os::current()
+                .as_ref()
+                .is_some_and(|current| oses.contains(current)),
         }
     }
 }

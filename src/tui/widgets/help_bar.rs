@@ -8,10 +8,7 @@ use crate::tui::app::App;
 
 pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let keys = if app.done {
-        vec![
-            key_hint("q", "quit"),
-            key_hint("Up/Down", "navigate"),
-        ]
+        vec![key_hint("q", "quit"), key_hint("Up/Down", "navigate")]
     } else {
         vec![
             key_hint("q", "quit"),
@@ -23,10 +20,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let mut spans = Vec::new();
     for (i, group) in keys.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled(
-                "  |  ",
-                Style::default().fg(Color::DarkGray),
-            ));
+            spans.push(Span::styled("  |  ", Style::default().fg(Color::DarkGray)));
         }
         spans.extend(group.clone());
     }
@@ -43,9 +37,6 @@ fn key_hint(key: &str, action: &str) -> Vec<Span<'static>> {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            format!(" {action}"),
-            Style::default().fg(Color::DarkGray),
-        ),
+        Span::styled(format!(" {action}"), Style::default().fg(Color::DarkGray)),
     ]
 }

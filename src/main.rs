@@ -48,8 +48,8 @@ async fn main() -> anyhow::Result<()> {
     let cancel = CancellationToken::new();
 
     // Set up runner
-    let runner = TaskRunner::new(app_config.clone(), cli.command, event_tx)
-        .with_config_dir(config_dir);
+    let runner =
+        TaskRunner::new(app_config.clone(), cli.command, event_tx).with_config_dir(config_dir);
     let force = cli.force;
     let task_names_clone = task_names.clone();
 
@@ -133,12 +133,11 @@ fn print_task_list(config: &config::types::AppConfig) {
         let os_info = match &task.os {
             config::os::OsFilter::All => "all".to_string(),
             config::os::OsFilter::Single(os) => os.to_string(),
-            config::os::OsFilter::Multiple(oses) => {
-                oses.iter()
-                    .map(|o| o.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }
+            config::os::OsFilter::Multiple(oses) => oses
+                .iter()
+                .map(|o| o.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
         };
         let parallel = if task.parallel { " [parallel]" } else { "" };
         println!("  {name} (os: {os_info}){parallel}");

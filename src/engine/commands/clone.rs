@@ -33,7 +33,11 @@ impl CommandExecutor for CloneCommand {
             return self.update(ctx).await;
         }
 
-        ctx.log(format!("Cloning {} into {}", self.args.url, target.display()));
+        ctx.log(format!(
+            "Cloning {} into {}",
+            self.args.url,
+            target.display()
+        ));
 
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;

@@ -47,21 +47,24 @@ fn find_output(events: &[TaskEvent], task: &str, needle: &str) -> bool {
 }
 
 fn task_completed(events: &[TaskEvent], task: &str) -> bool {
-    has_event(events, |e| {
-        matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == task)
-    })
+    has_event(
+        events,
+        |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == task),
+    )
 }
 
 fn task_skipped(events: &[TaskEvent], task: &str) -> bool {
-    has_event(events, |e| {
-        matches!(e, TaskEvent::TaskSkipped { task_name, .. } if task_name == task)
-    })
+    has_event(
+        events,
+        |e| matches!(e, TaskEvent::TaskSkipped { task_name, .. } if task_name == task),
+    )
 }
 
 fn task_failed(events: &[TaskEvent], task: &str) -> bool {
-    has_event(events, |e| {
-        matches!(e, TaskEvent::TaskFailed { task_name, .. } if task_name == task)
-    })
+    has_event(
+        events,
+        |e| matches!(e, TaskEvent::TaskFailed { task_name, .. } if task_name == task),
+    )
 }
 
 // ─── Run command tests ───
@@ -279,13 +282,16 @@ tasks:
 
     let config = config::load_config(&config_path).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let runner = TaskRunner::new(config, Command::Install, tx)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     // Verify file was copied
     assert!(target_dir.join("file.txt").exists());
-    assert_eq!(fs::read_to_string(target_dir.join("file.txt")).unwrap(), "hello");
+    assert_eq!(
+        fs::read_to_string(target_dir.join("file.txt")).unwrap(),
+        "hello"
+    );
 }
 
 #[tokio::test]
@@ -319,8 +325,8 @@ tasks:
 
     let config = config::load_config(&config_path).unwrap();
     let (tx, _rx) = mpsc::unbounded_channel();
-    let runner = TaskRunner::new(config, Command::Install, tx)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     assert!(target_dir.join("keep.txt").exists());
@@ -357,8 +363,8 @@ tasks:
 
     let config = config::load_config(&config_path).unwrap();
     let (tx, _rx) = mpsc::unbounded_channel();
-    let runner = TaskRunner::new(config, Command::Install, tx)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let link = target_dir.join("dotfile");
@@ -388,15 +394,15 @@ tasks:
     // First run
     let config = config::load_config(&config_path).unwrap();
     let (tx1, _rx1) = mpsc::unbounded_channel();
-    let runner1 = TaskRunner::new(config, Command::Install, tx1)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner1 =
+        TaskRunner::new(config, Command::Install, tx1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run (should skip)
     let config2 = config::load_config(&config_path).unwrap();
     let (tx2, mut rx2) = mpsc::unbounded_channel();
-    let runner2 = TaskRunner::new(config2, Command::Install, tx2)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner2 =
+        TaskRunner::new(config2, Command::Install, tx2).with_config_dir(dir.path().to_path_buf());
     let _ = runner2.run_all(false).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -430,15 +436,15 @@ tasks:
     // First run
     let config = config::load_config(&config_path).unwrap();
     let (tx1, _rx1) = mpsc::unbounded_channel();
-    let runner1 = TaskRunner::new(config, Command::Install, tx1)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner1 =
+        TaskRunner::new(config, Command::Install, tx1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run with force
     let config2 = config::load_config(&config_path).unwrap();
     let (tx2, mut rx2) = mpsc::unbounded_channel();
-    let runner2 = TaskRunner::new(config2, Command::Install, tx2)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner2 =
+        TaskRunner::new(config2, Command::Install, tx2).with_config_dir(dir.path().to_path_buf());
     let _ = runner2.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -534,8 +540,8 @@ tasks:
 
     let config = config::load_config(&config_path).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let runner = TaskRunner::new(config, Command::Install, tx)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();
@@ -560,8 +566,8 @@ async fn test_json_config() {
 
     let config = config::load_config(&config_path).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let runner = TaskRunner::new(config, Command::Install, tx)
-        .with_config_dir(dir.path().to_path_buf());
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();

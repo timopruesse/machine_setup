@@ -110,7 +110,7 @@ fn render(f: &mut ratatui::Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header/progress bar
+            Constraint::Length(3), // Header/progress bar
             Constraint::Min(5),    // Main content
             Constraint::Length(1), // Help bar
         ])
@@ -120,10 +120,7 @@ fn render(f: &mut ratatui::Frame, app: &App) {
 
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(30),
-            Constraint::Percentage(70),
-        ])
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(chunks[1]);
 
     widgets::task_list::render(f, main_chunks[0], app);

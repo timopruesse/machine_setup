@@ -22,10 +22,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                 app.succeeded, app.failed, app.skipped
             )
         } else {
-            format!(
-                " Done: {} ok, {} skipped ",
-                app.succeeded, app.skipped
-            )
+            format!(" Done: {} ok, {} skipped ", app.succeeded, app.skipped)
         }
     } else {
         format!(" {} {}/{} ", app.mode, completed, total)

@@ -9,16 +9,10 @@ pub enum TaskEvent {
     },
 
     /// A task was skipped (OS mismatch or already installed).
-    TaskSkipped {
-        task_name: String,
-        reason: String,
-    },
+    TaskSkipped { task_name: String, reason: String },
 
     /// A command within a task produced output.
-    CommandOutput {
-        task_name: String,
-        line: String,
-    },
+    CommandOutput { task_name: String, line: String },
 
     /// A command within a task started.
     CommandStarted {
@@ -40,15 +34,10 @@ pub enum TaskEvent {
     },
 
     /// A task completed all commands successfully.
-    TaskCompleted {
-        task_name: String,
-    },
+    TaskCompleted { task_name: String },
 
     /// A task failed.
-    TaskFailed {
-        task_name: String,
-        error: String,
-    },
+    TaskFailed { task_name: String, error: String },
 
     /// All tasks are done.
     AllDone {

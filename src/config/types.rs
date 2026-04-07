@@ -1,7 +1,7 @@
+use super::os::OsFilter;
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
-use super::os::OsFilter;
 
 /// Root configuration structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]

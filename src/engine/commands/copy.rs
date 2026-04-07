@@ -103,7 +103,12 @@ fn copy_file(src: &Path, dest: &Path, ctx: &CommandContext) -> Result<()> {
     Ok(())
 }
 
-fn copy_directory(src: &Path, target: &Path, ignore: &[String], ctx: &CommandContext) -> Result<()> {
+fn copy_directory(
+    src: &Path,
+    target: &Path,
+    ignore: &[String],
+    ctx: &CommandContext,
+) -> Result<()> {
     for entry in WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
         let relative = entry.path().strip_prefix(src).unwrap();
 

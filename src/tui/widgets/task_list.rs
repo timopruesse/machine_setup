@@ -13,28 +13,19 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         .enumerate()
         .map(|(i, task)| {
             let (symbol, style) = match &task.status {
-                TaskStatus::Pending => (
-                    "  ",
-                    Style::default().fg(Color::DarkGray),
-                ),
+                TaskStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),
                 TaskStatus::Running => (
                     ">>",
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
-                TaskStatus::Completed => (
-                    "OK",
-                    Style::default().fg(Color::Green),
-                ),
+                TaskStatus::Completed => ("OK", Style::default().fg(Color::Green)),
                 TaskStatus::Failed(_) => (
                     "XX",
                     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 ),
-                TaskStatus::Skipped(_) => (
-                    "--",
-                    Style::default().fg(Color::DarkGray),
-                ),
+                TaskStatus::Skipped(_) => ("--", Style::default().fg(Color::DarkGray)),
             };
 
             let indicator = if i == app.selected { ">" } else { " " };
