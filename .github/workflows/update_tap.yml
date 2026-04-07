@@ -1,0 +1,17 @@
+on:
+  release:
+    types: [published]
+
+name: Update Homebrew tap
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@v3
+        with:
+          tag-name: ${{ github.event.release.tag_name }}
+          formula-name: machine-setup
+          homebrew-tap: Chroma91/homebrew-repo
+        env:
+          COMMITTER_TOKEN: ${{ secrets.REPO_TOKEN }}

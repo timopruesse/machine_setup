@@ -1,0 +1,80 @@
+on:
+  push:
+    tags:
+      - "v*"
+
+name: Builds
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: ""
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - run: cargo build --release --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: machine-setup-${{ matrix.target }}
+          path: ./target/${{ matrix.target }}/release/machine-setup${{ matrix.suffix }}
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Package artifacts
+        run: |
+          cd artifacts
+          for dir in machine-setup-*; do
+            target="${dir#machine-setup-}"
+            if [[ "$target" == *"windows"* ]]; then
+              zip "../${dir}.zip" -j "$dir"/*
+            else
+              chmod +x "$dir"/*
+              tar czf "../${dir}.tar.gz" -C "$dir" .
+            fi
+          done
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "machine-setup-*.tar.gz,machine-setup-*.zip"
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}

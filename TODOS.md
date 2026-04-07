@@ -1,0 +1,18 @@
+# TODOs
+
+## Next
+
+- `depends_on` field for task ordering (DAG-based dependency resolution)
+- conditional tasks: only run if a certain file/directory exists (or doesn't)
+- shell completions generation via `clap_complete`
+- config validation subcommand (`machine-setup validate`)
+- fix homebrew/tap setup
+- add option to run `copy` and `symlink` as root user (needed for some system files)
+- Apple Silicon (aarch64-apple-darwin) native build target
+- JSON examples in documentation
+
+### Low priority
+
+- release script: copy markdown changelog from tag to GitHub release automatically
+- refactor TUI: add task filtering / search
+- task retry on failure
