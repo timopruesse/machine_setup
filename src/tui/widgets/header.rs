@@ -10,7 +10,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let completed = app.completed_tasks();
     let total = app.total_tasks();
     let ratio = if total > 0 {
-        completed as f64 / total as f64
+        (completed as f64 / total as f64).min(1.0)
     } else {
         0.0
     };

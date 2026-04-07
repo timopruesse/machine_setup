@@ -85,77 +85,70 @@ impl App {
     }
 
     /// Process a task event and update state.
+    /// Tasks from sub-configs are added dynamically if not already known.
     pub fn handle_event(&mut self, event: TaskEvent) {
         match event {
             TaskEvent::TaskStarted {
                 task_name,
                 command_count,
             } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.status = TaskStatus::Running;
-                    task.command_count = command_count;
-                    task.log_lines
-                        .push(format!("Starting ({command_count} commands)..."));
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.status = TaskStatus::Running;
+                task.command_count = command_count;
+                task.log_lines
+                    .push(format!("Starting ({command_count} commands)..."));
                 if self.auto_select {
                     self.select_task(&task_name);
                 }
             }
             TaskEvent::TaskSkipped { task_name, reason } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.status = TaskStatus::Skipped(reason.clone());
-                    task.log_lines.push(format!("Skipped: {reason}"));
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.status = TaskStatus::Skipped(reason.clone());
+                task.log_lines.push(format!("Skipped: {reason}"));
                 self.skipped += 1;
             }
             TaskEvent::CommandStarted {
                 task_name,
                 command_desc,
             } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.current_command = Some(command_desc.clone());
-                    task.log_lines.push(format!("> {command_desc}"));
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.current_command = Some(command_desc.clone());
+                task.log_lines.push(format!("> {command_desc}"));
                 self.auto_scroll_log();
             }
             TaskEvent::CommandOutput { task_name, line } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.log_lines.push(format!("  {line}"));
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.log_lines.push(format!("  {line}"));
                 self.auto_scroll_log();
             }
             TaskEvent::CommandCompleted {
                 task_name,
                 command_desc,
             } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.current_command = None;
-                    task.log_lines.push(format!("  [done] {command_desc}"));
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.current_command = None;
+                task.log_lines.push(format!("  [done] {command_desc}"));
             }
             TaskEvent::CommandFailed {
                 task_name,
                 command_desc,
                 error,
             } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.current_command = None;
-                    task.log_lines
-                        .push(format!("  [FAILED] {command_desc}: {error}"));
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.current_command = None;
+                task.log_lines
+                    .push(format!("  [FAILED] {command_desc}: {error}"));
             }
             TaskEvent::TaskCompleted { task_name } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.status = TaskStatus::Completed;
-                    task.log_lines.push("Completed successfully.".to_string());
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.status = TaskStatus::Completed;
+                task.log_lines.push("Completed successfully.".to_string());
                 self.succeeded += 1;
             }
             TaskEvent::TaskFailed { task_name, error } => {
-                if let Some(task) = self.find_task_mut(&task_name) {
-                    task.status = TaskStatus::Failed(error.clone());
-                    task.log_lines.push(format!("FAILED: {error}"));
-                }
+                let task = self.find_or_create_task(&task_name);
+                task.status = TaskStatus::Failed(error.clone());
+                task.log_lines.push(format!("FAILED: {error}"));
                 self.failed += 1;
             }
             TaskEvent::AllDone { .. } => {
@@ -208,8 +201,12 @@ impl App {
         self.succeeded + self.failed + self.skipped
     }
 
-    fn find_task_mut(&mut self, name: &str) -> Option<&mut TaskState> {
-        self.tasks.iter_mut().find(|t| t.name == name)
+    /// Find a task by name, or create it if it doesn't exist (e.g. sub-config tasks).
+    fn find_or_create_task(&mut self, name: &str) -> &mut TaskState {
+        if !self.tasks.iter().any(|t| t.name == name) {
+            self.tasks.push(TaskState::new(name.to_string()));
+        }
+        self.tasks.iter_mut().find(|t| t.name == name).unwrap()
     }
 
     fn select_task(&mut self, name: &str) {
