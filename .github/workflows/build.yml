@@ -77,4 +77,4 @@ jobs:
         with:
           artifacts: "machine-setup-*.tar.gz,machine-setup-*.zip"
           generateReleaseNotes: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.REPO_TOKEN }}
