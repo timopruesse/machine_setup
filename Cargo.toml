@@ -1,6 +1,6 @@
 [package]
 name = "machine_setup"
-version = "2.1.0"
+version = "2.1.1"
 edition = "2021"
 description = "A CLI tool with TUI for automating machine configuration and setup tasks"
 license = "MIT OR Apache-2.0"
