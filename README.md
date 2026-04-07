@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/timopruesse/machine_setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/timopruesse/machine_setup/actions/workflows/test.yml)
 [![Builds](https://github.com/timopruesse/machine_setup/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/timopruesse/machine_setup/actions/workflows/build.yml)
-[![Crates.io](https://img.shields.io/crates/v/machine-setup)](https://crates.io/crates/machine-setup)
+[![Crates.io](https://img.shields.io/crates/v/machine_setup)](https://crates.io/crates/machine_setup)
 
 The idea is to be able to replicate a certain setup (when resetting your machine or using a completely new machine).
 Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.
@@ -24,7 +24,7 @@ You can also use it for other tasks such as making the onboarding process of a n
 Install via `cargo` or download a binary from the [release page](https://github.com/timopruesse/machine_setup/releases).
 
 ```bash
-cargo install machine-setup
+cargo install machine_setup
 ```
 
 ## Run
@@ -33,27 +33,27 @@ cargo install machine-setup
 
 | command   | description                   | example                    |
 | --------- | ----------------------------- | -------------------------- |
-| install   | install the defined tasks     | `machine-setup install`    |
-| update    | update the defined tasks      | `machine-setup update`     |
-| uninstall | uninstall the defined tasks   | `machine-setup uninstall`  |
-| list      | list all of the defined tasks | `machine-setup list`       |
+| install   | install the defined tasks     | `machine_setup install`    |
+| update    | update the defined tasks      | `machine_setup update`     |
+| uninstall | uninstall the defined tasks   | `machine_setup uninstall`  |
+| list      | list all of the defined tasks | `machine_setup list`       |
 
-By default, `machine-setup` will look for a file called `machine_setup` with a supported file format.
+By default, `machine_setup` will look for a file called `machine_setup` with a supported file format.
 Supported file formats are: `yaml`, `yml`, and `json`.
 
 ### Command line parameters
 
 | flag              | value                                             | example                                            |
 | ----------------- | ------------------------------------------------- | -------------------------------------------------- |
-| -c<br> --config   | specify a different path to the config file       | `machine-setup install -c ./config/my_setup.yaml`  |
-| -t<br> --task     | only run the specified task                       | `machine-setup install -t my_task2`                |
-| -s<br> --select   | select a task to run                              | `machine-setup install -s`                         |
-| -f<br> --force    | force execution (bypass history checks)           | `machine-setup install --force`                    |
-| --no-tui          | disable TUI, use plain log output                 | `machine-setup install --no-tui`                   |
-| -h<br> --help     | display help information                          | `machine-setup --help`                             |
-| -v<br> --version  | display version information                       | `machine-setup --version`                          |
-| -d<br> --debug    | print additional debug information                | `machine-setup install --debug`                    |
-| -l<br> --level    | set a log level (info, warn, error, debug, trace) | `machine-setup install --level=info`               |
+| -c<br> --config   | specify a different path to the config file       | `machine_setup install -c ./config/my_setup.yaml`  |
+| -t<br> --task     | only run the specified task                       | `machine_setup install -t my_task2`                |
+| -s<br> --select   | select a task to run                              | `machine_setup install -s`                         |
+| -f<br> --force    | force execution (bypass history checks)           | `machine_setup install --force`                    |
+| --no-tui          | disable TUI, use plain log output                 | `machine_setup install --no-tui`                   |
+| -h<br> --help     | display help information                          | `machine_setup --help`                             |
+| -v<br> --version  | display version information                       | `machine_setup --version`                          |
+| -d<br> --debug    | print additional debug information                | `machine_setup install --debug`                    |
+| -l<br> --level    | set a log level (info, warn, error, debug, trace) | `machine_setup install --level=info`               |
 
 ### TUI Dashboard
 

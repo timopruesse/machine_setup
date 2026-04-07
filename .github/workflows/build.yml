@@ -25,13 +25,13 @@ jobs:
             target: x86_64-pc-windows-msvc
             suffix: .exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -41,10 +41,10 @@ jobs:
 
       - run: cargo build --release --target ${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
-          name: machine-setup-${{ matrix.target }}
-          path: ./target/${{ matrix.target }}/release/machine-setup${{ matrix.suffix }}
+          name: machine_setup-${{ matrix.target }}
+          path: ./target/${{ matrix.target }}/release/machine_setup${{ matrix.suffix }}
 
   release:
     name: Release
@@ -53,17 +53,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: artifacts
 
       - name: Package artifacts
         run: |
           cd artifacts
-          for dir in machine-setup-*; do
-            target="${dir#machine-setup-}"
+          for dir in machine_setup-*; do
+            target="${dir#machine_setup-}"
             if [[ "$target" == *"windows"* ]]; then
               zip "../${dir}.zip" -j "$dir"/*
             else
@@ -75,6 +75,6 @@ jobs:
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "machine-setup-*.tar.gz,machine-setup-*.zip"
+          artifacts: "machine_setup-*.tar.gz,machine_setup-*.zip"
           generateReleaseNotes: true
           token: ${{ secrets.REPO_TOKEN }}

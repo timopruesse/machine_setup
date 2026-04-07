@@ -624,7 +624,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "machine-setup"
+name = "machine_setup"
 version = "2.0.0"
 dependencies = [
  "anyhow",
