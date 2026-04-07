@@ -285,6 +285,24 @@ impl<'de> Deserialize<'de> for StringOrVec {
     }
 }
 
+impl AppConfig {
+    /// Check if any run commands in the selected tasks contain `sudo`.
+    pub fn requires_sudo(&self, task_names: &[String]) -> bool {
+        self.tasks
+            .iter()
+            .filter(|(name, _)| task_names.iter().any(|t| t == *name))
+            .any(|(_, task)| {
+                task.commands.iter().any(|cmd| {
+                    if let CommandEntry::Run(args) = cmd {
+                        args.all_command_strings().iter().any(|s| s.contains("sudo"))
+                    } else {
+                        false
+                    }
+                })
+            })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

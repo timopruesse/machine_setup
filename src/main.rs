@@ -55,6 +55,11 @@ async fn main() -> anyhow::Result<()> {
     // Determine if we should use the TUI
     let use_tui = !cli.no_tui && atty::is(atty::Stream::Stdout);
 
+    // Pre-authenticate sudo before TUI takes over the terminal
+    if use_tui && app_config.requires_sudo(&task_names) {
+        pre_authenticate_sudo();
+    }
+
     if use_tui {
         // Spawn engine in background
         let engine_cancel = cancel.clone();
@@ -145,6 +150,34 @@ fn print_task_list(config: &config::types::AppConfig) {
             println!("    - {cmd}");
         }
         println!();
+    }
+}
+
+/// Run `sudo -v` to cache credentials before the TUI takes over stdin.
+/// This way sudo commands inside tasks won't hang waiting for a password prompt.
+fn pre_authenticate_sudo() {
+    #[cfg(unix)]
+    {
+        use std::process::Command as StdCommand;
+
+        // Check if sudo is available
+        if StdCommand::new("sudo")
+            .arg("-n")
+            .arg("true")
+            .status()
+            .is_ok_and(|s| s.success())
+        {
+            // Already authenticated (passwordless or cached), no prompt needed
+            return;
+        }
+
+        eprintln!("Some tasks require sudo. Please enter your password:");
+        let _ = StdCommand::new("sudo")
+            .arg("-v")
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status();
     }
 }
 
