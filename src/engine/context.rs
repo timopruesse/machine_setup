@@ -26,6 +26,9 @@ pub struct CommandContext {
 
     /// Name of the current task being executed.
     pub task_name: String,
+
+    /// Nesting depth (0 = top-level, 1 = sub-config, etc.)
+    pub depth: usize,
 }
 
 impl CommandContext {

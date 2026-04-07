@@ -40,6 +40,8 @@ pub struct TaskState {
     pub log_lines: Vec<String>,
     pub command_count: usize,
     pub current_command: Option<String>,
+    /// Nesting depth (0 = top-level, 1+ = sub-config)
+    pub depth: usize,
 }
 
 impl TaskState {
@@ -50,6 +52,7 @@ impl TaskState {
             log_lines: Vec::new(),
             command_count: 0,
             current_command: None,
+            depth: 0,
         }
     }
 }
@@ -91,10 +94,12 @@ impl App {
             TaskEvent::TaskStarted {
                 task_name,
                 command_count,
+                depth,
             } => {
                 let task = self.find_or_create_task(&task_name);
                 task.status = TaskStatus::Running;
                 task.command_count = command_count;
+                task.depth = depth;
                 task.log_lines
                     .push(format!("Starting ({command_count} commands)..."));
                 if self.auto_select {

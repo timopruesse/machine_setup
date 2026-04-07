@@ -16,6 +16,7 @@ pub struct TaskRunner {
     mode: Command,
     event_tx: mpsc::UnboundedSender<TaskEvent>,
     config_dir: PathBuf,
+    depth: usize,
 }
 
 impl TaskRunner {
@@ -29,11 +30,17 @@ impl TaskRunner {
             mode,
             event_tx,
             config_dir: std::env::current_dir().unwrap_or_default(),
+            depth: 0,
         }
     }
 
     pub fn with_config_dir(mut self, dir: PathBuf) -> Self {
         self.config_dir = dir;
+        self
+    }
+
+    pub fn with_depth(mut self, depth: usize) -> Self {
+        self.depth = depth;
         self
     }
 
@@ -90,9 +97,10 @@ impl TaskRunner {
                 let ctx = self.create_context(name, &temp_dir);
                 let task = task_config.clone();
                 let mode = self.mode;
+                let depth = self.depth;
                 let name = name.clone();
                 handles.push(tokio::spawn(async move {
-                    let result = run_task(&name, &task, &ctx, mode).await;
+                    let result = run_task(&name, &task, &ctx, mode, depth).await;
                     (name, result)
                 }));
             }
@@ -142,7 +150,7 @@ impl TaskRunner {
 
                 let ctx = self.create_context(name, &temp_dir);
 
-                match run_task(name, task_config, &ctx, self.mode).await {
+                match run_task(name, task_config, &ctx, self.mode, self.depth).await {
                     Ok(()) => {
                         self.update_history(&mut history, name);
                         succeeded += 1;
@@ -196,6 +204,7 @@ impl TaskRunner {
             temp_dir: temp_dir.to_path_buf(),
             default_shell: self.config.default_shell.clone(),
             task_name: task_name.to_string(),
+            depth: self.depth,
         }
     }
 
@@ -218,10 +227,12 @@ async fn run_task(
     task: &TaskConfig,
     ctx: &CommandContext,
     mode: Command,
+    depth: usize,
 ) -> Result<()> {
     let _ = ctx.event_tx.send(TaskEvent::TaskStarted {
         task_name: name.to_string(),
         command_count: task.commands.len(),
+        depth,
     });
 
     let executors: Vec<Box<dyn CommandExecutor>> =

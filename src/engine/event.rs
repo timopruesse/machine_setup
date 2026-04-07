@@ -6,6 +6,8 @@ pub enum TaskEvent {
     TaskStarted {
         task_name: String,
         command_count: usize,
+        /// Nesting depth (0 = top-level, 1 = sub-config, etc.)
+        depth: usize,
     },
 
     /// A task was skipped (OS mismatch or already installed).

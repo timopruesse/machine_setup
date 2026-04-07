@@ -29,6 +29,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
             };
 
             let indicator = if i == app.selected { ">" } else { " " };
+            let indent = "  ".repeat(task.depth);
 
             let line = Line::from(vec![
                 Span::styled(
@@ -41,6 +42,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                         Style::default()
                     },
                 ),
+                Span::raw(indent),
                 Span::styled(format!("[{symbol}] "), style),
                 Span::styled(
                     &task.name,

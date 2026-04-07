@@ -9,8 +9,10 @@ pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
             TaskEvent::TaskStarted {
                 task_name,
                 command_count,
+                depth,
             } => {
-                println!(">> Starting: {task_name} ({command_count} commands)");
+                let indent = "  ".repeat(*depth);
+                println!("{indent}>> Starting: {task_name} ({command_count} commands)");
             }
             TaskEvent::TaskSkipped { task_name, reason } => {
                 println!("-- Skipped: {task_name} ({reason})");

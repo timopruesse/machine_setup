@@ -67,7 +67,8 @@ async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result
     };
 
     let runner = crate::engine::runner::TaskRunner::new(config, ctx.mode, ctx.event_tx.clone())
-        .with_config_dir(sub_config_dir);
+        .with_config_dir(sub_config_dir)
+        .with_depth(ctx.depth + 1);
 
     if let Some(task_name) = &args.task {
         runner.run_single_task(task_name, false).await
