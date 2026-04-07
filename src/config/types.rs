@@ -294,7 +294,9 @@ impl AppConfig {
             .any(|(_, task)| {
                 task.commands.iter().any(|cmd| {
                     if let CommandEntry::Run(args) = cmd {
-                        args.all_command_strings().iter().any(|s| s.contains("sudo"))
+                        args.all_command_strings()
+                            .iter()
+                            .any(|s| s.contains("sudo"))
                     } else {
                         false
                     }
