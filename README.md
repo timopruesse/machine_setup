@@ -21,11 +21,35 @@ You can also use it for other tasks such as making the onboarding process of a n
 
 ## Install
 
-Install via `cargo` or download a binary from the [release page](https://github.com/timopruesse/machine_setup/releases).
+### Quick Install (no dependencies needed)
+
+**macOS / Linux:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/timopruesse/machine_setup/main/install/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/timopruesse/machine_setup/main/install/install.ps1 | iex
+```
+
+### Other methods
+
+**Via Homebrew (macOS / Linux):**
+
+```bash
+brew install timopruesse/repo/machine_setup
+```
+
+**Via Cargo:**
 
 ```bash
 cargo install machine_setup
 ```
+
+**Manual download:** Grab a binary from the [release page](https://github.com/timopruesse/machine_setup/releases).
 
 ## Run
 
