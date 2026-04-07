@@ -12,7 +12,7 @@ use engine::runner::TaskRunner;
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Load config
+    // Load config (supports local paths and URLs)
     let app_config = config::load_config(&cli.config)?;
 
     // Handle list command
@@ -35,9 +35,8 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Resolve config directory for relative paths
-    let config_dir = cli
-        .config
+    // Resolve config directory for relative paths (URLs fall back to cwd)
+    let config_dir = std::path::Path::new(&cli.config)
         .canonicalize()
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))

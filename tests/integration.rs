@@ -13,7 +13,7 @@ async fn run_config(yaml: &str, mode: Command) -> Vec<TaskEvent> {
     let config_path = dir.path().join("config.yaml");
     fs::write(&config_path, yaml).unwrap();
 
-    let mut config = config::load_config(&config_path).unwrap();
+    let mut config = config::load_config(config_path.to_str().unwrap()).unwrap();
     // Use test-local temp_dir so history doesn't leak between tests
     config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
 
@@ -280,7 +280,7 @@ tasks:
     )
     .unwrap();
 
-    let config = config::load_config(&config_path).unwrap();
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
         TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
@@ -323,7 +323,7 @@ tasks:
     )
     .unwrap();
 
-    let config = config::load_config(&config_path).unwrap();
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, _rx) = mpsc::unbounded_channel();
     let runner =
         TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
@@ -361,7 +361,7 @@ tasks:
     )
     .unwrap();
 
-    let config = config::load_config(&config_path).unwrap();
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, _rx) = mpsc::unbounded_channel();
     let runner =
         TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
@@ -392,14 +392,14 @@ tasks:
     fs::write(&config_path, &config_yaml).unwrap();
 
     // First run
-    let config = config::load_config(&config_path).unwrap();
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx1, _rx1) = mpsc::unbounded_channel();
     let runner1 =
         TaskRunner::new(config, Command::Install, tx1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run (should skip)
-    let config2 = config::load_config(&config_path).unwrap();
+    let config2 = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx2, mut rx2) = mpsc::unbounded_channel();
     let runner2 =
         TaskRunner::new(config2, Command::Install, tx2).with_config_dir(dir.path().to_path_buf());
@@ -434,14 +434,14 @@ tasks:
     fs::write(&config_path, &config_yaml).unwrap();
 
     // First run
-    let config = config::load_config(&config_path).unwrap();
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx1, _rx1) = mpsc::unbounded_channel();
     let runner1 =
         TaskRunner::new(config, Command::Install, tx1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run with force
-    let config2 = config::load_config(&config_path).unwrap();
+    let config2 = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx2, mut rx2) = mpsc::unbounded_channel();
     let runner2 =
         TaskRunner::new(config2, Command::Install, tx2).with_config_dir(dir.path().to_path_buf());
@@ -538,7 +538,7 @@ tasks:
     )
     .unwrap();
 
-    let config = config::load_config(&config_path).unwrap();
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
         TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
@@ -564,7 +564,7 @@ async fn test_json_config() {
     )
     .unwrap();
 
-    let config = config::load_config(&config_path).unwrap();
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
         TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());

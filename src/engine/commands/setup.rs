@@ -41,20 +41,31 @@ impl CommandExecutor for SetupCommand {
 }
 
 async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result<()> {
-    let config_path = expand_path(&args.config, Some(&ctx.config_dir));
+    let is_url = args.config.starts_with("http://") || args.config.starts_with("https://");
 
-    ctx.log(format!("Loading sub-config: {}", config_path.display()));
+    let config_str = if is_url {
+        args.config.clone()
+    } else {
+        let config_path = expand_path(&args.config, Some(&ctx.config_dir));
+        config_path.to_string_lossy().to_string()
+    };
 
-    let config = crate::config::load_config(&config_path)?;
+    ctx.log(format!("Loading sub-config: {config_str}"));
+
+    let config = crate::config::load_config(&config_str)?;
 
     // Resolve the sub-config's directory for its own relative paths
-    let sub_config_dir = config_path
-        .canonicalize()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| ctx.config_dir.clone());
+    // URLs fall back to parent's config_dir
+    let sub_config_dir = if is_url {
+        ctx.config_dir.clone()
+    } else {
+        std::path::Path::new(&config_str)
+            .canonicalize()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| ctx.config_dir.clone())
+    };
 
-    // Create a sub-runner with the sub-config's own directory
     let runner = crate::engine::runner::TaskRunner::new(config, ctx.mode, ctx.event_tx.clone())
         .with_config_dir(sub_config_dir);
 

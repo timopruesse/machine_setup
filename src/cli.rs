@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -11,9 +10,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 
-    /// Path to config file (YAML/JSON auto-detected)
+    /// Path or URL to config file (YAML/JSON auto-detected)
     #[arg(short, long, global = true, default_value = "./machine_setup")]
-    pub config: PathBuf,
+    pub config: String,
 
     /// Run only a specific task by name
     #[arg(short, long, global = true)]
