@@ -1,6 +1,7 @@
 pub mod history;
 pub mod os;
 pub mod types;
+pub mod validate;
 
 use std::path::Path;
 
@@ -22,7 +23,7 @@ pub fn load_config(path_or_url: &str) -> Result<AppConfig> {
     }
 }
 
-fn is_url(s: &str) -> bool {
+pub fn is_url(s: &str) -> bool {
     s.starts_with("http://") || s.starts_with("https://")
 }
 

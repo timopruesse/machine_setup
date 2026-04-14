@@ -1,6 +1,7 @@
 use machine_setup::{cli, config, engine, error, tui};
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use std::io::IsTerminal;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -12,12 +13,47 @@ use engine::runner::TaskRunner;
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
+    // Handle completions (no config needed)
+    if let Command::Completions { shell } = &cli.command {
+        let mut cmd = Cli::command();
+        clap_complete::generate(*shell, &mut cmd, "machine_setup", &mut std::io::stdout());
+        return Ok(());
+    }
+
     // Load config (supports local paths and URLs)
     let app_config = config::load_config(&cli.config)?;
 
     // Handle list command
     if cli.command == Command::List {
         print_task_list(&app_config);
+        return Ok(());
+    }
+
+    // Handle validate command
+    if cli.command == Command::Validate {
+        let config_dir = std::path::Path::new(&cli.config)
+            .canonicalize()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+        let issues = config::validate::validate_config(&app_config, &config_dir);
+        if issues.is_empty() {
+            println!("Config is valid.");
+        } else {
+            let has_errors = issues
+                .iter()
+                .any(|i| matches!(i.severity, config::validate::Severity::Error));
+            for issue in &issues {
+                println!(
+                    "[{}] {}: {}",
+                    issue.severity, issue.task_name, issue.message
+                );
+            }
+            if has_errors {
+                std::process::exit(1);
+            }
+        }
         return Ok(());
     }
 
@@ -47,13 +83,13 @@ async fn main() -> anyhow::Result<()> {
     let cancel = CancellationToken::new();
 
     // Set up runner
-    let runner =
-        TaskRunner::new(app_config.clone(), cli.command, event_tx).with_config_dir(config_dir);
+    let runner = TaskRunner::new(app_config.clone(), cli.command.clone(), event_tx)
+        .with_config_dir(config_dir);
     let force = cli.force;
     let task_names_clone = task_names.clone();
 
     // Determine if we should use the TUI
-    let use_tui = !cli.no_tui && atty::is(atty::Stream::Stdout);
+    let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
 
     // Pre-authenticate sudo before TUI takes over the terminal
     if use_tui && app_config.requires_sudo(&task_names) {

@@ -57,7 +57,7 @@ async fn run_for_mode(
     }
 
     let active_shell = args.shell.as_ref().unwrap_or(&ctx.default_shell);
-    let script = shell::build_shell_command(commands, active_shell, &args.env);
+    let script = shell::build_shell_command(commands, active_shell, &args.env)?;
 
     // Write temp script
     let script_path = shell::write_temp_script(&script, active_shell, &ctx.temp_dir)?;

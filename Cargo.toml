@@ -9,6 +9,7 @@ authors = ["Timo Pruesse"]
 [dependencies]
 # CLI
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -37,7 +38,6 @@ walkdir = "2"
 dialoguer = "0.12"
 async-trait = "0.1"
 tokio-util = "0.7"
-atty = "0.2"
 indexmap = { version = "2", features = ["serde"] }
 ureq = "3"
 

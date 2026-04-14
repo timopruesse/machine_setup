@@ -96,7 +96,7 @@ impl TaskRunner {
 
                 let ctx = self.create_context(name, &temp_dir);
                 let task = task_config.clone();
-                let mode = self.mode;
+                let mode = self.mode.clone();
                 let depth = self.depth;
                 let name = name.clone();
                 handles.push(tokio::spawn(async move {
@@ -150,7 +150,7 @@ impl TaskRunner {
 
                 let ctx = self.create_context(name, &temp_dir);
 
-                match run_task(name, task_config, &ctx, self.mode, self.depth).await {
+                match run_task(name, task_config, &ctx, self.mode.clone(), self.depth).await {
                     Ok(()) => {
                         self.update_history(&mut history, name);
                         succeeded += 1;
@@ -199,7 +199,7 @@ impl TaskRunner {
     fn create_context(&self, task_name: &str, temp_dir: &Path) -> CommandContext {
         CommandContext {
             event_tx: self.event_tx.clone(),
-            mode: self.mode,
+            mode: self.mode.clone(),
             config_dir: self.config_dir.clone(),
             temp_dir: temp_dir.to_path_buf(),
             default_shell: self.config.default_shell.clone(),
@@ -213,7 +213,7 @@ impl TaskRunner {
             Command::Install => history.mark_installed(task_name),
             Command::Update => history.mark_updated(task_name),
             Command::Uninstall => history.mark_uninstalled(task_name),
-            Command::List => {}
+            Command::List | Command::Validate | Command::Completions { .. } => {}
         }
     }
 
@@ -244,6 +244,7 @@ async fn run_task(
 
         for executor in executors {
             let ctx = ctx.clone();
+            let mode = mode.clone();
             handles.push(tokio::spawn(async move {
                 run_command(executor.as_ref(), &ctx, mode).await
             }));
@@ -261,7 +262,7 @@ async fn run_task(
                 command_desc: desc.clone(),
             });
 
-            match run_command(executor.as_ref(), ctx, mode).await {
+            match run_command(executor.as_ref(), ctx, mode.clone()).await {
                 Ok(()) => {
                     let _ = ctx.event_tx.send(TaskEvent::CommandCompleted {
                         task_name: name.to_string(),
@@ -296,6 +297,6 @@ async fn run_command(
         Command::Install => executor.install(ctx).await,
         Command::Update => executor.update(ctx).await,
         Command::Uninstall => executor.uninstall(ctx).await,
-        Command::List => Ok(()),
+        Command::List | Command::Validate | Command::Completions { .. } => Ok(()),
     }
 }
