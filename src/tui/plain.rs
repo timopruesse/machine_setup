@@ -45,6 +45,14 @@ pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
             TaskEvent::TaskFailed { task_name, error } => {
                 eprintln!("XX {task_name}: {error}");
             }
+            TaskEvent::TaskRetry {
+                task_name,
+                attempt,
+                max_attempts,
+                error,
+            } => {
+                println!("   [{task_name}]   Retry {attempt}/{max_attempts}: {error}");
+            }
             TaskEvent::AllDone {
                 succeeded,
                 failed,

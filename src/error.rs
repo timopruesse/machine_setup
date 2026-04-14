@@ -32,6 +32,12 @@ pub enum Error {
     #[error("History error: {0}")]
     HistoryError(String),
 
+    #[error("Cyclic dependency detected: {0}")]
+    CyclicDependency(String),
+
+    #[error("Unknown dependency: task '{0}' depends on '{1}' which does not exist")]
+    MissingDependency(String, String),
+
     #[error("{0}")]
     Other(String),
 }

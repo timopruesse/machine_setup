@@ -1,16 +1,31 @@
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use crate::tui::app::{App, TaskStatus};
 
 pub fn render(f: &mut Frame, area: Rect, app: &App) {
+    // Split area: main task list + optional search bar at bottom
+    let (list_area, search_area) = if app.search_mode || !app.search_query.is_empty() {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(area);
+        (chunks[0], Some(chunks[1]))
+    } else {
+        (area, None)
+    };
+
+    let filtered_set: std::collections::HashSet<usize> =
+        app.filtered_indices.iter().copied().collect();
+
     let items: Vec<ListItem> = app
         .tasks
         .iter()
         .enumerate()
+        .filter(|(i, _)| filtered_set.contains(i))
         .map(|(i, task)| {
             let (symbol, style) = match &task.status {
                 TaskStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),
@@ -58,6 +73,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
+    // Compute which filtered position is selected
+    let selected_pos = app.filtered_indices.iter().position(|&i| i == app.selected);
+
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
@@ -71,7 +89,27 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     );
 
     let mut state = ListState::default();
-    state.select(Some(app.selected));
+    state.select(selected_pos);
 
-    f.render_stateful_widget(list, area, &mut state);
+    f.render_stateful_widget(list, list_area, &mut state);
+
+    // Render search bar if active or has a query
+    if let Some(search_area) = search_area {
+        let search_line = Line::from(vec![
+            Span::styled(
+                "/",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(&app.search_query, Style::default().fg(Color::White)),
+            if app.search_mode {
+                Span::styled("_", Style::default().fg(Color::Cyan))
+            } else {
+                Span::raw("")
+            },
+        ]);
+        let search = Paragraph::new(search_line);
+        f.render_widget(search, search_area);
+    }
 }

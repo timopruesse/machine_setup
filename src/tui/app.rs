@@ -69,10 +69,17 @@ pub struct App {
     pub skipped: usize,
     /// Auto-follow: track the first running task
     pub auto_select: bool,
+    /// Whether the search input is active
+    pub search_mode: bool,
+    /// Current search query
+    pub search_query: String,
+    /// Indices into `tasks` that match the current filter
+    pub filtered_indices: Vec<usize>,
 }
 
 impl App {
     pub fn new(task_names: Vec<String>, mode: Command) -> Self {
+        let filtered_indices: Vec<usize> = (0..task_names.len()).collect();
         let tasks = task_names.into_iter().map(TaskState::new).collect();
         Self {
             tasks,
@@ -84,6 +91,9 @@ impl App {
             failed: 0,
             skipped: 0,
             auto_select: true,
+            search_mode: false,
+            search_query: String::new(),
+            filtered_indices,
         }
     }
 
@@ -156,6 +166,18 @@ impl App {
                 task.log_lines.push(format!("FAILED: {error}"));
                 self.failed += 1;
             }
+            TaskEvent::TaskRetry {
+                task_name,
+                attempt,
+                max_attempts,
+                error,
+            } => {
+                let task = self.find_or_create_task(&task_name);
+                task.status = TaskStatus::Running;
+                task.log_lines
+                    .push(format!("  Retry {attempt}/{max_attempts}: {error}"));
+                self.auto_scroll_log();
+            }
             TaskEvent::AllDone { .. } => {
                 self.done = true;
             }
@@ -164,16 +186,85 @@ impl App {
 
     pub fn select_next(&mut self) {
         self.auto_select = false;
-        if !self.tasks.is_empty() {
-            self.selected = (self.selected + 1).min(self.tasks.len() - 1);
-            self.log_scroll = 0;
+        if self.filtered_indices.is_empty() {
+            return;
         }
+        // Find the next filtered index after current selection
+        if let Some(pos) = self
+            .filtered_indices
+            .iter()
+            .position(|&i| i > self.selected)
+        {
+            self.selected = self.filtered_indices[pos];
+        }
+        self.log_scroll = 0;
     }
 
     pub fn select_prev(&mut self) {
         self.auto_select = false;
-        self.selected = self.selected.saturating_sub(1);
+        if self.filtered_indices.is_empty() {
+            return;
+        }
+        // Find the previous filtered index before current selection
+        if let Some(pos) = self
+            .filtered_indices
+            .iter()
+            .rposition(|&i| i < self.selected)
+        {
+            self.selected = self.filtered_indices[pos];
+        }
         self.log_scroll = 0;
+    }
+
+    /// Enter search mode.
+    pub fn enter_search(&mut self) {
+        self.search_mode = true;
+        self.search_query.clear();
+        self.update_filter();
+    }
+
+    /// Exit search mode and clear the filter.
+    pub fn exit_search(&mut self) {
+        self.search_mode = false;
+        self.search_query.clear();
+        self.update_filter();
+    }
+
+    /// Confirm search: exit search mode but keep the filter active.
+    pub fn confirm_search(&mut self) {
+        self.search_mode = false;
+    }
+
+    /// Append a character to the search query.
+    pub fn search_push_char(&mut self, c: char) {
+        self.search_query.push(c);
+        self.update_filter();
+    }
+
+    /// Remove the last character from the search query.
+    pub fn search_pop_char(&mut self) {
+        self.search_query.pop();
+        self.update_filter();
+    }
+
+    /// Recalculate filtered indices based on the search query.
+    fn update_filter(&mut self) {
+        let query = self.search_query.to_lowercase();
+        self.filtered_indices = self
+            .tasks
+            .iter()
+            .enumerate()
+            .filter(|(_, task)| query.is_empty() || task.name.to_lowercase().contains(&query))
+            .map(|(i, _)| i)
+            .collect();
+
+        // If selected is no longer in filtered set, jump to nearest match
+        if !self.filtered_indices.contains(&self.selected) {
+            if let Some(&first) = self.filtered_indices.first() {
+                self.selected = first;
+                self.log_scroll = 0;
+            }
+        }
     }
 
     pub fn scroll_log_down(&mut self) {
@@ -209,7 +300,13 @@ impl App {
     /// Find a task by name, or create it if it doesn't exist (e.g. sub-config tasks).
     fn find_or_create_task(&mut self, name: &str) -> &mut TaskState {
         if !self.tasks.iter().any(|t| t.name == name) {
+            let idx = self.tasks.len();
             self.tasks.push(TaskState::new(name.to_string()));
+            // Add to filtered indices if it matches the current filter
+            let query = self.search_query.to_lowercase();
+            if query.is_empty() || name.to_lowercase().contains(&query) {
+                self.filtered_indices.push(idx);
+            }
         }
         self.tasks.iter_mut().find(|t| t.name == name).unwrap()
     }

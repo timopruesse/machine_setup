@@ -41,6 +41,14 @@ pub enum TaskEvent {
     /// A task failed.
     TaskFailed { task_name: String, error: String },
 
+    /// A task is being retried after failure.
+    TaskRetry {
+        task_name: String,
+        attempt: u32,
+        max_attempts: u32,
+        error: String,
+    },
+
     /// All tasks are done.
     AllDone {
         succeeded: usize,

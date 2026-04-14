@@ -72,9 +72,26 @@ jobs:
             fi
           done
 
+      - name: Extract changelog
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk "/^## \\[${VERSION}\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            echo "use_auto=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "use_auto=false" >> "$GITHUB_OUTPUT"
+            {
+              echo 'notes<<CHANGELOG_EOF'
+              echo "$NOTES"
+              echo 'CHANGELOG_EOF'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
           artifacts: "machine_setup-*.tar.gz,machine_setup-*.zip"
-          generateReleaseNotes: true
+          generateReleaseNotes: ${{ steps.changelog.outputs.use_auto == 'true' }}
+          body: ${{ steps.changelog.outputs.use_auto == 'false' && steps.changelog.outputs.notes || '' }}
           token: ${{ secrets.REPO_TOKEN }}

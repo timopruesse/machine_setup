@@ -25,10 +25,116 @@ pub struct ValidationIssue {
     pub severity: Severity,
 }
 
+/// Validate depends_on references exist and detect cycles.
+fn validate_dependencies(config: &AppConfig, issues: &mut Vec<ValidationIssue>) {
+    let task_names: std::collections::HashSet<&str> =
+        config.tasks.keys().map(|s| s.as_str()).collect();
+
+    // Check all depends_on references exist
+    for (name, task) in &config.tasks {
+        for dep in &task.depends_on {
+            if !task_names.contains(dep.as_str()) {
+                issues.push(ValidationIssue {
+                    task_name: name.clone(),
+                    message: format!("depends_on references unknown task: '{dep}'"),
+                    severity: Severity::Error,
+                });
+            }
+        }
+    }
+
+    // Detect cycles using DFS with coloring
+    use std::collections::HashMap;
+    #[derive(PartialEq)]
+    enum Color {
+        White,
+        Gray,
+        Black,
+    }
+    let mut colors: HashMap<&str, Color> = config
+        .tasks
+        .keys()
+        .map(|k| (k.as_str(), Color::White))
+        .collect();
+
+    fn dfs<'a>(
+        node: &'a str,
+        config: &'a AppConfig,
+        colors: &mut HashMap<&'a str, Color>,
+        path: &mut Vec<&'a str>,
+    ) -> Option<Vec<String>> {
+        colors.insert(node, Color::Gray);
+        path.push(node);
+
+        if let Some(task) = config.tasks.get(node) {
+            for dep in &task.depends_on {
+                match colors.get(dep.as_str()) {
+                    Some(Color::Gray) => {
+                        // Found a cycle — build the cycle path
+                        let cycle_start = path.iter().position(|&n| n == dep.as_str()).unwrap();
+                        let mut cycle: Vec<String> =
+                            path[cycle_start..].iter().map(|s| s.to_string()).collect();
+                        cycle.push(dep.clone());
+                        return Some(cycle);
+                    }
+                    Some(Color::White) | None => {
+                        if let Some(cycle) = dfs(dep, config, colors, path) {
+                            return Some(cycle);
+                        }
+                    }
+                    Some(Color::Black) => {}
+                }
+            }
+        }
+
+        path.pop();
+        colors.insert(node, Color::Black);
+        None
+    }
+
+    let task_keys: Vec<&str> = config.tasks.keys().map(|k| k.as_str()).collect();
+    for &node in &task_keys {
+        if colors.get(node) == Some(&Color::White) {
+            let mut path = Vec::new();
+            if let Some(cycle) = dfs(node, config, &mut colors, &mut path) {
+                issues.push(ValidationIssue {
+                    task_name: cycle[0].clone(),
+                    message: format!("Cyclic dependency detected: {}", cycle.join(" -> ")),
+                    severity: Severity::Error,
+                });
+                break; // Report one cycle at a time
+            }
+        }
+    }
+}
+
 pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
 
+    // Validate depends_on references and detect cycles
+    validate_dependencies(config, &mut issues);
+
     for (name, task) in &config.tasks {
+        // Validate condition paths
+        for path_str in task.only_if.as_slice() {
+            if path_str.trim().is_empty() {
+                issues.push(ValidationIssue {
+                    task_name: name.clone(),
+                    message: "only_if contains an empty path".to_string(),
+                    severity: Severity::Error,
+                });
+            }
+        }
+        for path_str in task.skip_if.as_slice() {
+            if path_str.trim().is_empty() {
+                issues.push(ValidationIssue {
+                    task_name: name.clone(),
+                    message: "skip_if contains an empty path".to_string(),
+                    severity: Severity::Error,
+                });
+            }
+        }
+
         if task.commands.is_empty() {
             issues.push(ValidationIssue {
                 task_name: name.clone(),
@@ -129,6 +235,10 @@ mod tests {
                 commands: vec![],
                 os: Default::default(),
                 parallel: false,
+                only_if: Default::default(),
+                skip_if: Default::default(),
+                depends_on: Default::default(),
+                retry: 0,
             },
         );
         let config = make_config(tasks);
@@ -156,6 +266,10 @@ mod tests {
                 })],
                 os: Default::default(),
                 parallel: false,
+                only_if: Default::default(),
+                skip_if: Default::default(),
+                depends_on: Default::default(),
+                retry: 0,
             },
         );
         let config = make_config(tasks);
@@ -177,6 +291,10 @@ mod tests {
                 })],
                 os: Default::default(),
                 parallel: false,
+                only_if: Default::default(),
+                skip_if: Default::default(),
+                depends_on: Default::default(),
+                retry: 0,
             },
         );
         let config = make_config(tasks);
@@ -201,6 +319,10 @@ mod tests {
                 })],
                 os: Default::default(),
                 parallel: false,
+                only_if: Default::default(),
+                skip_if: Default::default(),
+                depends_on: Default::default(),
+                retry: 0,
             },
         );
         let config = make_config(tasks);
@@ -228,6 +350,10 @@ mod tests {
                 })],
                 os: Default::default(),
                 parallel: false,
+                only_if: Default::default(),
+                skip_if: Default::default(),
+                depends_on: Default::default(),
+                retry: 0,
             },
         );
         let config = make_config(tasks);
