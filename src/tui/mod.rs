@@ -84,22 +84,37 @@ async fn run_loop(
         // Handle keyboard input (with timeout for responsive UI)
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        cancel.cancel();
-                        return Ok(());
+                // Ctrl+C always quits
+                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                    cancel.cancel();
+                    return Ok(());
+                }
+
+                if app.search_mode {
+                    match key.code {
+                        KeyCode::Esc => app.exit_search(),
+                        KeyCode::Enter => app.confirm_search(),
+                        KeyCode::Backspace => app.search_pop_char(),
+                        KeyCode::Char(c) => app.search_push_char(c),
+                        KeyCode::Up => app.select_prev(),
+                        KeyCode::Down => app.select_next(),
+                        _ => {}
                     }
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        cancel.cancel();
-                        return Ok(());
+                } else {
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => {
+                            cancel.cancel();
+                            return Ok(());
+                        }
+                        KeyCode::Char('/') => app.enter_search(),
+                        KeyCode::Up | KeyCode::Char('k') => app.select_prev(),
+                        KeyCode::Down | KeyCode::Char('j') => app.select_next(),
+                        KeyCode::PageUp => app.scroll_log_up(),
+                        KeyCode::PageDown => app.scroll_log_down(),
+                        KeyCode::Home => app.scroll_log_to_top(),
+                        KeyCode::End => app.scroll_log_to_bottom(),
+                        _ => {}
                     }
-                    KeyCode::Up | KeyCode::Char('k') => app.select_prev(),
-                    KeyCode::Down | KeyCode::Char('j') => app.select_next(),
-                    KeyCode::PageUp => app.scroll_log_up(),
-                    KeyCode::PageDown => app.scroll_log_down(),
-                    KeyCode::Home => app.scroll_log_to_top(),
-                    KeyCode::End => app.scroll_log_to_bottom(),
-                    _ => {}
                 }
             }
         }

@@ -668,3 +668,353 @@ tasks:
         && i.message.contains("no commands")
         && matches!(i.severity, validate::Severity::Warning)));
 }
+
+// ─── Conditional task tests (only_if / skip_if) ───
+
+#[tokio::test]
+async fn test_only_if_path_exists_runs() {
+    let dir = tempdir().unwrap();
+    let marker = dir.path().join("marker_file");
+    fs::write(&marker, "").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  conditional:
+    only_if: "{}"
+    commands:
+      - run:
+          commands: "echo only_if_ran"
+"#,
+            marker.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_all(true).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+
+    assert!(task_completed(&events, "conditional"));
+    assert!(find_output(&events, "conditional", "only_if_ran"));
+}
+
+#[tokio::test]
+async fn test_only_if_path_missing_skips() {
+    let events = run_config(
+        r#"
+tasks:
+  conditional:
+    only_if: "/nonexistent/path/that/should/not/exist"
+    commands:
+      - run:
+          commands: "echo should_not_run"
+"#,
+        Command::Install,
+    )
+    .await;
+
+    assert!(task_skipped(&events, "conditional"));
+    assert!(!find_output(&events, "conditional", "should_not_run"));
+}
+
+#[tokio::test]
+async fn test_skip_if_path_exists_skips() {
+    let dir = tempdir().unwrap();
+    let marker = dir.path().join("skip_marker");
+    fs::write(&marker, "").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  conditional:
+    skip_if: "{}"
+    commands:
+      - run:
+          commands: "echo should_not_run"
+"#,
+            marker.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_all(true).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+
+    assert!(task_skipped(&events, "conditional"));
+}
+
+#[tokio::test]
+async fn test_skip_if_path_missing_runs() {
+    let events = run_config(
+        r#"
+tasks:
+  conditional:
+    skip_if: "/nonexistent/path/that/should/not/exist"
+    commands:
+      - run:
+          commands: "echo skip_if_ran"
+"#,
+        Command::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "conditional"));
+    assert!(find_output(&events, "conditional", "skip_if_ran"));
+}
+
+// ─── Dependency ordering tests (depends_on) ───
+
+#[tokio::test]
+async fn test_depends_on_ordering() {
+    let events = run_config(
+        r#"
+tasks:
+  second:
+    depends_on: ["first"]
+    commands:
+      - run:
+          commands: "echo second_task"
+  first:
+    commands:
+      - run:
+          commands: "echo first_task"
+"#,
+        Command::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "first"));
+    assert!(task_completed(&events, "second"));
+
+    // Verify first completed before second started
+    let first_done = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "first"));
+    let second_start = events.iter().position(
+        |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "second"),
+    );
+    assert!(first_done.is_some());
+    assert!(second_start.is_some());
+    assert!(first_done.unwrap() < second_start.unwrap());
+}
+
+#[tokio::test]
+async fn test_depends_on_transitive() {
+    let events = run_config(
+        r#"
+tasks:
+  c:
+    depends_on: ["b"]
+    commands:
+      - run:
+          commands: "echo task_c"
+  b:
+    depends_on: ["a"]
+    commands:
+      - run:
+          commands: "echo task_b"
+  a:
+    commands:
+      - run:
+          commands: "echo task_a"
+"#,
+        Command::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "a"));
+    assert!(task_completed(&events, "b"));
+    assert!(task_completed(&events, "c"));
+
+    // Verify order: a before b, b before c
+    let a_done = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "a"))
+        .unwrap();
+    let b_start = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "b"))
+        .unwrap();
+    let b_done = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "b"))
+        .unwrap();
+    let c_start = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "c"))
+        .unwrap();
+
+    assert!(a_done < b_start);
+    assert!(b_done < c_start);
+}
+
+#[tokio::test]
+async fn test_depends_on_cycle_detected() {
+    use machine_setup::config::validate;
+
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        r#"
+tasks:
+  a:
+    depends_on: ["b"]
+    commands:
+      - run:
+          commands: "echo a"
+  b:
+    depends_on: ["a"]
+    commands:
+      - run:
+          commands: "echo b"
+"#,
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let issues = validate::validate_config(&config, dir.path());
+    assert!(issues
+        .iter()
+        .any(|i| i.message.contains("Cyclic dependency")));
+}
+
+#[tokio::test]
+async fn test_depends_on_missing_dependency() {
+    use machine_setup::config::validate;
+
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        r#"
+tasks:
+  a:
+    depends_on: ["nonexistent"]
+    commands:
+      - run:
+          commands: "echo a"
+"#,
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let issues = validate::validate_config(&config, dir.path());
+    assert!(issues
+        .iter()
+        .any(|i| i.message.contains("unknown task") && i.message.contains("nonexistent")));
+}
+
+// ─── Retry tests ───
+
+#[tokio::test]
+async fn test_retry_on_failure() {
+    let dir = tempdir().unwrap();
+    let counter_file = dir.path().join("counter");
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  retryable:
+    retry: 2
+    commands:
+      - run:
+          commands: "if [ -f '{}' ]; then echo retry_success; else touch '{}' && exit 1; fi"
+"#,
+            counter_file.to_string_lossy().replace('\\', "/"),
+            counter_file.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    let mut config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
+
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_all(true).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+
+    // Should have a retry event and eventual success
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, TaskEvent::TaskRetry { task_name, .. } if task_name == "retryable")));
+    assert!(task_completed(&events, "retryable"));
+    assert!(find_output(&events, "retryable", "retry_success"));
+}
+
+#[tokio::test]
+async fn test_retry_exhausted_fails() {
+    let events = run_config(
+        r#"
+tasks:
+  always_fails:
+    retry: 1
+    commands:
+      - run:
+          commands: "exit 1"
+"#,
+        Command::Install,
+    )
+    .await;
+
+    // Should have a retry event but still fail
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, TaskEvent::TaskRetry { .. })));
+    assert!(task_failed(&events, "always_fails"));
+}
+
+#[tokio::test]
+async fn test_no_retry_by_default() {
+    let events = run_config(
+        r#"
+tasks:
+  no_retry:
+    commands:
+      - run:
+          commands: "exit 1"
+"#,
+        Command::Install,
+    )
+    .await;
+
+    // Should NOT have any retry events
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, TaskEvent::TaskRetry { .. })));
+    assert!(task_failed(&events, "no_retry"));
+}

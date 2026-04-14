@@ -64,6 +64,22 @@ pub struct TaskConfig {
     /// Run commands within this task in parallel
     #[serde(default)]
     pub parallel: bool,
+
+    /// Only run this task if all these paths exist
+    #[serde(default)]
+    pub only_if: StringOrVec,
+
+    /// Skip this task if any of these paths exist
+    #[serde(default)]
+    pub skip_if: StringOrVec,
+
+    /// Task names that must complete before this task runs
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+
+    /// Number of retry attempts on failure (0 = no retry)
+    #[serde(default)]
+    pub retry: u32,
 }
 
 /// A command entry in the config. Each entry is a single-key map.

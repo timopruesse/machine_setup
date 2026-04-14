@@ -7,13 +7,24 @@ use ratatui::Frame;
 use crate::tui::app::App;
 
 pub fn render(f: &mut Frame, area: Rect, app: &App) {
-    let keys = if app.done {
-        vec![key_hint("q", "quit"), key_hint("Up/Down", "navigate")]
+    let keys = if app.search_mode {
+        vec![
+            key_hint("Esc", "cancel"),
+            key_hint("Enter", "apply"),
+            key_hint("Up/Down", "navigate"),
+        ]
+    } else if app.done {
+        vec![
+            key_hint("q", "quit"),
+            key_hint("Up/Down", "navigate"),
+            key_hint("/", "search"),
+        ]
     } else {
         vec![
             key_hint("q", "quit"),
             key_hint("Up/Down", "navigate"),
             key_hint("PgUp/PgDn", "scroll log"),
+            key_hint("/", "search"),
         ]
     };
 
