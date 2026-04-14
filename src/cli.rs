@@ -39,7 +39,7 @@ pub struct Cli {
     pub level: String,
 }
 
-#[derive(Subcommand, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Install all or selected tasks
     Install,
@@ -49,6 +49,14 @@ pub enum Command {
     Uninstall,
     /// List all defined tasks
     List,
+    /// Validate config file without executing
+    Validate,
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 impl std::fmt::Display for Command {
@@ -58,6 +66,8 @@ impl std::fmt::Display for Command {
             Command::Update => write!(f, "update"),
             Command::Uninstall => write!(f, "uninstall"),
             Command::List => write!(f, "list"),
+            Command::Validate => write!(f, "validate"),
+            Command::Completions { .. } => write!(f, "completions"),
         }
     }
 }

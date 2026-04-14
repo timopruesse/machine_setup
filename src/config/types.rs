@@ -249,7 +249,9 @@ impl RunArgs {
                     &[]
                 }
             }
-            crate::cli::Command::List => &[],
+            crate::cli::Command::List
+            | crate::cli::Command::Validate
+            | crate::cli::Command::Completions { .. } => &[],
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::config::types::Shell;
+use crate::error::{Error, Result};
 use std::path::Path;
 
 /// Get the shell binary path.
@@ -31,12 +32,42 @@ pub fn shell_profile(shell: &Shell) -> Option<String> {
     }
 }
 
+/// Check that an environment variable key is a valid identifier.
+pub fn validate_env_key(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    let mut chars = key.chars();
+    let first = chars.next().unwrap();
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Escape a value for use inside a bash/zsh single-quoted string.
+/// Wraps in single quotes, replacing internal `'` with `'\''`.
+fn escape_shell_value(val: &str) -> String {
+    let escaped = val.replace('\'', "'\\''");
+    format!("'{escaped}'")
+}
+
+/// Escape a value for use inside a PowerShell double-quoted string.
+/// Escapes `"` as `` `" `` and `$` as `` `$ ``.
+fn escape_powershell_value(val: &str) -> String {
+    let escaped = val
+        .replace('`', "``")
+        .replace('"', "`\"")
+        .replace('$', "`$");
+    format!("\"{escaped}\"")
+}
+
 /// Build a shell command string with optional profile sourcing and env vars.
 pub fn build_shell_command(
     commands: &[String],
     shell: &Shell,
     env: &std::collections::HashMap<String, String>,
-) -> String {
+) -> Result<String> {
     let mut script = String::new();
 
     // Source profile if available (not for PowerShell)
@@ -52,6 +83,11 @@ pub fn build_shell_command(
     // Export environment variables into the script
     // Only expand ~ in values (home dir), don't prepend config_dir for relative paths
     for (key, value) in env {
+        if !validate_env_key(key) {
+            return Err(Error::ShellFailed(format!(
+                "Invalid environment variable name: {key:?}"
+            )));
+        }
         let val = if value.starts_with('~') {
             crate::utils::path::expand_path(value, None)
                 .to_string_lossy()
@@ -61,10 +97,10 @@ pub fn build_shell_command(
         };
         match shell {
             Shell::Bash | Shell::Zsh => {
-                script.push_str(&format!("export {key}=\"{val}\"\n"));
+                script.push_str(&format!("export {key}={}\n", escape_shell_value(&val)));
             }
             Shell::PowerShell => {
-                script.push_str(&format!("$env:{key} = \"{val}\"\n"));
+                script.push_str(&format!("$env:{key} = {}\n", escape_powershell_value(&val)));
             }
         }
     }
@@ -74,7 +110,7 @@ pub fn build_shell_command(
         script.push('\n');
     }
 
-    script
+    Ok(script)
 }
 
 /// Get the script file extension.
@@ -117,4 +153,86 @@ fn rand_suffix() -> u32 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_validate_env_key_valid() {
+        assert!(validate_env_key("MY_VAR"));
+        assert!(validate_env_key("_PRIVATE"));
+        assert!(validate_env_key("a"));
+        assert!(validate_env_key("PATH"));
+        assert!(validate_env_key("var123"));
+    }
+
+    #[test]
+    fn test_validate_env_key_invalid() {
+        assert!(!validate_env_key(""));
+        assert!(!validate_env_key("123abc"));
+        assert!(!validate_env_key("my-var"));
+        assert!(!validate_env_key("my var"));
+        assert!(!validate_env_key("foo=bar"));
+        assert!(!validate_env_key("$VAR"));
+    }
+
+    #[test]
+    fn test_escape_shell_value_simple() {
+        assert_eq!(escape_shell_value("hello"), "'hello'");
+    }
+
+    #[test]
+    fn test_escape_shell_value_with_single_quote() {
+        assert_eq!(escape_shell_value("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn test_escape_shell_value_prevents_injection() {
+        // These should all be rendered as literal strings, not executed
+        assert_eq!(escape_shell_value("$(whoami)"), "'$(whoami)'");
+        assert_eq!(escape_shell_value("`rm -rf`"), "'`rm -rf`'");
+        assert_eq!(
+            escape_shell_value("val\"; echo pwned"),
+            "'val\"; echo pwned'"
+        );
+        assert_eq!(escape_shell_value("$HOME"), "'$HOME'");
+        assert_eq!(escape_shell_value("line1\nline2"), "'line1\nline2'");
+    }
+
+    #[test]
+    fn test_escape_powershell_value_simple() {
+        assert_eq!(escape_powershell_value("hello"), "\"hello\"");
+    }
+
+    #[test]
+    fn test_escape_powershell_value_prevents_injection() {
+        assert_eq!(escape_powershell_value("$env:SECRET"), "\"`$env:SECRET\"");
+        assert_eq!(
+            escape_powershell_value("val\"; Write-Host pwned"),
+            "\"val`\"; Write-Host pwned\""
+        );
+    }
+
+    #[test]
+    fn test_build_shell_command_escapes_env() {
+        let mut env = HashMap::new();
+        env.insert("MY_VAR".to_string(), "$(whoami)".to_string());
+
+        let script =
+            build_shell_command(&["echo $MY_VAR".to_string()], &Shell::Bash, &env).unwrap();
+
+        assert!(script.contains("export MY_VAR='$(whoami)'"));
+    }
+
+    #[test]
+    fn test_build_shell_command_rejects_invalid_key() {
+        let mut env = HashMap::new();
+        env.insert("INVALID-KEY".to_string(), "value".to_string());
+
+        let result = build_shell_command(&["echo test".to_string()], &Shell::Bash, &env);
+        assert!(result.is_err());
+    }
 }

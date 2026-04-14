@@ -281,7 +281,7 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, _rx) = mpsc::unbounded_channel();
     let runner =
         TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
@@ -577,4 +577,94 @@ async fn test_json_config() {
 
     assert!(task_completed(&events, "json_task"));
     assert!(find_output(&events, "json_task", "from_json"));
+}
+
+// ─── Security tests ───
+
+#[tokio::test]
+async fn test_env_var_injection_prevented() {
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        r#"
+tasks:
+  injection_test:
+    commands:
+      - run:
+          env:
+            MY_VAR: "$(echo injected)"
+          commands: "echo $MY_VAR"
+"#,
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_all(true).await;
+
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+
+    assert!(task_completed(&events, "injection_test"));
+    // The value should be the literal string, not the result of command substitution
+    assert!(find_output(&events, "injection_test", "$(echo injected)"));
+    assert!(!find_output(&events, "injection_test", "injected\n"));
+}
+
+// ─── Validation tests ───
+
+#[tokio::test]
+async fn test_validate_catches_invalid_env_key() {
+    use machine_setup::config::validate;
+
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        r#"
+tasks:
+  bad_env:
+    commands:
+      - run:
+          env:
+            "INVALID-KEY": "value"
+          commands: "echo test"
+"#,
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let issues = validate::validate_config(&config, dir.path());
+    assert!(issues
+        .iter()
+        .any(|i| i.message.contains("INVALID-KEY")
+            && matches!(i.severity, validate::Severity::Error)));
+}
+
+#[tokio::test]
+async fn test_validate_reports_empty_task() {
+    use machine_setup::config::validate;
+
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        r#"
+tasks:
+  empty_task:
+    commands: []
+"#,
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let issues = validate::validate_config(&config, dir.path());
+    assert!(issues.iter().any(|i| i.task_name == "empty_task"
+        && i.message.contains("no commands")
+        && matches!(i.severity, validate::Severity::Warning)));
 }
