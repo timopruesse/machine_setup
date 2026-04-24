@@ -82,12 +82,6 @@ async fn main() -> anyhow::Result<()> {
     let (event_tx, event_rx) = mpsc::unbounded_channel::<TaskEvent>();
     let cancel = CancellationToken::new();
 
-    // Set up runner
-    let runner = TaskRunner::new(app_config.clone(), cli.command.clone(), event_tx)
-        .with_config_dir(config_dir);
-    let force = cli.force;
-    let task_names_clone = task_names.clone();
-
     // Determine if we should use the TUI
     let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
 
@@ -95,6 +89,12 @@ async fn main() -> anyhow::Result<()> {
     if use_tui && app_config.requires_sudo(&task_names) {
         pre_authenticate_sudo();
     }
+
+    // Set up runner (moves app_config)
+    let runner = TaskRunner::new(app_config, cli.command.clone(), event_tx)
+        .with_config_dir(config_dir);
+    let force = cli.force;
+    let task_names_clone = task_names.clone();
 
     if use_tui {
         // Spawn engine in background
