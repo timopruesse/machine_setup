@@ -91,7 +91,7 @@ pub fn build_shell_command(
         let val = if value.starts_with('~') {
             crate::utils::path::expand_path(value, None)
                 .to_string_lossy()
-                .to_string()
+                .into_owned()
         } else {
             value.clone()
         };

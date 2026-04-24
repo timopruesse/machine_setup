@@ -43,27 +43,31 @@ impl CommandExecutor for SetupCommand {
 async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result<()> {
     let is_url = args.config.starts_with("http://") || args.config.starts_with("https://");
 
-    let config_str = if is_url {
-        args.config.clone()
-    } else {
-        let config_path = expand_path(&args.config, Some(&ctx.config_dir));
-        config_path.to_string_lossy().to_string()
-    };
+    // For URLs we pass the string through to load_config. For local paths
+    // we keep the resolved PathBuf so canonicalize below can reuse it
+    // without re-parsing a string representation.
+    let (config_str, config_path): (std::borrow::Cow<'_, str>, Option<std::path::PathBuf>) =
+        if is_url {
+            (std::borrow::Cow::Borrowed(&args.config), None)
+        } else {
+            let path = expand_path(&args.config, Some(&ctx.config_dir));
+            let s = path.to_string_lossy().into_owned();
+            (std::borrow::Cow::Owned(s), Some(path))
+        };
 
     ctx.log(format!("Loading sub-config: {config_str}"));
 
     let config = crate::config::load_config(&config_str)?;
 
-    // Resolve the sub-config's directory for its own relative paths
-    // URLs fall back to parent's config_dir
-    let sub_config_dir = if is_url {
-        ctx.config_dir.clone()
-    } else {
-        std::path::Path::new(&config_str)
+    // Resolve the sub-config's directory for its own relative paths.
+    // URLs fall back to the parent's config_dir.
+    let sub_config_dir = match config_path {
+        Some(path) => path
             .canonicalize()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| ctx.config_dir.clone())
+            .unwrap_or_else(|| ctx.config_dir.clone()),
+        None => ctx.config_dir.clone(),
     };
 
     let runner =
