@@ -409,7 +409,7 @@ async fn run_task(
     });
 
     let executors: Vec<Box<dyn CommandExecutor>> =
-        task.commands.iter().map(create_executor).collect();
+        task.commands.iter().cloned().map(create_executor).collect();
 
     if task.parallel {
         // Run commands in parallel
