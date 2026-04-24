@@ -31,11 +31,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Handle validate command
     if cli.command == Command::Validate {
-        let config_dir = std::path::Path::new(&cli.config)
-            .canonicalize()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let config_dir = config::resolve_config_dir(&cli.config, &cwd);
 
         let issues = config::validate::validate_config(&app_config, &config_dir);
         if issues.is_empty() {
@@ -72,11 +69,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Resolve config directory for relative paths (URLs fall back to cwd)
-    let config_dir = std::path::Path::new(&cli.config)
-        .canonicalize()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let config_dir = config::resolve_config_dir(&cli.config, &cwd);
 
     // Create event channel and cancellation token
     let (event_tx, event_rx) = mpsc::unbounded_channel::<TaskEvent>();

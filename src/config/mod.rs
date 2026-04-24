@@ -3,10 +3,25 @@ pub mod os;
 pub mod types;
 pub mod validate;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 use types::AppConfig;
+
+/// Return the directory that relative paths inside a config file should be
+/// resolved against. For local configs this is the config file's parent
+/// directory (after canonicalizing); for URLs and unresolvable paths we fall
+/// back to `fallback`.
+pub fn resolve_config_dir(path_or_url: &str, fallback: &Path) -> PathBuf {
+    if is_url(path_or_url) {
+        return fallback.to_path_buf();
+    }
+    Path::new(path_or_url)
+        .canonicalize()
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| fallback.to_path_buf())
+}
 
 /// Load a config from a local path or URL, auto-detecting format from extension.
 /// If the path has no extension, tries `.yaml`, `.yml`, then `.json`.
