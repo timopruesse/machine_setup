@@ -146,7 +146,7 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
         for cmd in &task.commands {
             match cmd {
                 CommandEntry::Run(args) => {
-                    if args.all_command_strings().is_empty() {
+                    if args.all_command_strings().next().is_none() {
                         issues.push(ValidationIssue {
                             task_name: name.clone(),
                             message: format!("Run command has no commands defined: {cmd}"),

@@ -154,13 +154,13 @@ impl std::fmt::Display for CommandEntry {
             CommandEntry::Symlink(args) => write!(f, "symlink: {} -> {}", args.src, args.target),
             CommandEntry::Clone(args) => write!(f, "clone: {} -> {}", args.url, args.target),
             CommandEntry::Run(args) => {
-                let cmds = args.all_command_strings();
-                if cmds.is_empty() {
-                    write!(f, "run: (no commands)")
-                } else if cmds.len() == 1 {
-                    write!(f, "run: {}", cmds[0])
-                } else {
-                    write!(f, "run: {} commands", cmds.len())
+                let mut iter = args.all_command_strings();
+                let first = iter.next();
+                let second = iter.next();
+                match (first, second) {
+                    (None, _) => write!(f, "run: (no commands)"),
+                    (Some(c), None) => write!(f, "run: {c}"),
+                    (Some(_), Some(_)) => write!(f, "run: {} commands", 2 + iter.count()),
                 }
             }
             CommandEntry::MachineSetup(args) => {
@@ -230,14 +230,17 @@ pub struct RunArgs {
 }
 
 impl RunArgs {
-    /// Get all command strings regardless of mode (for display purposes).
-    pub fn all_command_strings(&self) -> Vec<&str> {
-        let mut cmds = Vec::new();
-        cmds.extend(self.commands.as_slice().iter().map(|s| s.as_str()));
-        cmds.extend(self.install.as_slice().iter().map(|s| s.as_str()));
-        cmds.extend(self.update.as_slice().iter().map(|s| s.as_str()));
-        cmds.extend(self.uninstall.as_slice().iter().map(|s| s.as_str()));
-        cmds
+    /// Iterate all command strings regardless of mode (for display purposes).
+    /// Returns an iterator so callers that only need count/first/is_empty
+    /// don't force an intermediate Vec allocation.
+    pub fn all_command_strings(&self) -> impl Iterator<Item = &str> {
+        self.commands
+            .as_slice()
+            .iter()
+            .chain(self.install.as_slice().iter())
+            .chain(self.update.as_slice().iter())
+            .chain(self.uninstall.as_slice().iter())
+            .map(|s| s.as_str())
     }
 
     /// Get commands for a specific mode.
@@ -315,10 +318,9 @@ impl AppConfig {
             .filter(|(name, _)| task_names.iter().any(|t| t == *name))
             .any(|(_, task)| {
                 task.commands.iter().any(|cmd| match cmd {
-                    CommandEntry::Run(args) => args
-                        .all_command_strings()
-                        .iter()
-                        .any(|s| s.contains("sudo")),
+                    CommandEntry::Run(args) => {
+                        args.all_command_strings().any(|s| s.contains("sudo"))
+                    }
                     CommandEntry::Copy(args) => args.sudo,
                     CommandEntry::Symlink(args) => args.sudo,
                     _ => false,

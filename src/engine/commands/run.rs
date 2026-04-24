@@ -34,13 +34,13 @@ impl CommandExecutor for RunCommand {
     }
 
     fn description(&self) -> String {
-        let cmds = self.args.all_command_strings();
-        if cmds.is_empty() {
-            "run: (no commands)".to_string()
-        } else if cmds.len() == 1 {
-            format!("run: {}", cmds[0])
-        } else {
-            format!("run: {} commands", cmds.len())
+        let mut iter = self.args.all_command_strings();
+        let first = iter.next();
+        let second = iter.next();
+        match (first, second) {
+            (None, _) => "run: (no commands)".to_string(),
+            (Some(c), None) => format!("run: {c}"),
+            (Some(_), Some(_)) => format!("run: {} commands", 2 + iter.count()),
         }
     }
 }
