@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.4.1]
+
+### Changed
+- `list` command output now marks copy/symlink commands that use sudo with a `(sudo)` annotation, matching what the TUI already showed
+
+### Performance
+- Pipe shell scripts directly to bash/zsh stdin instead of writing, reading, and executing a temp file (PowerShell still uses `-File` and a temp file)
+- Avoid allocating a `HashSet<usize>` per TUI frame in the task list render
+- Borrow task names on the no-dependency fast path of `topological_sort` instead of cloning
+- Skip cloning `AppConfig` into `TaskRunner`; move ownership instead
+- Use `mem::take` in interactive task selection to avoid re-cloning selected names
+- Return an iterator from `RunArgs::all_command_strings`; callers no longer force a `Vec<&str>` allocation
+- Use a `HashSet` for selected-task lookup in `requires_sudo`
+
+### Refactored
+- Extract `config::resolve_config_dir`, `utils::process::stream_and_wait`, and `utils::path::walk_relative` helpers, removing duplicated logic across `main.rs`, `setup.rs`, `run.rs`, `clone.rs`, `copy.rs`, and `symlink.rs`
+- Unify `CommandEntry::Display` with each executor's `description()` via per-args `Display` impls
+
 ## [2.4.0]
 
 ### Added
