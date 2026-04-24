@@ -218,15 +218,18 @@ fn pre_authenticate_sudo() {
 }
 
 fn select_tasks(config: &config::types::AppConfig) -> anyhow::Result<Vec<String>> {
-    let task_names: Vec<String> = config.tasks.keys().cloned().collect();
+    let mut task_names: Vec<String> = config.tasks.keys().cloned().collect();
 
     let selections = dialoguer::MultiSelect::new()
         .with_prompt("Select tasks to run")
         .items(&task_names)
         .interact()?;
 
+    // `std::mem::take` transfers ownership of each selected name out of the
+    // vec without cloning. `selections` is sorted and unique, so no slot is
+    // taken twice.
     Ok(selections
         .into_iter()
-        .map(|i| task_names[i].clone())
+        .map(|i| std::mem::take(&mut task_names[i]))
         .collect())
 }
