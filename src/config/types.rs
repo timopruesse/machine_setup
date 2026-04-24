@@ -313,9 +313,11 @@ impl<'de> Deserialize<'de> for StringOrVec {
 impl AppConfig {
     /// Check if any commands in the selected tasks require sudo.
     pub fn requires_sudo(&self, task_names: &[String]) -> bool {
+        let selected: std::collections::HashSet<&str> =
+            task_names.iter().map(String::as_str).collect();
         self.tasks
             .iter()
-            .filter(|(name, _)| task_names.iter().any(|t| t == *name))
+            .filter(|(name, _)| selected.contains(name.as_str()))
             .any(|(_, task)| {
                 task.commands.iter().any(|cmd| match cmd {
                     CommandEntry::Run(args) => {
