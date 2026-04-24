@@ -31,11 +31,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Handle validate command
     if cli.command == Command::Validate {
-        let config_dir = std::path::Path::new(&cli.config)
-            .canonicalize()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let config_dir = config::resolve_config_dir(&cli.config, &cwd);
 
         let issues = config::validate::validate_config(&app_config, &config_dir);
         if issues.is_empty() {
@@ -72,21 +69,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Resolve config directory for relative paths (URLs fall back to cwd)
-    let config_dir = std::path::Path::new(&cli.config)
-        .canonicalize()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let config_dir = config::resolve_config_dir(&cli.config, &cwd);
 
     // Create event channel and cancellation token
     let (event_tx, event_rx) = mpsc::unbounded_channel::<TaskEvent>();
     let cancel = CancellationToken::new();
-
-    // Set up runner
-    let runner = TaskRunner::new(app_config.clone(), cli.command.clone(), event_tx)
-        .with_config_dir(config_dir);
-    let force = cli.force;
-    let task_names_clone = task_names.clone();
 
     // Determine if we should use the TUI
     let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
@@ -95,6 +83,12 @@ async fn main() -> anyhow::Result<()> {
     if use_tui && app_config.requires_sudo(&task_names) {
         pre_authenticate_sudo();
     }
+
+    // Set up runner (moves app_config)
+    let runner =
+        TaskRunner::new(app_config, cli.command.clone(), event_tx).with_config_dir(config_dir);
+    let force = cli.force;
+    let task_names_clone = task_names.clone();
 
     if use_tui {
         // Spawn engine in background
@@ -218,15 +212,18 @@ fn pre_authenticate_sudo() {
 }
 
 fn select_tasks(config: &config::types::AppConfig) -> anyhow::Result<Vec<String>> {
-    let task_names: Vec<String> = config.tasks.keys().cloned().collect();
+    let mut task_names: Vec<String> = config.tasks.keys().cloned().collect();
 
     let selections = dialoguer::MultiSelect::new()
         .with_prompt("Select tasks to run")
         .items(&task_names)
         .interact()?;
 
+    // `std::mem::take` transfers ownership of each selected name out of the
+    // vec without cloning. `selections` is sorted and unique, so no slot is
+    // taken twice.
     Ok(selections
         .into_iter()
-        .map(|i| task_names[i].clone())
+        .map(|i| std::mem::take(&mut task_names[i]))
         .collect())
 }

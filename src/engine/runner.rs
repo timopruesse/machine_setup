@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
@@ -61,8 +62,10 @@ impl TaskRunner {
 
     /// Run specific tasks by name.
     pub async fn run_tasks(&self, task_names: &[String], force: bool) -> Result<()> {
-        // Resolve dependency order via topological sort
+        // Resolve dependency order via topological sort. When no task has
+        // dependencies, this borrows `task_names` instead of cloning it.
         let ordered = self.topological_sort(task_names)?;
+        let ordered: &[String] = &ordered;
 
         let temp_dir = expand_path(&self.config.temp_dir, None);
         let mut history = History::load(&temp_dir).unwrap_or_default();
@@ -73,7 +76,7 @@ impl TaskRunner {
 
         if self.config.parallel {
             // Parallel execution with dependency layers
-            let layers = self.dependency_layers(&ordered);
+            let layers = self.dependency_layers(ordered);
 
             for layer in layers {
                 let mut handles = Vec::new();
@@ -122,7 +125,7 @@ impl TaskRunner {
             }
         } else {
             // Sequential execution
-            for name in &ordered {
+            for name in ordered {
                 let task_config = &self.config.tasks[name];
 
                 if let Some(reason) = self.should_skip(task_config, name, force, &history) {
@@ -211,8 +214,8 @@ impl TaskRunner {
 
     /// Topological sort of tasks respecting depends_on.
     /// Returns tasks in dependency order. Includes transitive dependencies
-    /// of the requested tasks.
-    fn topological_sort(&self, requested: &[String]) -> Result<Vec<String>> {
+    /// of the requested tasks. Borrows the input when no sorting is needed.
+    fn topological_sort<'a>(&self, requested: &'a [String]) -> Result<Cow<'a, [String]>> {
         let all_tasks = &self.config.tasks;
 
         // If no task has dependencies, preserve original order
@@ -221,7 +224,7 @@ impl TaskRunner {
             .filter_map(|n| all_tasks.get(n))
             .any(|t| !t.depends_on.is_empty());
         if !has_deps {
-            return Ok(requested.to_vec());
+            return Ok(Cow::Borrowed(requested));
         }
 
         // Collect all needed tasks (requested + transitive deps)
@@ -293,7 +296,7 @@ impl TaskRunner {
             return Err(Error::CyclicDependency(remaining.join(", ")));
         }
 
-        Ok(sorted)
+        Ok(Cow::Owned(sorted))
     }
 
     /// Group tasks into dependency layers for parallel execution.
@@ -406,7 +409,7 @@ async fn run_task(
     });
 
     let executors: Vec<Box<dyn CommandExecutor>> =
-        task.commands.iter().map(create_executor).collect();
+        task.commands.iter().cloned().map(create_executor).collect();
 
     if task.parallel {
         // Run commands in parallel

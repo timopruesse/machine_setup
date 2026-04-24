@@ -32,39 +32,29 @@ impl CommandExecutor for SetupCommand {
     }
 
     fn description(&self) -> String {
-        let mut desc = format!("machine_setup: {}", self.args.config);
-        if let Some(task) = &self.args.task {
-            desc.push_str(&format!(" (task: {task})"));
-        }
-        desc
+        self.args.to_string()
     }
 }
 
 async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result<()> {
-    let is_url = args.config.starts_with("http://") || args.config.starts_with("https://");
+    let is_url = crate::config::is_url(&args.config);
 
-    let config_str = if is_url {
-        args.config.clone()
+    // For URLs we pass the string through to load_config; for local paths
+    // we resolve via expand_path against the parent's config_dir.
+    let config_str: std::borrow::Cow<'_, str> = if is_url {
+        std::borrow::Cow::Borrowed(&args.config)
     } else {
-        let config_path = expand_path(&args.config, Some(&ctx.config_dir));
-        config_path.to_string_lossy().to_string()
+        let path = expand_path(&args.config, Some(&ctx.config_dir));
+        std::borrow::Cow::Owned(path.to_string_lossy().into_owned())
     };
 
     ctx.log(format!("Loading sub-config: {config_str}"));
 
     let config = crate::config::load_config(&config_str)?;
 
-    // Resolve the sub-config's directory for its own relative paths
-    // URLs fall back to parent's config_dir
-    let sub_config_dir = if is_url {
-        ctx.config_dir.clone()
-    } else {
-        std::path::Path::new(&config_str)
-            .canonicalize()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| ctx.config_dir.clone())
-    };
+    // Resolve the sub-config's directory for its own relative paths. URLs
+    // and unresolvable paths fall back to the parent's config_dir.
+    let sub_config_dir = crate::config::resolve_config_dir(&config_str, &ctx.config_dir);
 
     let runner =
         crate::engine::runner::TaskRunner::new(config, ctx.mode.clone(), ctx.event_tx.clone())

@@ -1,11 +1,10 @@
 use async_trait::async_trait;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use crate::config::types::RunArgs;
 use crate::engine::context::CommandContext;
 use crate::error::{Error, Result};
-use crate::utils::shell;
+use crate::utils::{process, shell};
 
 use super::CommandExecutor;
 
@@ -34,14 +33,7 @@ impl CommandExecutor for RunCommand {
     }
 
     fn description(&self) -> String {
-        let cmds = self.args.all_command_strings();
-        if cmds.is_empty() {
-            "run: (no commands)".to_string()
-        } else if cmds.len() == 1 {
-            format!("run: {}", cmds[0])
-        } else {
-            format!("run: {} commands", cmds.len())
-        }
+        self.args.to_string()
     }
 }
 
@@ -59,24 +51,58 @@ async fn run_for_mode(
     let active_shell = args.shell.as_ref().unwrap_or(&ctx.default_shell);
     let script = shell::build_shell_command(commands, active_shell, &args.env)?;
 
-    // Write temp script
-    let script_path = shell::write_temp_script(&script, active_shell, &ctx.temp_dir)?;
-
     ctx.log(format!(
         "Running {} command(s) with {}",
         commands.len(),
         active_shell
     ));
 
-    let result = execute_script(&script_path, active_shell, ctx).await;
-
-    // Cleanup temp script
-    let _ = std::fs::remove_file(&script_path);
-
-    result
+    match active_shell {
+        crate::config::types::Shell::Bash | crate::config::types::Shell::Zsh => {
+            // Pipe the in-memory script straight to the shell over stdin —
+            // no temp file round-trip needed.
+            execute_script_stdin(&script, active_shell, ctx).await
+        }
+        crate::config::types::Shell::PowerShell => {
+            // PowerShell needs -File for reliable execution on Windows, so
+            // we still materialize a script on disk for this path only.
+            let script_path = shell::write_temp_script(&script, active_shell, &ctx.temp_dir)?;
+            let result = execute_script_file(&script_path, active_shell, ctx).await;
+            let _ = std::fs::remove_file(&script_path);
+            result
+        }
+    }
 }
 
-async fn execute_script(
+async fn execute_script_stdin(
+    script: &str,
+    shell_type: &crate::config::types::Shell,
+    ctx: &CommandContext,
+) -> Result<()> {
+    let shell_bin = shell::shell_binary(shell_type);
+
+    let mut cmd = Command::new(shell_bin);
+    cmd.stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| Error::ShellFailed(format!("Failed to spawn {shell_bin}: {e}")))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        use tokio::io::AsyncWriteExt;
+        stdin
+            .write_all(script.as_bytes())
+            .await
+            .map_err(|e| Error::ShellFailed(format!("Failed to write to stdin: {e}")))?;
+        // Drop stdin to signal EOF
+    }
+
+    wait_with_output(child, ctx).await
+}
+
+async fn execute_script_file(
     script_path: &std::path::Path,
     shell_type: &crate::config::types::Shell,
     ctx: &CommandContext,
@@ -84,78 +110,22 @@ async fn execute_script(
     let shell_bin = shell::shell_binary(shell_type);
 
     let mut cmd = Command::new(shell_bin);
-
-    let script_content = std::fs::read_to_string(script_path)
-        .map_err(|e| Error::ShellFailed(format!("Failed to read script: {e}")))?;
-
-    match shell_type {
-        crate::config::types::Shell::Bash | crate::config::types::Shell::Zsh => {
-            // Pipe script via stdin to avoid path issues on Windows
-            // and newline-in-args issues with CreateProcess
-            cmd.stdin(std::process::Stdio::piped());
-        }
-        crate::config::types::Shell::PowerShell => {
-            cmd.arg("-File").arg(script_path);
-        }
-    }
+    cmd.arg("-File").arg(script_path);
 
     cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    let mut child = cmd
+    let child = cmd
         .spawn()
         .map_err(|e| Error::ShellFailed(format!("Failed to spawn {shell_bin}: {e}")))?;
 
-    // Write script to stdin for bash/zsh
-    if matches!(
-        shell_type,
-        crate::config::types::Shell::Bash | crate::config::types::Shell::Zsh
-    ) {
-        if let Some(mut stdin) = child.stdin.take() {
-            use tokio::io::AsyncWriteExt;
-            stdin
-                .write_all(script_content.as_bytes())
-                .await
-                .map_err(|e| Error::ShellFailed(format!("Failed to write to stdin: {e}")))?;
-            // Drop stdin to signal EOF
-        }
-    }
+    wait_with_output(child, ctx).await
+}
 
-    // Stream stdout and stderr concurrently, then wait for process
-    let stdout_handle = child.stdout.take().map(|stdout| {
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                ctx_clone.log(line);
-            }
-        })
-    });
-
-    let stderr_handle = child.stderr.take().map(|stderr| {
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                ctx_clone.log(format!("[stderr] {line}"));
-            }
-        })
-    });
-
-    let status = child
-        .wait()
+async fn wait_with_output(child: tokio::process::Child, ctx: &CommandContext) -> Result<()> {
+    let status = process::stream_and_wait(child, ctx, process::StderrLabel::Prefixed)
         .await
         .map_err(|e| Error::ShellFailed(format!("Failed to wait for shell: {e}")))?;
-
-    // Wait for output streams to finish flushing
-    if let Some(h) = stdout_handle {
-        let _ = h.await;
-    }
-    if let Some(h) = stderr_handle {
-        let _ = h.await;
-    }
 
     if !status.success() {
         return Err(Error::ShellFailed(format!(

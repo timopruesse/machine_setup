@@ -18,14 +18,13 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         (area, None)
     };
 
-    let filtered_set: std::collections::HashSet<usize> =
-        app.filtered_indices.iter().copied().collect();
-
+    // `filtered_indices` is already the exact set we want to render and is
+    // maintained in ascending order by `update_filter`, so we can iterate it
+    // directly without rebuilding a HashSet every frame.
     let items: Vec<ListItem> = app
-        .tasks
+        .filtered_indices
         .iter()
-        .enumerate()
-        .filter(|(i, _)| filtered_set.contains(i))
+        .filter_map(|&i| app.tasks.get(i).map(|task| (i, task)))
         .map(|(i, task)| {
             let (symbol, style) = match &task.status {
                 TaskStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),

@@ -1,11 +1,10 @@
 use async_trait::async_trait;
 use std::path::Path;
-use walkdir::WalkDir;
 
 use crate::config::types::CopyArgs;
 use crate::engine::context::CommandContext;
 use crate::error::{Error, Result};
-use crate::utils::path::{expand_path, should_ignore};
+use crate::utils::path::{expand_path, walk_relative};
 use crate::utils::sudo;
 
 use super::CommandExecutor;
@@ -74,31 +73,20 @@ impl CommandExecutor for CopyCommand {
                 remove_file(&dest, use_sudo)?;
             }
         } else {
-            for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
-                if entry.file_type().is_file() {
-                    let relative = entry.path().strip_prefix(&src).unwrap();
-                    if should_ignore(relative, &self.args.ignore) {
-                        continue;
-                    }
-                    let dest = target.join(relative);
-                    if dest.exists() {
-                        ctx.log(format!("Removing: {}", dest.display()));
-                        remove_file(&dest, use_sudo)?;
-                    }
+            walk_relative(&src, &target, &self.args.ignore, |entry, dest| {
+                if entry.file_type().is_file() && dest.exists() {
+                    ctx.log(format!("Removing: {}", dest.display()));
+                    remove_file(dest, use_sudo)?;
                 }
-            }
+                Ok(())
+            })?;
         }
 
         Ok(())
     }
 
     fn description(&self) -> String {
-        let prefix = if self.args.sudo {
-            "copy (sudo)"
-        } else {
-            "copy"
-        };
-        format!("{prefix}: {} -> {}", self.args.src, self.args.target)
+        self.args.to_string()
     }
 }
 
@@ -156,20 +144,11 @@ fn copy_directory(
     use_sudo: bool,
     ctx: &CommandContext,
 ) -> Result<()> {
-    for entry in WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
-        let relative = entry.path().strip_prefix(src).unwrap();
-
-        if should_ignore(relative, ignore) {
-            continue;
-        }
-
-        let dest = target.join(relative);
-
+    walk_relative(src, target, ignore, |entry, dest| {
         if entry.file_type().is_dir() {
-            mkdir(&dest, use_sudo)?;
+            mkdir(dest, use_sudo)
         } else {
-            copy_file(entry.path(), &dest, use_sudo, ctx)?;
+            copy_file(entry.path(), dest, use_sudo, ctx)
         }
-    }
-    Ok(())
+    })
 }

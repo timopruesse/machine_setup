@@ -34,15 +34,12 @@ pub fn shell_profile(shell: &Shell) -> Option<String> {
 
 /// Check that an environment variable key is a valid identifier.
 pub fn validate_env_key(key: &str) -> bool {
-    if key.is_empty() {
-        return false;
-    }
     let mut chars = key.chars();
-    let first = chars.next().unwrap();
-    if !first.is_ascii_alphabetic() && first != '_' {
+    let Some(first) = chars.next() else {
         return false;
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Escape a value for use inside a bash/zsh single-quoted string.
@@ -91,7 +88,7 @@ pub fn build_shell_command(
         let val = if value.starts_with('~') {
             crate::utils::path::expand_path(value, None)
                 .to_string_lossy()
-                .to_string()
+                .into_owned()
         } else {
             value.clone()
         };

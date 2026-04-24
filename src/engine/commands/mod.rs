@@ -22,13 +22,15 @@ pub trait CommandExecutor: Send + Sync {
     fn description(&self) -> String;
 }
 
-/// Create a command executor from a config entry.
-pub fn create_executor(entry: &CommandEntry) -> Box<dyn CommandExecutor> {
+/// Create a command executor from a config entry. Takes ownership so the
+/// args struct moves directly into the executor without an intermediate
+/// clone inside each match arm.
+pub fn create_executor(entry: CommandEntry) -> Box<dyn CommandExecutor> {
     match entry {
-        CommandEntry::Copy(args) => Box::new(copy::CopyCommand::new(args.clone())),
-        CommandEntry::Symlink(args) => Box::new(symlink::SymlinkCommand::new(args.clone())),
-        CommandEntry::Clone(args) => Box::new(clone::CloneCommand::new(args.clone())),
-        CommandEntry::Run(args) => Box::new(run::RunCommand::new(args.clone())),
-        CommandEntry::MachineSetup(args) => Box::new(setup::SetupCommand::new(args.clone())),
+        CommandEntry::Copy(args) => Box::new(copy::CopyCommand::new(args)),
+        CommandEntry::Symlink(args) => Box::new(symlink::SymlinkCommand::new(args)),
+        CommandEntry::Clone(args) => Box::new(clone::CloneCommand::new(args)),
+        CommandEntry::Run(args) => Box::new(run::RunCommand::new(args)),
+        CommandEntry::MachineSetup(args) => Box::new(setup::SetupCommand::new(args)),
     }
 }

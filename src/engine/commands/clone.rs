@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use crate::config::types::CloneArgs;
 use crate::engine::context::CommandContext;
 use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
+use crate::utils::process;
 
 use super::CommandExecutor;
 
@@ -75,7 +75,7 @@ impl CommandExecutor for CloneCommand {
     }
 
     fn description(&self) -> String {
-        format!("clone: {} -> {}", self.args.url, self.args.target)
+        self.args.to_string()
     }
 }
 
@@ -93,43 +93,14 @@ async fn run_git_command(
         cmd.current_dir(dir);
     }
 
-    let mut child = cmd
+    let child = cmd
         .spawn()
         .map_err(|e| Error::GitFailed(format!("Failed to spawn git: {e}")))?;
 
-    let stdout_handle = child.stdout.take().map(|stdout| {
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                ctx_clone.log(line);
-            }
-        })
-    });
-
-    let stderr_handle = child.stderr.take().map(|stderr| {
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                ctx_clone.log(line);
-            }
-        })
-    });
-
-    let status = child
-        .wait()
+    // git emits progress on stderr — don't tag those lines as errors.
+    let status = process::stream_and_wait(child, ctx, process::StderrLabel::Plain)
         .await
         .map_err(|e| Error::GitFailed(format!("Failed to wait for git: {e}")))?;
-
-    if let Some(h) = stdout_handle {
-        let _ = h.await;
-    }
-    if let Some(h) = stderr_handle {
-        let _ = h.await;
-    }
 
     if !status.success() {
         return Err(Error::GitFailed(format!(
