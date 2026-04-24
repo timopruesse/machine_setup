@@ -85,8 +85,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Set up runner (moves app_config)
-    let runner = TaskRunner::new(app_config, cli.command.clone(), event_tx)
-        .with_config_dir(config_dir);
+    let runner =
+        TaskRunner::new(app_config, cli.command.clone(), event_tx).with_config_dir(config_dir);
     let force = cli.force;
     let task_names_clone = task_names.clone();
 

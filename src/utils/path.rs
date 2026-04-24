@@ -87,12 +87,7 @@ fn expand_env_vars(input: &str) -> String {
 ///
 /// `strip_prefix` is guaranteed to succeed because every WalkDir entry is
 /// rooted at `src`.
-pub fn walk_relative<F>(
-    src: &Path,
-    target: &Path,
-    ignore_list: &[String],
-    mut f: F,
-) -> Result<()>
+pub fn walk_relative<F>(src: &Path, target: &Path, ignore_list: &[String], mut f: F) -> Result<()>
 where
     F: FnMut(&DirEntry, &Path) -> Result<()>,
 {

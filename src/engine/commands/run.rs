@@ -122,10 +122,7 @@ async fn execute_script_file(
     wait_with_output(child, ctx).await
 }
 
-async fn wait_with_output(
-    child: tokio::process::Child,
-    ctx: &CommandContext,
-) -> Result<()> {
+async fn wait_with_output(child: tokio::process::Child, ctx: &CommandContext) -> Result<()> {
     let status = process::stream_and_wait(child, ctx, process::StderrLabel::Prefixed)
         .await
         .map_err(|e| Error::ShellFailed(format!("Failed to wait for shell: {e}")))?;

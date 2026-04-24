@@ -168,7 +168,11 @@ impl std::fmt::Display for CopyArgs {
 
 impl std::fmt::Display for SymlinkArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let prefix = if self.sudo { "symlink (sudo)" } else { "symlink" };
+        let prefix = if self.sudo {
+            "symlink (sudo)"
+        } else {
+            "symlink"
+        };
         write!(f, "{prefix}: {} -> {}", self.src, self.target)
     }
 }
