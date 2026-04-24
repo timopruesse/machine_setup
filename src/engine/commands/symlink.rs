@@ -86,12 +86,7 @@ impl CommandExecutor for SymlinkCommand {
     }
 
     fn description(&self) -> String {
-        let prefix = if self.args.sudo {
-            "symlink (sudo)"
-        } else {
-            "symlink"
-        };
-        format!("{prefix}: {} -> {}", self.args.src, self.args.target)
+        self.args.to_string()
     }
 }
 

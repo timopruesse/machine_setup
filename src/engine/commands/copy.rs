@@ -86,12 +86,7 @@ impl CommandExecutor for CopyCommand {
     }
 
     fn description(&self) -> String {
-        let prefix = if self.args.sudo {
-            "copy (sudo)"
-        } else {
-            "copy"
-        };
-        format!("{prefix}: {} -> {}", self.args.src, self.args.target)
+        self.args.to_string()
     }
 }
 

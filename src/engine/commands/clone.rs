@@ -75,7 +75,7 @@ impl CommandExecutor for CloneCommand {
     }
 
     fn description(&self) -> String {
-        format!("clone: {} -> {}", self.args.url, self.args.target)
+        self.args.to_string()
     }
 }
 

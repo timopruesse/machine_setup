@@ -150,27 +150,53 @@ impl<'de> Deserialize<'de> for CommandEntry {
 impl std::fmt::Display for CommandEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CommandEntry::Copy(args) => write!(f, "copy: {} -> {}", args.src, args.target),
-            CommandEntry::Symlink(args) => write!(f, "symlink: {} -> {}", args.src, args.target),
-            CommandEntry::Clone(args) => write!(f, "clone: {} -> {}", args.url, args.target),
-            CommandEntry::Run(args) => {
-                let mut iter = args.all_command_strings();
-                let first = iter.next();
-                let second = iter.next();
-                match (first, second) {
-                    (None, _) => write!(f, "run: (no commands)"),
-                    (Some(c), None) => write!(f, "run: {c}"),
-                    (Some(_), Some(_)) => write!(f, "run: {} commands", 2 + iter.count()),
-                }
-            }
-            CommandEntry::MachineSetup(args) => {
-                write!(f, "machine_setup: {}", args.config)?;
-                if let Some(task) = &args.task {
-                    write!(f, " (task: {task})")?;
-                }
-                Ok(())
-            }
+            CommandEntry::Copy(args) => args.fmt(f),
+            CommandEntry::Symlink(args) => args.fmt(f),
+            CommandEntry::Clone(args) => args.fmt(f),
+            CommandEntry::Run(args) => args.fmt(f),
+            CommandEntry::MachineSetup(args) => args.fmt(f),
         }
+    }
+}
+
+impl std::fmt::Display for CopyArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let prefix = if self.sudo { "copy (sudo)" } else { "copy" };
+        write!(f, "{prefix}: {} -> {}", self.src, self.target)
+    }
+}
+
+impl std::fmt::Display for SymlinkArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let prefix = if self.sudo { "symlink (sudo)" } else { "symlink" };
+        write!(f, "{prefix}: {} -> {}", self.src, self.target)
+    }
+}
+
+impl std::fmt::Display for CloneArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "clone: {} -> {}", self.url, self.target)
+    }
+}
+
+impl std::fmt::Display for RunArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut iter = self.all_command_strings();
+        match (iter.next(), iter.next()) {
+            (None, _) => write!(f, "run: (no commands)"),
+            (Some(c), None) => write!(f, "run: {c}"),
+            (Some(_), Some(_)) => write!(f, "run: {} commands", 2 + iter.count()),
+        }
+    }
+}
+
+impl std::fmt::Display for MachineSetupArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "machine_setup: {}", self.config)?;
+        if let Some(task) = &self.task {
+            write!(f, " (task: {task})")?;
+        }
+        Ok(())
     }
 }
 

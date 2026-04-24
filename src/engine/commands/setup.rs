@@ -32,11 +32,7 @@ impl CommandExecutor for SetupCommand {
     }
 
     fn description(&self) -> String {
-        let mut desc = format!("machine_setup: {}", self.args.config);
-        if let Some(task) = &self.args.task {
-            desc.push_str(&format!(" (task: {task})"));
-        }
-        desc
+        self.args.to_string()
     }
 }
 
