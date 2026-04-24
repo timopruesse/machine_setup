@@ -1,11 +1,10 @@
 use async_trait::async_trait;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use crate::config::types::RunArgs;
 use crate::engine::context::CommandContext;
 use crate::error::{Error, Result};
-use crate::utils::shell;
+use crate::utils::{process, shell};
 
 use super::CommandExecutor;
 
@@ -131,44 +130,12 @@ async fn execute_script_file(
 }
 
 async fn wait_with_output(
-    mut child: tokio::process::Child,
+    child: tokio::process::Child,
     ctx: &CommandContext,
 ) -> Result<()> {
-    // Stream stdout and stderr concurrently, then wait for process
-    let stdout_handle = child.stdout.take().map(|stdout| {
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                ctx_clone.log(line);
-            }
-        })
-    });
-
-    let stderr_handle = child.stderr.take().map(|stderr| {
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                ctx_clone.log(format!("[stderr] {line}"));
-            }
-        })
-    });
-
-    let status = child
-        .wait()
+    let status = process::stream_and_wait(child, ctx, process::StderrLabel::Prefixed)
         .await
         .map_err(|e| Error::ShellFailed(format!("Failed to wait for shell: {e}")))?;
-
-    // Wait for output streams to finish flushing
-    if let Some(h) = stdout_handle {
-        let _ = h.await;
-    }
-    if let Some(h) = stderr_handle {
-        let _ = h.await;
-    }
 
     if !status.success() {
         return Err(Error::ShellFailed(format!(
