@@ -1,10 +1,9 @@
 use async_trait::async_trait;
-use walkdir::WalkDir;
 
 use crate::config::types::SymlinkArgs;
 use crate::engine::context::CommandContext;
 use crate::error::{Error, Result};
-use crate::utils::path::{expand_path, should_ignore};
+use crate::utils::path::{expand_path, walk_relative};
 use crate::utils::sudo;
 
 use super::CommandExecutor;
@@ -46,21 +45,13 @@ impl CommandExecutor for SymlinkCommand {
             create_symlink(&src, &dest, self.args.force, use_sudo, ctx)?;
         } else {
             mkdir(&target, use_sudo)?;
-            for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
-                let relative = entry.path().strip_prefix(&src).unwrap();
-
-                if should_ignore(relative, &self.args.ignore) {
-                    continue;
-                }
-
-                let dest = target.join(relative);
-
+            walk_relative(&src, &target, &self.args.ignore, |entry, dest| {
                 if entry.file_type().is_dir() {
-                    mkdir(&dest, use_sudo)?;
+                    mkdir(dest, use_sudo)
                 } else {
-                    create_symlink(entry.path(), &dest, self.args.force, use_sudo, ctx)?;
+                    create_symlink(entry.path(), dest, self.args.force, use_sudo, ctx)
                 }
-            }
+            })?;
         }
 
         Ok(())
@@ -83,16 +74,12 @@ impl CommandExecutor for SymlinkCommand {
             };
             remove_symlink(&dest, use_sudo, ctx)?;
         } else {
-            for entry in WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
+            walk_relative(&src, &target, &self.args.ignore, |entry, dest| {
                 if entry.file_type().is_file() {
-                    let relative = entry.path().strip_prefix(&src).unwrap();
-                    if should_ignore(relative, &self.args.ignore) {
-                        continue;
-                    }
-                    let dest = target.join(relative);
-                    remove_symlink(&dest, use_sudo, ctx)?;
+                    remove_symlink(dest, use_sudo, ctx)?;
                 }
-            }
+                Ok(())
+            })?;
         }
 
         Ok(())

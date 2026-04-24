@@ -1,5 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use walkdir::{DirEntry, WalkDir};
+
+use crate::error::Result;
+
 /// Expand `~` to the user's home directory, `$VAR` to environment variables,
 /// and resolve relative paths against the base directory.
 pub fn expand_path(path: &str, base_dir: Option<&Path>) -> PathBuf {
@@ -74,6 +78,33 @@ fn expand_env_vars(input: &str) -> String {
     }
 
     result
+}
+
+/// Walk `src` and invoke `f` for each entry that isn't filtered out by
+/// `ignore_list`. The closure receives the raw `DirEntry` plus the
+/// precomputed destination path (`target` joined with the entry's
+/// `src`-relative suffix).
+///
+/// `strip_prefix` is guaranteed to succeed because every WalkDir entry is
+/// rooted at `src`.
+pub fn walk_relative<F>(
+    src: &Path,
+    target: &Path,
+    ignore_list: &[String],
+    mut f: F,
+) -> Result<()>
+where
+    F: FnMut(&DirEntry, &Path) -> Result<()>,
+{
+    for entry in WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
+        let relative = entry.path().strip_prefix(src).unwrap_or(entry.path());
+        if should_ignore(relative, ignore_list) {
+            continue;
+        }
+        let dest = target.join(relative);
+        f(&entry, &dest)?;
+    }
+    Ok(())
 }
 
 /// Check if a path should be ignored based on the ignore list.
