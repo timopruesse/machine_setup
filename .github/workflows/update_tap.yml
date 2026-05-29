@@ -26,12 +26,13 @@ jobs:
           base = "https://github.com/timopruesse/machine_setup"
 
           # marker (unique substring of the url) -> new url. The bump action only
-          # updated the source tarball, leaving the darwin binaries stale; we
-          # update all three url/sha256 pairs so they stay in sync.
+          # updated the source tarball, leaving the prebuilt binaries stale; we
+          # update every url/sha256 pair so they stay in sync.
           assets = {
               "archive/refs/tags": f"{base}/archive/refs/tags/{tag}.tar.gz",
               "aarch64-apple-darwin": f"{base}/releases/download/{tag}/machine_setup-aarch64-apple-darwin.tar.gz",
               "x86_64-apple-darwin": f"{base}/releases/download/{tag}/machine_setup-x86_64-apple-darwin.tar.gz",
+              "x86_64-unknown-linux-gnu": f"{base}/releases/download/{tag}/machine_setup-x86_64-unknown-linux-gnu.tar.gz",
           }
 
           def sha_of(url):
