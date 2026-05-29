@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.4.2]
+
+### Fixed
+- Homebrew release workflow now bumps the macOS `aarch64`/`x86_64` prebuilt-binary URLs and checksums alongside the source tarball, so `brew upgrade` installs the new version instead of the stale binaries left behind by the previous tap-update action
+
 ## [2.4.1]
 
 ### Changed

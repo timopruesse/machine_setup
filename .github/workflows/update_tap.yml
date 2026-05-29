@@ -8,10 +8,74 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: mislav/bump-homebrew-formula-action@v4
+      - name: Checkout tap
+        uses: actions/checkout@v5
         with:
-          tag-name: ${{ github.event.release.tag_name }}
-          formula-name: machine_setup
-          homebrew-tap: timopruesse/homebrew-repo
+          repository: timopruesse/homebrew-repo
+          token: ${{ secrets.REPO_TOKEN }}
+
+      - name: Update formula
         env:
-          COMMITTER_TOKEN: ${{ secrets.REPO_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, re, time, urllib.request
+
+          tag = os.environ["TAG"]
+          version = tag.removeprefix("v")
+          base = "https://github.com/timopruesse/machine_setup"
+
+          # marker (unique substring of the url) -> new url. The bump action only
+          # updated the source tarball, leaving the darwin binaries stale; we
+          # update all three url/sha256 pairs so they stay in sync.
+          assets = {
+              "archive/refs/tags": f"{base}/archive/refs/tags/{tag}.tar.gz",
+              "aarch64-apple-darwin": f"{base}/releases/download/{tag}/machine_setup-aarch64-apple-darwin.tar.gz",
+              "x86_64-apple-darwin": f"{base}/releases/download/{tag}/machine_setup-x86_64-apple-darwin.tar.gz",
+          }
+
+          def sha_of(url):
+              # Release assets may lag slightly behind the published event, so retry.
+              last = None
+              for _ in range(12):
+                  try:
+                      with urllib.request.urlopen(url) as r:
+                          if r.status == 200:
+                              return hashlib.sha256(r.read()).hexdigest()
+                          last = f"HTTP {r.status}"
+                  except Exception as e:  # noqa: BLE001
+                      last = str(e)
+                  time.sleep(15)
+              raise SystemExit(f"could not download {url}: {last}")
+
+          path = "Formula/machine_setup.rb"
+          with open(path) as f:
+              content = f.read()
+
+          for marker, url in assets.items():
+              sha = sha_of(url)
+              pattern = r'url "[^"]*' + re.escape(marker) + r'[^"]*"\n(\s*)sha256 "[^"]*"'
+              repl = lambda m, url=url, sha=sha: f'url "{url}"\n{m.group(1)}sha256 "{sha}"'
+              content, n = re.subn(pattern, repl, content)
+              if n != 1:
+                  raise SystemExit(f"expected exactly 1 url/sha256 block for {marker!r}, found {n}")
+
+          with open(path, "w") as f:
+              f.write(content)
+
+          print(f"Updated formula to {version}")
+          PY
+
+      - name: Commit and push
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Formula already up to date"
+            exit 0
+          fi
+          git add Formula/machine_setup.rb
+          git commit -m "machine_setup ${TAG#v}"
+          git push
