@@ -1,11 +1,14 @@
 use async_trait::async_trait;
+use std::path::Path;
 
 use crate::config::types::SymlinkArgs;
 use crate::engine::context::CommandContext;
+use crate::engine::mode::Mode;
 use crate::error::{Error, Result};
-use crate::utils::path::{expand_path, walk_relative};
-use crate::utils::sudo;
+use crate::utils::path::expand_path;
 
+use super::fs_ops::{self, FileOps};
+use super::tree;
 use super::CommandExecutor;
 
 pub struct SymlinkCommand {
@@ -20,10 +23,22 @@ impl SymlinkCommand {
 
 #[async_trait]
 impl CommandExecutor for SymlinkCommand {
-    async fn install(&self, ctx: &CommandContext) -> Result<()> {
+    async fn execute(&self, ctx: &CommandContext) -> Result<()> {
+        match ctx.mode {
+            Mode::Install | Mode::Update => self.apply(ctx),
+            Mode::Uninstall => self.remove(ctx),
+        }
+    }
+
+    fn description(&self) -> String {
+        self.args.to_string()
+    }
+}
+
+impl SymlinkCommand {
+    fn apply(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
-        let use_sudo = self.args.sudo;
 
         if !src.exists() {
             return Err(Error::PathError(format!(
@@ -32,141 +47,148 @@ impl CommandExecutor for SymlinkCommand {
             )));
         }
 
-        if src.is_file() {
-            let dest = if target.extension().is_some() || !target.is_dir() {
-                if let Some(parent) = target.parent() {
-                    mkdir(parent, use_sudo)?;
-                }
-                target.clone()
-            } else {
-                mkdir(&target, use_sudo)?;
-                target.join(src.file_name().unwrap())
-            };
-            create_symlink(&src, &dest, self.args.force, use_sudo, ctx)?;
-        } else {
-            mkdir(&target, use_sudo)?;
-            walk_relative(&src, &target, &self.args.ignore, |entry, dest| {
-                if entry.file_type().is_dir() {
-                    mkdir(dest, use_sudo)
-                } else {
-                    create_symlink(entry.path(), dest, self.args.force, use_sudo, ctx)
-                }
-            })?;
-        }
-
-        Ok(())
+        let ops = fs_ops::select(self.args.sudo);
+        let force = self.args.force;
+        tree::install_tree(
+            ops.as_ref(),
+            &src,
+            &target,
+            &self.args.ignore,
+            |file, dest| symlink_one(ops.as_ref(), file, dest, force, ctx),
+        )
     }
 
-    async fn update(&self, ctx: &CommandContext) -> Result<()> {
-        self.install(ctx).await
-    }
-
-    async fn uninstall(&self, ctx: &CommandContext) -> Result<()> {
+    fn remove(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
-        let use_sudo = self.args.sudo;
 
-        if src.is_file() {
-            let dest = if target.extension().is_some() || !target.is_dir() {
-                target
-            } else {
-                target.join(src.file_name().unwrap())
-            };
-            remove_symlink(&dest, use_sudo, ctx)?;
-        } else {
-            walk_relative(&src, &target, &self.args.ignore, |entry, dest| {
-                if entry.file_type().is_file() {
-                    remove_symlink(dest, use_sudo, ctx)?;
-                }
-                Ok(())
-            })?;
-        }
-
-        Ok(())
-    }
-
-    fn description(&self) -> String {
-        self.args.to_string()
+        let ops = fs_ops::select(self.args.sudo);
+        tree::uninstall_tree(&src, &target, &self.args.ignore, |dest| {
+            remove_link(ops.as_ref(), dest, ctx)
+        })
     }
 }
 
-fn mkdir(path: &std::path::Path, use_sudo: bool) -> Result<()> {
-    if path.is_dir() {
-        return Ok(());
-    }
-    if use_sudo {
-        sudo::sudo_mkdir(path)
-    } else {
-        std::fs::create_dir_all(path)?;
-        Ok(())
-    }
-}
-
-fn create_symlink(
-    src: &std::path::Path,
-    dest: &std::path::Path,
+/// Create one symlink at `dest` pointing to `src`. When something already
+/// exists at `dest`, either replace it (`force`) or skip it.
+fn symlink_one(
+    ops: &dyn FileOps,
+    src: &Path,
+    dest: &Path,
     force: bool,
-    use_sudo: bool,
     ctx: &CommandContext,
 ) -> Result<()> {
     if dest.exists() || dest.symlink_metadata().is_ok() {
         if force {
             ctx.log(format!("Removing existing: {}", dest.display()));
-            if use_sudo {
-                if dest.is_dir() {
-                    sudo::sudo_remove_dir(dest)?;
-                } else {
-                    sudo::sudo_remove(dest)?;
-                }
-            } else if dest.is_dir() {
-                std::fs::remove_dir_all(dest)?;
-            } else {
-                std::fs::remove_file(dest)?;
-            }
+            ops.remove_path(dest)?;
         } else {
             ctx.log(format!("Skipping (already exists): {}", dest.display()));
             return Ok(());
         }
     }
 
-    if let Some(parent) = dest.parent() {
-        mkdir(parent, use_sudo)?;
-    }
-
     ctx.log(format!("Symlink: {} -> {}", src.display(), dest.display()));
-
-    if use_sudo {
-        sudo::sudo_symlink(src, dest)
-    } else {
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(src, dest)?;
-
-        #[cfg(windows)]
-        {
-            if src.is_dir() {
-                std::os::windows::fs::symlink_dir(src, dest)?;
-            } else {
-                std::os::windows::fs::symlink_file(src, dest)?;
-            }
-        }
-
-        Ok(())
-    }
+    ops.create_symlink(src, dest)
 }
 
-fn remove_symlink(dest: &std::path::Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
+/// Remove the symlink an install would have created at `dest`, if present.
+fn remove_link(ops: &dyn FileOps, dest: &Path, ctx: &CommandContext) -> Result<()> {
     if dest.symlink_metadata().is_ok() {
         ctx.log(format!("Removing symlink: {}", dest.display()));
-        if use_sudo {
-            sudo::sudo_remove(dest)?;
-        } else {
-            #[cfg(windows)]
-            if dest.is_dir() {
-                std::fs::remove_dir(dest)?;
-                return Ok(());
-            }
-            std::fs::remove_file(dest)?;
-        }
+        ops.remove_symlink(dest)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::commands::fs_ops::RecordingFs;
+    use tempfile::tempdir;
+
+    fn ctx_for(
+        dir: &Path,
+    ) -> (
+        CommandContext,
+        tokio::sync::mpsc::UnboundedReceiver<crate::engine::event::TaskEvent>,
+    ) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = CommandContext {
+            event_tx: tx,
+            mode: Mode::Install,
+            config_dir: dir.to_path_buf(),
+            temp_dir: dir.to_path_buf(),
+            default_shell: crate::config::types::Shell::Bash,
+            task_name: "t".to_string(),
+            depth: 0,
+        };
+        (ctx, rx)
+    }
+
+    #[test]
+    fn test_symlink_one_creates_when_absent() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s");
+        std::fs::write(&src, b"x").unwrap();
+        let dest = dir.path().join("link");
+        let (ctx, _rx) = ctx_for(dir.path());
+
+        let ops = RecordingFs::default();
+        symlink_one(&ops, &src, &dest, false, &ctx).unwrap();
+        assert_eq!(
+            ops.calls(),
+            vec![format!(
+                "create_symlink {} {}",
+                src.display(),
+                dest.display()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_symlink_one_skips_existing_without_force() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s");
+        std::fs::write(&src, b"x").unwrap();
+        let dest = dir.path().join("existing");
+        std::fs::write(&dest, b"old").unwrap();
+        let (ctx, _rx) = ctx_for(dir.path());
+
+        let ops = RecordingFs::default();
+        symlink_one(&ops, &src, &dest, false, &ctx).unwrap();
+        // Skipped: nothing touched.
+        assert!(ops.calls().is_empty());
+    }
+
+    #[test]
+    fn test_symlink_one_force_removes_then_creates() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s");
+        std::fs::write(&src, b"x").unwrap();
+        let dest = dir.path().join("existing");
+        std::fs::write(&dest, b"old").unwrap();
+        let (ctx, _rx) = ctx_for(dir.path());
+
+        let ops = RecordingFs::default();
+        symlink_one(&ops, &src, &dest, true, &ctx).unwrap();
+        assert_eq!(
+            ops.calls(),
+            vec![
+                format!("remove_path {}", dest.display()),
+                format!("create_symlink {} {}", src.display(), dest.display()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_remove_link_noop_when_absent() {
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("nope");
+        let (ctx, _rx) = ctx_for(dir.path());
+
+        let ops = RecordingFs::default();
+        remove_link(&ops, &dest, &ctx).unwrap();
+        assert!(ops.calls().is_empty());
+    }
 }

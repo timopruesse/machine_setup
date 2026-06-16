@@ -1,5 +1,5 @@
-use crate::cli::Command;
 use crate::engine::event::TaskEvent;
+use crate::engine::mode::Mode;
 
 /// Status of a task in the TUI.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +61,7 @@ impl TaskState {
 pub struct App {
     pub tasks: Vec<TaskState>,
     pub selected: usize,
-    pub mode: Command,
+    pub mode: Mode,
     pub log_scroll: usize,
     pub done: bool,
     pub succeeded: usize,
@@ -78,7 +78,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(task_names: Vec<String>, mode: Command) -> Self {
+    pub fn new(task_names: Vec<String>, mode: Mode) -> Self {
         let filtered_indices: Vec<usize> = (0..task_names.len()).collect();
         let tasks = task_names.into_iter().map(TaskState::new).collect();
         Self {

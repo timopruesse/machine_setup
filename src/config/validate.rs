@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use super::graph::TaskGraph;
 use super::types::{AppConfig, CommandEntry};
 use crate::utils::shell::validate_env_key;
 
@@ -25,86 +26,27 @@ pub struct ValidationIssue {
     pub severity: Severity,
 }
 
-/// Validate depends_on references exist and detect cycles.
+/// Validate depends_on references exist and detect cycles, using the shared
+/// [`TaskGraph`] so ordering and validation agree on the same logic.
 fn validate_dependencies(config: &AppConfig, issues: &mut Vec<ValidationIssue>) {
-    let task_names: std::collections::HashSet<&str> =
-        config.tasks.keys().map(|s| s.as_str()).collect();
+    let graph = TaskGraph::new(&config.tasks);
 
-    // Check all depends_on references exist
-    for (name, task) in &config.tasks {
-        for dep in &task.depends_on {
-            if !task_names.contains(dep.as_str()) {
-                issues.push(ValidationIssue {
-                    task_name: name.clone(),
-                    message: format!("depends_on references unknown task: '{dep}'"),
-                    severity: Severity::Error,
-                });
-            }
-        }
+    // Report each broken edge.
+    for (name, dep) in graph.missing_dependencies() {
+        issues.push(ValidationIssue {
+            task_name: name,
+            message: format!("depends_on references unknown task: '{dep}'"),
+            severity: Severity::Error,
+        });
     }
 
-    // Detect cycles using DFS with coloring
-    use std::collections::HashMap;
-    #[derive(PartialEq)]
-    enum Color {
-        White,
-        Gray,
-        Black,
-    }
-    let mut colors: HashMap<&str, Color> = config
-        .tasks
-        .keys()
-        .map(|k| (k.as_str(), Color::White))
-        .collect();
-
-    fn dfs<'a>(
-        node: &'a str,
-        config: &'a AppConfig,
-        colors: &mut HashMap<&'a str, Color>,
-        path: &mut Vec<&'a str>,
-    ) -> Option<Vec<String>> {
-        colors.insert(node, Color::Gray);
-        path.push(node);
-
-        if let Some(task) = config.tasks.get(node) {
-            for dep in &task.depends_on {
-                match colors.get(dep.as_str()) {
-                    Some(Color::Gray) => {
-                        // Found a cycle — build the cycle path
-                        let cycle_start = path.iter().position(|&n| n == dep.as_str()).unwrap();
-                        let mut cycle: Vec<String> =
-                            path[cycle_start..].iter().map(|s| s.to_string()).collect();
-                        cycle.push(dep.clone());
-                        return Some(cycle);
-                    }
-                    Some(Color::White) | None => {
-                        if let Some(cycle) = dfs(dep, config, colors, path) {
-                            return Some(cycle);
-                        }
-                    }
-                    Some(Color::Black) => {}
-                }
-            }
-        }
-
-        path.pop();
-        colors.insert(node, Color::Black);
-        None
-    }
-
-    let task_keys: Vec<&str> = config.tasks.keys().map(|k| k.as_str()).collect();
-    for &node in &task_keys {
-        if colors.get(node) == Some(&Color::White) {
-            let mut path = Vec::new();
-            if let Some(cycle) = dfs(node, config, &mut colors, &mut path) {
-                issues.push(ValidationIssue {
-                    task_name: cycle[0].clone(),
-                    message: format!("Cyclic dependency detected: {}", cycle.join(" -> ")),
-                    severity: Severity::Error,
-                });
-                break; // Report one cycle at a time
-            }
-        }
+    // Report one cycle, if any.
+    if let Some(cycle) = graph.find_cycle() {
+        issues.push(ValidationIssue {
+            task_name: cycle[0].clone(),
+            message: format!("Cyclic dependency detected: {}", cycle.join(" -> ")),
+            severity: Severity::Error,
+        });
     }
 }
 

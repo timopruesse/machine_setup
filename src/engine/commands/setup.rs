@@ -19,15 +19,7 @@ impl SetupCommand {
 
 #[async_trait]
 impl CommandExecutor for SetupCommand {
-    async fn install(&self, ctx: &CommandContext) -> Result<()> {
-        run_sub_config(&self.args, ctx).await
-    }
-
-    async fn update(&self, ctx: &CommandContext) -> Result<()> {
-        run_sub_config(&self.args, ctx).await
-    }
-
-    async fn uninstall(&self, ctx: &CommandContext) -> Result<()> {
+    async fn execute(&self, ctx: &CommandContext) -> Result<()> {
         run_sub_config(&self.args, ctx).await
     }
 
@@ -56,10 +48,9 @@ async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result
     // and unresolvable paths fall back to the parent's config_dir.
     let sub_config_dir = crate::config::resolve_config_dir(&config_str, &ctx.config_dir);
 
-    let runner =
-        crate::engine::runner::TaskRunner::new(config, ctx.mode.clone(), ctx.event_tx.clone())
-            .with_config_dir(sub_config_dir)
-            .with_depth(ctx.depth + 1);
+    let runner = crate::engine::runner::TaskRunner::new(config, ctx.mode, ctx.event_tx.clone())
+        .with_config_dir(sub_config_dir)
+        .with_depth(ctx.depth + 1);
 
     if let Some(task_name) = &args.task {
         runner.run_single_task(task_name, false).await

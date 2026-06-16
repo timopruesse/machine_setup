@@ -7,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 
 use cli::{Cli, Command};
 use engine::event::TaskEvent;
+use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
 #[tokio::main]
@@ -84,9 +85,13 @@ async fn main() -> anyhow::Result<()> {
         pre_authenticate_sudo();
     }
 
+    // All non-execution verbs (list/validate/completions) returned above, so
+    // the remaining command always maps to an execution mode.
+    let mode = Mode::from_command(&cli.command)
+        .expect("list/validate/completions are handled before this point");
+
     // Set up runner (moves app_config)
-    let runner =
-        TaskRunner::new(app_config, cli.command.clone(), event_tx).with_config_dir(config_dir);
+    let runner = TaskRunner::new(app_config, mode, event_tx).with_config_dir(config_dir);
     let force = cli.force;
     let task_names_clone = task_names.clone();
 
@@ -103,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
         });
 
         // Run TUI in foreground (blocks until user quits)
-        tui::run(event_rx, task_names, cli.command, cancel).await?;
+        tui::run(event_rx, task_names, mode, cancel).await?;
 
         // Abort engine if still running
         engine_handle.abort();

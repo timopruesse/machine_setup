@@ -1,8 +1,10 @@
 pub mod clone;
 pub mod copy;
+pub mod fs_ops;
 pub mod run;
 pub mod setup;
 pub mod symlink;
+pub mod tree;
 
 use async_trait::async_trait;
 
@@ -12,11 +14,13 @@ use crate::error::Result;
 use super::context::CommandContext;
 
 /// Trait for executable commands.
+///
+/// A single `execute` entry point reads the execution mode from `ctx.mode`,
+/// so mode dispatch happens exactly once (inside the executor) rather than
+/// once here and again at the call site.
 #[async_trait]
 pub trait CommandExecutor: Send + Sync {
-    async fn install(&self, ctx: &CommandContext) -> Result<()>;
-    async fn update(&self, ctx: &CommandContext) -> Result<()>;
-    async fn uninstall(&self, ctx: &CommandContext) -> Result<()>;
+    async fn execute(&self, ctx: &CommandContext) -> Result<()>;
 
     /// Short description for display.
     fn description(&self) -> String;

@@ -2,13 +2,13 @@ use std::fs;
 use tempfile::tempdir;
 use tokio::sync::mpsc;
 
-use machine_setup::cli::Command;
 use machine_setup::config;
 use machine_setup::engine::event::TaskEvent;
+use machine_setup::engine::mode::Mode;
 use machine_setup::engine::runner::TaskRunner;
 
 /// Helper: run a config string and collect all events.
-async fn run_config(yaml: &str, mode: Command) -> Vec<TaskEvent> {
+async fn run_config(yaml: &str, mode: Mode) -> Vec<TaskEvent> {
     let dir = tempdir().unwrap();
     let config_path = dir.path().join("config.yaml");
     fs::write(&config_path, yaml).unwrap();
@@ -79,7 +79,7 @@ tasks:
       - run:
           commands: "echo hello_world"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -99,7 +99,7 @@ tasks:
             - "echo line_one"
             - "echo line_two"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -120,7 +120,7 @@ tasks:
           update: "echo updating"
           uninstall: "echo removing"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -140,7 +140,7 @@ tasks:
           install: "echo installing"
           update: "echo updating"
 "#,
-        Command::Update,
+        Mode::Update,
     )
     .await;
 
@@ -160,7 +160,7 @@ tasks:
             MY_VAR: "test_value_123"
           commands: "echo $MY_VAR"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -187,7 +187,7 @@ tasks:
       - run:
           commands: "exit 1"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -215,7 +215,7 @@ tasks:
           commands: "echo should_not_run"
 "#
         ),
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -244,7 +244,7 @@ tasks:
           commands: "echo correct_os"
 "#
         ),
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -283,7 +283,7 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, _rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     // Verify file was copied
@@ -326,7 +326,7 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, _rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     assert!(target_dir.join("keep.txt").exists());
@@ -364,7 +364,7 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, _rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let link = target_dir.join("dotfile");
@@ -395,14 +395,14 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx1, _rx1) = mpsc::unbounded_channel();
     let runner1 =
-        TaskRunner::new(config, Command::Install, tx1).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run (should skip)
     let config2 = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx2, mut rx2) = mpsc::unbounded_channel();
     let runner2 =
-        TaskRunner::new(config2, Command::Install, tx2).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config2, Mode::Install, tx2).with_config_dir(dir.path().to_path_buf());
     let _ = runner2.run_all(false).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -437,14 +437,14 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx1, _rx1) = mpsc::unbounded_channel();
     let runner1 =
-        TaskRunner::new(config, Command::Install, tx1).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run with force
     let config2 = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx2, mut rx2) = mpsc::unbounded_channel();
     let runner2 =
-        TaskRunner::new(config2, Command::Install, tx2).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config2, Mode::Install, tx2).with_config_dir(dir.path().to_path_buf());
     let _ = runner2.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -475,7 +475,7 @@ tasks:
       - run:
           commands: "echo task_b"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -496,7 +496,7 @@ tasks:
       - run:
           commands: "echo cmd_2"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -541,7 +541,7 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();
@@ -567,7 +567,7 @@ async fn test_json_config() {
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();
@@ -602,7 +602,7 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();
@@ -697,7 +697,7 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -721,7 +721,7 @@ tasks:
       - run:
           commands: "echo should_not_run"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -755,7 +755,7 @@ tasks:
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -778,7 +778,7 @@ tasks:
       - run:
           commands: "echo skip_if_ran"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -803,7 +803,7 @@ tasks:
       - run:
           commands: "echo first_task"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -842,7 +842,7 @@ tasks:
       - run:
           commands: "echo task_a"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -959,7 +959,7 @@ tasks:
 
     let (tx, mut rx) = mpsc::unbounded_channel();
     let runner =
-        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -987,7 +987,7 @@ tasks:
       - run:
           commands: "exit 1"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -1008,7 +1008,7 @@ tasks:
       - run:
           commands: "exit 1"
 "#,
-        Command::Install,
+        Mode::Install,
     )
     .await;
 
@@ -1017,4 +1017,240 @@ tasks:
         .iter()
         .any(|e| matches!(e, TaskEvent::TaskRetry { .. })));
     assert!(task_failed(&events, "no_retry"));
+}
+
+// ─── Copy/symlink lifecycle tests (install → uninstall) ───
+
+/// Run a config at `config_path` once in the given mode, against `base_dir`.
+async fn run_at(config_path: &std::path::Path, base_dir: &std::path::Path, mode: Mode) {
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    let runner = TaskRunner::new(config, mode, tx).with_config_dir(base_dir.to_path_buf());
+    let _ = runner.run_all(true).await;
+}
+
+#[tokio::test]
+async fn test_copy_uninstall_removes_copied_files() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("source");
+    let target_dir = dir.path().join("target");
+    fs::create_dir_all(src_dir.join("nested")).unwrap();
+    fs::write(src_dir.join("a.txt"), "a").unwrap();
+    fs::write(src_dir.join("nested/b.txt"), "b").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  copy_task:
+    commands:
+      - copy:
+          src: "{}"
+          target: "{}"
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    run_at(&config_path, dir.path(), Mode::Install).await;
+    assert!(target_dir.join("a.txt").exists());
+    assert!(target_dir.join("nested/b.txt").exists());
+
+    run_at(&config_path, dir.path(), Mode::Uninstall).await;
+    // Copied files are removed; the source is untouched.
+    assert!(!target_dir.join("a.txt").exists());
+    assert!(!target_dir.join("nested/b.txt").exists());
+    assert!(src_dir.join("a.txt").exists());
+}
+
+#[tokio::test]
+async fn test_symlink_uninstall_removes_link_keeps_source() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("source");
+    let target_dir = dir.path().join("target");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(src_dir.join("dotfile"), "content").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  link_task:
+    commands:
+      - symlink:
+          src: "{}"
+          target: "{}"
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    run_at(&config_path, dir.path(), Mode::Install).await;
+    let link = target_dir.join("dotfile");
+    assert!(link.symlink_metadata().is_ok());
+
+    run_at(&config_path, dir.path(), Mode::Uninstall).await;
+    assert!(link.symlink_metadata().is_err());
+    // Source file survives.
+    assert!(src_dir.join("dotfile").exists());
+}
+
+#[tokio::test]
+async fn test_symlink_force_overwrites_existing_file() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("source");
+    let target_dir = dir.path().join("target");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(src_dir.join("dotfile"), "from-source").unwrap();
+    // A real file already sits where the symlink should go.
+    fs::write(target_dir.join("dotfile"), "pre-existing").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  link_task:
+    commands:
+      - symlink:
+          src: "{}"
+          target: "{}"
+          force: true
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    run_at(&config_path, dir.path(), Mode::Install).await;
+
+    let link = target_dir.join("dotfile");
+    let meta = link.symlink_metadata().unwrap();
+    assert!(
+        meta.file_type().is_symlink(),
+        "force should replace the file with a symlink"
+    );
+    // Reading through the link yields the source content.
+    assert_eq!(fs::read_to_string(&link).unwrap(), "from-source");
+}
+
+#[tokio::test]
+async fn test_symlink_without_force_skips_existing_file() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("source");
+    let target_dir = dir.path().join("target");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(src_dir.join("dotfile"), "from-source").unwrap();
+    fs::write(target_dir.join("dotfile"), "pre-existing").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  link_task:
+    commands:
+      - symlink:
+          src: "{}"
+          target: "{}"
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    run_at(&config_path, dir.path(), Mode::Install).await;
+
+    // Without force, the pre-existing real file is left in place.
+    let link = target_dir.join("dotfile");
+    assert!(!link.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read_to_string(&link).unwrap(), "pre-existing");
+}
+
+#[tokio::test]
+async fn test_parallel_respects_dependency_layers() {
+    // parallel: true must still honor depends_on: the dependency completes
+    // before the dependent starts, exercising the graph's layering.
+    let events = run_config(
+        r#"
+parallel: true
+tasks:
+  dependent:
+    depends_on: ["base"]
+    commands:
+      - run:
+          commands: "echo dependent_task"
+  base:
+    commands:
+      - run:
+          commands: "echo base_task"
+"#,
+        Mode::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "base"));
+    assert!(task_completed(&events, "dependent"));
+
+    let base_done = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "base"))
+        .unwrap();
+    let dependent_start = events
+        .iter()
+        .position(
+            |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "dependent"),
+        )
+        .unwrap();
+    assert!(base_done < dependent_start);
+}
+
+#[tokio::test]
+async fn test_copy_single_file_into_directory_target() {
+    // A single source file with an existing directory target lands inside the
+    // directory under its own name (the dest-resolution rule).
+    let dir = tempdir().unwrap();
+    let src_file = dir.path().join("config.toml");
+    fs::write(&src_file, "x = 1").unwrap();
+    let target_dir = dir.path().join("dest_dir");
+    fs::create_dir_all(&target_dir).unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  copy_one:
+    commands:
+      - copy:
+          src: "{}"
+          target: "{}"
+"#,
+            src_file.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    run_at(&config_path, dir.path(), Mode::Install).await;
+    assert!(target_dir.join("config.toml").exists());
+    assert_eq!(
+        fs::read_to_string(target_dir.join("config.toml")).unwrap(),
+        "x = 1"
+    );
 }

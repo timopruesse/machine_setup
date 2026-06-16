@@ -273,34 +273,32 @@ impl RunArgs {
             .map(|s| s.as_str())
     }
 
-    /// Get commands for a specific mode.
-    pub fn commands_for_mode(&self, mode: &crate::cli::Command) -> &[String] {
+    /// Get commands for a specific execution mode.
+    pub fn commands_for_mode(&self, mode: crate::engine::mode::Mode) -> &[String] {
+        use crate::engine::mode::Mode;
         match mode {
-            crate::cli::Command::Install => {
+            Mode::Install => {
                 if !self.install.as_slice().is_empty() {
                     self.install.as_slice()
                 } else {
                     self.commands.as_slice()
                 }
             }
-            crate::cli::Command::Update => {
+            Mode::Update => {
                 if !self.update.as_slice().is_empty() {
                     self.update.as_slice()
                 } else {
-                    // In v1, update only runs if explicitly defined
+                    // Update only runs if explicitly defined.
                     &[]
                 }
             }
-            crate::cli::Command::Uninstall => {
+            Mode::Uninstall => {
                 if !self.uninstall.as_slice().is_empty() {
                     self.uninstall.as_slice()
                 } else {
                     &[]
                 }
             }
-            crate::cli::Command::List
-            | crate::cli::Command::Validate
-            | crate::cli::Command::Completions { .. } => &[],
         }
     }
 }
@@ -442,18 +440,24 @@ update: "npm update"
 uninstall: "npm uninstall"
 "#;
         let args: RunArgs = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(
-            args.commands_for_mode(&crate::cli::Command::Install),
-            &["npm install"]
-        );
-        assert_eq!(
-            args.commands_for_mode(&crate::cli::Command::Update),
-            &["npm update"]
-        );
-        assert_eq!(
-            args.commands_for_mode(&crate::cli::Command::Uninstall),
-            &["npm uninstall"]
-        );
+        use crate::engine::mode::Mode;
+        assert_eq!(args.commands_for_mode(Mode::Install), &["npm install"]);
+        assert_eq!(args.commands_for_mode(Mode::Update), &["npm update"]);
+        assert_eq!(args.commands_for_mode(Mode::Uninstall), &["npm uninstall"]);
+    }
+
+    #[test]
+    fn test_run_args_install_falls_back_to_commands() {
+        // When no mode-specific `install` is set, install mode uses `commands`.
+        let yaml = r#"
+commands: "echo shared"
+"#;
+        let args: RunArgs = serde_yaml::from_str(yaml).unwrap();
+        use crate::engine::mode::Mode;
+        assert_eq!(args.commands_for_mode(Mode::Install), &["echo shared"]);
+        // Update/uninstall don't fall back to `commands`.
+        assert!(args.commands_for_mode(Mode::Update).is_empty());
+        assert!(args.commands_for_mode(Mode::Uninstall).is_empty());
     }
 
     #[test]
