@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.4.4]
+
+### Performance
+- Parallelize DirectFs directory copy/uninstall file apply on a shared Rayon pool sized by `num_threads`, so large tree installs scale without oversubscribing sibling tasks
+- Coalesce per-file copy/symlink progress logs for large trees (first few, then periodically, plus a summary)
+- Skip redundant parent `create_dir_all` when the destination directory already exists
+- Avoid `canonicalize` syscalls when creating new symlinks whose destination does not yet exist
+
+### Changed
+- Cap concurrent leaf Command executor work with a shared concurrency gate (`num_threads`, default CPUs − 1)
+- Add Criterion Command bench for tree materialization and Runner smoke (report-only; SudoFs opt-in via `MACHINE_SETUP_BENCH_SUDO=1`)
+
+### Refactored
+- Deepen engine architecture around File ops adapters, shared tree materialization, Task event sinks, and CONTEXT.md vocabulary
+
 ## [2.4.3]
 
 ### Fixed
