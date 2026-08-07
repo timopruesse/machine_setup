@@ -178,7 +178,11 @@ where
     apply_dests(pool, &dests, &on_dest)
 }
 
-fn apply_files<F>(pool: Option<&ThreadPool>, files: &[(PathBuf, PathBuf)], on_file: &F) -> Result<()>
+fn apply_files<F>(
+    pool: Option<&ThreadPool>,
+    files: &[(PathBuf, PathBuf)],
+    on_file: &F,
+) -> Result<()>
 where
     F: Fn(&Path, &Path) -> Result<()> + Sync,
 {
