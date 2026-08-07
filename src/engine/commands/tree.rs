@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::utils::path::walk_relative;
 
 use super::fs_ops::FileOps;
@@ -52,38 +52,65 @@ pub fn resolve_single_file_dest(src: &Path, target: &Path) -> ResolvedDest {
 /// Apply an operation across a source onto `target`.
 ///
 /// For a single file, resolves the destination, ensures the needed directory
-/// exists via `ops`, then calls `on_file(src_file, dest)`. For a directory,
-/// creates `target` and walks the source (honoring `ignore`), creating
-/// directories via `ops` and calling `on_file` for each file. Because WalkDir
-/// yields a directory before its contents, every file's parent already exists
-/// by the time `on_file` runs.
-pub fn install_tree<F>(
-    ops: &dyn FileOps,
+/// via `ensure_dir`, then calls `on_file(src_file, dest)`. For a directory,
+/// ensures `target` and walks the source (honoring `ignore`), ensuring
+/// directories via `ensure_dir` and calling `on_file` for each file. Because
+/// WalkDir yields a directory before its contents, every file's parent already
+/// exists by the time `on_file` runs.
+///
+/// Callers choose directory semantics: `copy` passes `|d| ops.mkdir_p(d)`;
+/// `symlink` passes [`ensure_real_dir`] so leftover directory symlinks cannot
+/// redirect leaf operations into the source tree.
+pub fn install_tree<F, E>(
     src: &Path,
     target: &Path,
     ignore: &[String],
+    mut ensure_dir: E,
     mut on_file: F,
 ) -> Result<()>
 where
+    E: FnMut(&Path) -> Result<()>,
     F: FnMut(&Path, &Path) -> Result<()>,
 {
     if src.is_file() {
         let resolved = resolve_single_file_dest(src, target);
         if let Some(dir) = &resolved.dir_to_create {
-            ops.mkdir_p(dir)?;
+            ensure_dir(dir)?;
         }
         on_file(src, &resolved.dest)?;
     } else {
-        ops.mkdir_p(target)?;
+        ensure_dir(target)?;
         walk_relative(src, target, ignore, |entry, dest| {
             if entry.file_type().is_dir() {
-                ops.mkdir_p(dest)
+                ensure_dir(dest)
             } else {
                 on_file(entry.path(), dest)
             }
         })?;
     }
     Ok(())
+}
+
+/// Ensure `path` is a real directory — never leave a directory symlink in place.
+///
+/// Directory-mode symlink walks create real intermediate dirs + file symlinks.
+/// A leftover directory symlink at `path` would make leaf operations resolve
+/// into the source tree (self-links). Unwrap by removing only the link inode.
+pub fn ensure_real_dir(ops: &dyn FileOps, path: &Path, mut log: impl FnMut(String)) -> Result<()> {
+    match path.symlink_metadata() {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            log(format!("Unwrapping directory symlink: {}", path.display()));
+            ops.remove_symlink(path)?;
+            ops.mkdir_p(path)
+        }
+        Ok(meta) if meta.is_dir() => Ok(()),
+        Ok(_) => Err(Error::PathError(format!(
+            "Expected a directory at {}, found a file",
+            path.display()
+        ))),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => ops.mkdir_p(path),
+        Err(err) => Err(err.into()),
+    }
 }
 
 /// Undo an operation across a source onto `target`.
@@ -114,7 +141,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::commands::fs_ops::RecordingFs;
+    use crate::engine::commands::fs_ops::{DirectFs, RecordingFs};
     use std::cell::RefCell;
     use tempfile::tempdir;
 
@@ -152,12 +179,18 @@ mod tests {
 
         let ops = RecordingFs::default();
         let applied = RefCell::new(Vec::new());
-        install_tree(&ops, &src, &target, &[], |s, d| {
-            applied
-                .borrow_mut()
-                .push(format!("{} -> {}", s.display(), d.display()));
-            Ok(())
-        })
+        install_tree(
+            &src,
+            &target,
+            &[],
+            |d| ops.mkdir_p(d),
+            |s, d| {
+                applied
+                    .borrow_mut()
+                    .push(format!("{} -> {}", s.display(), d.display()));
+                Ok(())
+            },
+        )
         .unwrap();
 
         // Parent dir created via ops; file op invoked once with resolved dest.
@@ -182,12 +215,18 @@ mod tests {
 
         let ops = RecordingFs::default();
         let files = RefCell::new(Vec::new());
-        install_tree(&ops, &src, &target, &[], |s, _d| {
-            files
-                .borrow_mut()
-                .push(s.file_name().unwrap().to_string_lossy().into_owned());
-            Ok(())
-        })
+        install_tree(
+            &src,
+            &target,
+            &[],
+            |d| ops.mkdir_p(d),
+            |s, _d| {
+                files
+                    .borrow_mut()
+                    .push(s.file_name().unwrap().to_string_lossy().into_owned());
+                Ok(())
+            },
+        )
         .unwrap();
 
         let mut applied = files.into_inner();
@@ -210,12 +249,18 @@ mod tests {
 
         let ops = RecordingFs::default();
         let files = RefCell::new(Vec::new());
-        install_tree(&ops, &src, &target, &["README.md".to_string()], |s, _d| {
-            files
-                .borrow_mut()
-                .push(s.file_name().unwrap().to_string_lossy().into_owned());
-            Ok(())
-        })
+        install_tree(
+            &src,
+            &target,
+            &["README.md".to_string()],
+            |d| ops.mkdir_p(d),
+            |s, _d| {
+                files
+                    .borrow_mut()
+                    .push(s.file_name().unwrap().to_string_lossy().into_owned());
+                Ok(())
+            },
+        )
         .unwrap();
 
         assert_eq!(files.into_inner(), vec!["keep.txt"]);
@@ -259,5 +304,38 @@ mod tests {
         let mut got = removed.into_inner();
         got.sort();
         assert_eq!(got, vec!["a.txt", "b.txt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ensure_real_dir_unwraps_directory_symlink() {
+        let dir = tempdir().unwrap();
+        let real = dir.path().join("real");
+        std::fs::create_dir_all(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        let ops = DirectFs;
+        let logs = RefCell::new(Vec::new());
+        ensure_real_dir(&ops, &link, |msg| logs.borrow_mut().push(msg)).unwrap();
+
+        let meta = link.symlink_metadata().unwrap();
+        assert!(meta.is_dir() && !meta.file_type().is_symlink());
+        assert!(real.exists());
+        assert!(logs
+            .into_inner()
+            .iter()
+            .any(|m| m.contains("Unwrapping directory symlink")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ensure_real_dir_rejects_regular_file() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("file");
+        std::fs::write(&file, b"x").unwrap();
+        let ops = DirectFs;
+        let err = ensure_real_dir(&ops, &file, |_| {}).unwrap_err();
+        assert!(matches!(err, Error::PathError(_)));
     }
 }

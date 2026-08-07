@@ -90,6 +90,14 @@ impl FileOps for DirectFs {
     }
 
     fn remove_path(&self, path: &Path) -> Result<()> {
+        // Symlinks first: `is_dir()` follows links, and `remove_dir_all` on a
+        // directory symlink would delete the pointed-to tree.
+        if path
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink())
+        {
+            return self.remove_symlink(path);
+        }
         if path.is_dir() {
             std::fs::remove_dir_all(path)?;
         } else {
@@ -132,7 +140,14 @@ impl FileOps for SudoFs {
     }
 
     fn remove_path(&self, path: &Path) -> Result<()> {
-        // `rm -rf` removes files and directories alike.
+        // Never `rm -rf` a directory symlink — that follows into and deletes
+        // the pointed-to tree. Unlink the inode with `rm -f` instead.
+        if path
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink())
+        {
+            return self.remove_symlink(path);
+        }
         sudo::sudo_remove_dir(path)
     }
 
@@ -258,6 +273,23 @@ mod tests {
         assert!(link.symlink_metadata().is_err());
         // The link target is untouched.
         assert!(src.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_direct_remove_path_unlinks_dir_symlink_without_touching_target() {
+        let dir = tempdir().unwrap();
+        let ops = DirectFs;
+
+        let target = dir.path().join("target");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(target.join("keep.txt"), b"safe").unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        ops.remove_path(&link).unwrap();
+        assert!(link.symlink_metadata().is_err());
+        assert_eq!(std::fs::read(target.join("keep.txt")).unwrap(), b"safe");
     }
 
     #[test]

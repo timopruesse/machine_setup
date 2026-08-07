@@ -50,10 +50,10 @@ impl SymlinkCommand {
         let ops = fs_ops::select(self.args.sudo);
         let force = self.args.force;
         tree::install_tree(
-            ops.as_ref(),
             &src,
             &target,
             &self.args.ignore,
+            |dir| tree::ensure_real_dir(ops.as_ref(), dir, |msg| ctx.log(msg)),
             |file, dest| symlink_one(ops.as_ref(), file, dest, force, ctx),
         )
     }
@@ -85,6 +85,22 @@ fn symlink_one(
         } else {
             ctx.log(format!("Skipping (already exists): {}", dest.display()));
             return Ok(());
+        }
+    }
+
+    if let Some(parent) = dest.parent() {
+        tree::ensure_real_dir(ops, parent, |msg| ctx.log(msg))?;
+    }
+
+    if let (Ok(src_canon), Ok(dest_canon)) =
+        (std::fs::canonicalize(src), std::fs::canonicalize(dest))
+    {
+        if src_canon == dest_canon {
+            return Err(Error::PathError(format!(
+                "Refusing to create self-symlink: {} -> {}",
+                src.display(),
+                dest.display()
+            )));
         }
     }
 

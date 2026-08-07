@@ -49,10 +49,10 @@ impl CopyCommand {
 
         let ops = fs_ops::select(self.args.sudo);
         tree::install_tree(
-            ops.as_ref(),
             &src,
             &target,
             &self.args.ignore,
+            |dir| ops.mkdir_p(dir),
             |file, dest| copy_one(ops.as_ref(), file, dest, ctx),
         )
     }
