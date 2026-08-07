@@ -225,6 +225,12 @@ This command symlinks all the files from the source directory to the target dire
 | sudo     | run file operations with sudo       |    -     | true                              |
 
 > If `force` is set to `true`, existing files will be **removed** and replaced by the symlinks.
+>
+> When `src` is a directory, intermediate destinations are always **real directories**.
+> Leftover directory symlinks under `target` are unwrapped (the link inode is
+> removed and replaced with an empty real directory; the tree the link pointed
+> at is left untouched). This prevents file symlinks from being written through
+> into the source tree.
 
 ##### example
 

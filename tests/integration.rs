@@ -371,6 +371,153 @@ tasks:
     assert!(link.exists() || link.symlink_metadata().is_ok());
 }
 
+#[tokio::test]
+async fn test_symlink_unwraps_nested_dir_symlink_without_corrupting_source() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("src");
+    let target_dir = dir.path().join("target");
+    let src_pack = src_dir.join("skills").join("route-agents");
+    let target_skills = target_dir.join("skills");
+    let skill_body = "route-agents-body";
+
+    fs::create_dir_all(&src_pack).unwrap();
+    fs::write(src_pack.join("SKILL.md"), skill_body).unwrap();
+    fs::create_dir_all(&target_skills).unwrap();
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&src_pack, target_skills.join("route-agents")).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(&src_pack, target_skills.join("route-agents")).unwrap();
+
+    assert!(
+        target_skills
+            .join("route-agents")
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  symlink_unwrap:
+    commands:
+      - symlink:
+          src: "{}"
+          target: "{}"
+          force: true
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_all(true).await;
+
+    let dest_pack = target_skills.join("route-agents");
+    let dest_meta = dest_pack.symlink_metadata().expect("dest pack should exist");
+    assert!(
+        dest_meta.is_dir() && !dest_meta.file_type().is_symlink(),
+        "dest pack must be a real directory, not a leftover dir symlink"
+    );
+
+    let dest_skill = dest_pack.join("SKILL.md");
+    assert!(
+        dest_skill
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "dest SKILL.md should be a symlink"
+    );
+
+    let src_skill = src_pack.join("SKILL.md");
+    let src_meta = src_skill.symlink_metadata().expect("source SKILL.md");
+    assert!(
+        src_meta.is_file() && !src_meta.file_type().is_symlink(),
+        "source SKILL.md must remain a regular file (not a self-symlink)"
+    );
+    assert_eq!(fs::read_to_string(&src_skill).unwrap(), skill_body);
+}
+
+#[tokio::test]
+async fn test_symlink_unwraps_nested_dir_symlink_without_force_for_new_leaf() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("src");
+    let target_dir = dir.path().join("target");
+    let src_pack = src_dir.join("skills").join("route-agents");
+    let target_skills = target_dir.join("skills");
+
+    fs::create_dir_all(&src_pack).unwrap();
+    fs::write(src_pack.join("SKILL.md"), "body").unwrap();
+    fs::write(src_pack.join("NEW.md"), "new-leaf").unwrap();
+    fs::create_dir_all(&target_skills).unwrap();
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&src_pack, target_skills.join("route-agents")).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(&src_pack, target_skills.join("route-agents")).unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  symlink_unwrap_noforce:
+    commands:
+      - symlink:
+          src: "{}"
+          target: "{}"
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (tx, _rx) = mpsc::unbounded_channel();
+    let runner =
+        TaskRunner::new(config, Command::Install, tx).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_all(true).await;
+
+    let dest_pack = target_skills.join("route-agents");
+    assert!(
+        !dest_pack
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        dest_pack
+            .join("NEW.md")
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        !src_pack
+            .join("NEW.md")
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read_to_string(src_pack.join("NEW.md")).unwrap(), "new-leaf");
+}
+
 // ─── History tests ───
 
 #[tokio::test]

@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use std::fs;
+use std::path::Path;
 
 use crate::config::types::SymlinkArgs;
 use crate::engine::context::CommandContext;
@@ -35,19 +37,19 @@ impl CommandExecutor for SymlinkCommand {
         if src.is_file() {
             let dest = if target.extension().is_some() || !target.is_dir() {
                 if let Some(parent) = target.parent() {
-                    mkdir(parent, use_sudo)?;
+                    ensure_real_dir(parent, use_sudo, ctx)?;
                 }
                 target.clone()
             } else {
-                mkdir(&target, use_sudo)?;
+                ensure_real_dir(&target, use_sudo, ctx)?;
                 target.join(src.file_name().unwrap())
             };
             create_symlink(&src, &dest, self.args.force, use_sudo, ctx)?;
         } else {
-            mkdir(&target, use_sudo)?;
+            ensure_real_dir(&target, use_sudo, ctx)?;
             walk_relative(&src, &target, &self.args.ignore, |entry, dest| {
                 if entry.file_type().is_dir() {
-                    mkdir(dest, use_sudo)
+                    ensure_real_dir(dest, use_sudo, ctx)
                 } else {
                     create_symlink(entry.path(), dest, self.args.force, use_sudo, ctx)
                 }
@@ -90,21 +92,54 @@ impl CommandExecutor for SymlinkCommand {
     }
 }
 
-fn mkdir(path: &std::path::Path, use_sudo: bool) -> Result<()> {
-    if path.is_dir() {
-        return Ok(());
+/// Ensure `path` is a real directory — never leave a directory symlink in place.
+///
+/// Directory-mode symlink walks create real intermediate dirs + file symlinks.
+/// A leftover directory symlink at `path` would make leaf operations resolve
+/// into the source tree (self-links). Unwrap by removing only the link inode.
+fn ensure_real_dir(path: &Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
+    match path.symlink_metadata() {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            ctx.log(format!(
+                "Unwrapping directory symlink: {}",
+                path.display()
+            ));
+            remove_symlink_inode(path, use_sudo)?;
+            create_dir(path, use_sudo)
+        }
+        Ok(meta) if meta.is_dir() => Ok(()),
+        Ok(_) => Err(Error::PathError(format!(
+            "Expected a directory at {}, found a file",
+            path.display()
+        ))),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => create_dir(path, use_sudo),
+        Err(err) => Err(err.into()),
     }
+}
+
+fn create_dir(path: &Path, use_sudo: bool) -> Result<()> {
     if use_sudo {
         sudo::sudo_mkdir(path)
     } else {
-        std::fs::create_dir_all(path)?;
+        fs::create_dir_all(path)?;
+        Ok(())
+    }
+}
+
+fn remove_symlink_inode(path: &Path, use_sudo: bool) -> Result<()> {
+    if use_sudo {
+        // `rm -f` removes the symlink inode; do not use `rm -rf` (would follow
+        // into and delete the pointed-to tree).
+        sudo::sudo_remove(path)
+    } else {
+        fs::remove_file(path)?;
         Ok(())
     }
 }
 
 fn create_symlink(
-    src: &std::path::Path,
-    dest: &std::path::Path,
+    src: &Path,
+    dest: &Path,
     force: bool,
     use_sudo: bool,
     ctx: &CommandContext,
@@ -113,15 +148,18 @@ fn create_symlink(
         if force {
             ctx.log(format!("Removing existing: {}", dest.display()));
             if use_sudo {
-                if dest.is_dir() {
+                if dest.is_dir() && !dest.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink())
+                {
                     sudo::sudo_remove_dir(dest)?;
                 } else {
                     sudo::sudo_remove(dest)?;
                 }
+            } else if dest.is_symlink() {
+                fs::remove_file(dest)?;
             } else if dest.is_dir() {
-                std::fs::remove_dir_all(dest)?;
+                fs::remove_dir_all(dest)?;
             } else {
-                std::fs::remove_file(dest)?;
+                fs::remove_file(dest)?;
             }
         } else {
             ctx.log(format!("Skipping (already exists): {}", dest.display()));
@@ -130,7 +168,17 @@ fn create_symlink(
     }
 
     if let Some(parent) = dest.parent() {
-        mkdir(parent, use_sudo)?;
+        ensure_real_dir(parent, use_sudo, ctx)?;
+    }
+
+    if let (Ok(src_canon), Ok(dest_canon)) = (fs::canonicalize(src), fs::canonicalize(dest)) {
+        if src_canon == dest_canon {
+            return Err(Error::PathError(format!(
+                "Refusing to create self-symlink: {} -> {}",
+                src.display(),
+                dest.display()
+            )));
+        }
     }
 
     ctx.log(format!("Symlink: {} -> {}", src.display(), dest.display()));
@@ -154,7 +202,7 @@ fn create_symlink(
     }
 }
 
-fn remove_symlink(dest: &std::path::Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
+fn remove_symlink(dest: &Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
     if dest.symlink_metadata().is_ok() {
         ctx.log(format!("Removing symlink: {}", dest.display()));
         if use_sudo {
@@ -162,10 +210,10 @@ fn remove_symlink(dest: &std::path::Path, use_sudo: bool, ctx: &CommandContext) 
         } else {
             #[cfg(windows)]
             if dest.is_dir() {
-                std::fs::remove_dir(dest)?;
+                fs::remove_dir(dest)?;
                 return Ok(());
             }
-            std::fs::remove_file(dest)?;
+            fs::remove_file(dest)?;
         }
     }
     Ok(())
