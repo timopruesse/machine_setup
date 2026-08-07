@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.4.5]
+
+### Performance
+- Defer Tokio multi-thread runtime until install/update/uninstall so sync verbs (`list`, `validate`, completions, `--help`) skip runtime bring-up
+- Lazily create the Concurrency gate Rayon FS pool on first tree apply instead of at `TaskRunner` construction
+- Slim the release binary with thin LTO, single codegen unit, strip, and a trimmed tokio feature set
+
+### Changed
+- Add fixed-cost Command benches for `TaskRunner::new` and empty-task Runner smoke (report-only)
+
 ## [2.4.4]
 
 ### Performance
