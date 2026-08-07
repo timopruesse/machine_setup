@@ -4,29 +4,41 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-use crate::tui::app::App;
+use crate::tui::state::UiState;
 
-pub fn render(f: &mut Frame, area: Rect, app: &App) {
-    let keys = if app.search_mode {
+pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
+    let mut keys = if state.search_mode {
         vec![
             key_hint("Esc", "cancel"),
             key_hint("Enter", "apply"),
-            key_hint("Up/Down", "navigate"),
+            key_hint("j/k", "navigate"),
         ]
-    } else if app.done {
+    } else if state.filter_active() {
+        vec![
+            key_hint("Esc", "clear filter"),
+            key_hint("q", "quit"),
+            key_hint("j/k", "navigate"),
+            key_hint("/", "search"),
+        ]
+    } else if state.done {
         vec![
             key_hint("q", "quit"),
-            key_hint("Up/Down", "navigate"),
+            key_hint("j/k", "navigate"),
             key_hint("/", "search"),
         ]
     } else {
         vec![
             key_hint("q", "quit"),
-            key_hint("Up/Down", "navigate"),
-            key_hint("PgUp/PgDn", "scroll log"),
+            key_hint("j/k", "navigate"),
+            key_hint("PgUp/PgDn", "scroll"),
+            key_hint("Home/End", "log"),
             key_hint("/", "search"),
         ]
     };
+
+    if !state.log_follow && !state.search_mode {
+        keys.push(key_hint("End", "follow"));
+    }
 
     let mut spans = Vec::new();
     for (i, group) in keys.iter().enumerate() {

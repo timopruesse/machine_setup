@@ -1,11 +1,12 @@
-pub mod app;
+pub mod event_loop;
+pub mod message;
 pub mod plain;
+pub mod reduce;
+pub mod state;
 pub mod widgets;
 
 use std::io;
-use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::ExecutableCommand;
 use ratatui::layout::{Constraint, Direction, Layout};
@@ -15,18 +16,18 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::engine::event::TaskEvent;
-use app::App;
+use state::{TaskStatus, UiState};
 
 /// Restore the terminal to its normal state.
 /// Safe to call multiple times.
-fn restore_terminal() {
+pub(crate) fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
     let _ = io::stdout().execute(LeaveAlternateScreen);
 }
 
 /// Run the TUI, consuming events from the engine until all tasks are done.
 pub async fn run(
-    mut event_rx: mpsc::UnboundedReceiver<TaskEvent>,
+    event_rx: mpsc::UnboundedReceiver<TaskEvent>,
     task_names: Vec<String>,
     mode: crate::engine::mode::Mode,
     cancel: CancellationToken,
@@ -45,83 +46,24 @@ pub async fn run(
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
 
-    let mut app = App::new(task_names, mode);
+    let state = UiState::new(task_names, mode);
 
-    let result = run_loop(&mut terminal, &mut app, &mut event_rx, &cancel).await;
+    let result = event_loop::run_loop(&mut terminal, state, event_rx, cancel).await;
 
     // Always restore terminal
     restore_terminal();
-    terminal.show_cursor()?;
+    let _ = terminal.show_cursor();
 
-    // Print final summary to stdout
-    print_summary(&app);
-
-    result
-}
-
-async fn run_loop(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    app: &mut App,
-    event_rx: &mut mpsc::UnboundedReceiver<TaskEvent>,
-    cancel: &CancellationToken,
-) -> anyhow::Result<()> {
-    loop {
-        // Drain all pending task events (non-blocking)
-        loop {
-            match event_rx.try_recv() {
-                Ok(task_event) => app.handle_event(task_event),
-                Err(mpsc::error::TryRecvError::Empty) => break,
-                Err(mpsc::error::TryRecvError::Disconnected) => {
-                    app.done = true;
-                    break;
-                }
-            }
+    match result {
+        Ok(final_state) => {
+            print_summary(&final_state);
+            Ok(())
         }
-
-        // Render
-        terminal.draw(|f| render(f, app))?;
-
-        // Handle keyboard input (with timeout for responsive UI)
-        if event::poll(Duration::from_millis(50))? {
-            if let Event::Key(key) = event::read()? {
-                // Ctrl+C always quits
-                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    cancel.cancel();
-                    return Ok(());
-                }
-
-                if app.search_mode {
-                    match key.code {
-                        KeyCode::Esc => app.exit_search(),
-                        KeyCode::Enter => app.confirm_search(),
-                        KeyCode::Backspace => app.search_pop_char(),
-                        KeyCode::Char(c) => app.search_push_char(c),
-                        KeyCode::Up => app.select_prev(),
-                        KeyCode::Down => app.select_next(),
-                        _ => {}
-                    }
-                } else {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => {
-                            cancel.cancel();
-                            return Ok(());
-                        }
-                        KeyCode::Char('/') => app.enter_search(),
-                        KeyCode::Up | KeyCode::Char('k') => app.select_prev(),
-                        KeyCode::Down | KeyCode::Char('j') => app.select_next(),
-                        KeyCode::PageUp => app.scroll_log_up(),
-                        KeyCode::PageDown => app.scroll_log_down(),
-                        KeyCode::Home => app.scroll_log_to_top(),
-                        KeyCode::End => app.scroll_log_to_bottom(),
-                        _ => {}
-                    }
-                }
-            }
-        }
+        Err(e) => Err(e),
     }
 }
 
-fn render(f: &mut ratatui::Frame, app: &App) {
+pub(crate) fn render(f: &mut ratatui::Frame, state: &UiState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -131,26 +73,26 @@ fn render(f: &mut ratatui::Frame, app: &App) {
         ])
         .split(f.area());
 
-    widgets::header::render(f, chunks[0], app);
+    widgets::header::render(f, chunks[0], state);
 
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(chunks[1]);
 
-    widgets::task_list::render(f, main_chunks[0], app);
-    widgets::log_view::render(f, main_chunks[1], app);
-    widgets::help_bar::render(f, chunks[2], app);
+    widgets::task_list::render(f, main_chunks[0], state);
+    widgets::log_view::render(f, main_chunks[1], state);
+    widgets::help_bar::render(f, chunks[2], state);
 }
 
-fn print_summary(app: &App) {
+fn print_summary(state: &UiState) {
     println!(
         "\nmachine_setup {}: {} succeeded, {} failed, {} skipped\n",
-        app.mode, app.succeeded, app.failed, app.skipped
+        state.mode, state.succeeded, state.failed, state.skipped
     );
 
-    for task in &app.tasks {
-        if let app::TaskStatus::Failed(ref error) = task.status {
+    for task in &state.tasks {
+        if let TaskStatus::Failed(ref error) = task.status {
             println!("  FAILED: {} - {}", task.name, error);
         }
     }

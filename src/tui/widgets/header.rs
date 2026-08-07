@@ -4,32 +4,32 @@ use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, Gauge};
 use ratatui::Frame;
 
-use crate::tui::app::App;
+use crate::tui::state::UiState;
 
-pub fn render(f: &mut Frame, area: Rect, app: &App) {
-    let completed = app.completed_tasks();
-    let total = app.total_tasks();
+pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
+    let completed = state.completed_tasks();
+    let total = state.total_tasks();
     let ratio = if total > 0 {
         (completed as f64 / total as f64).min(1.0)
     } else {
         0.0
     };
 
-    let status = if app.done {
-        if app.failed > 0 {
+    let status = if state.done {
+        if state.failed > 0 {
             format!(
                 " Done: {} ok, {} failed, {} skipped ",
-                app.succeeded, app.failed, app.skipped
+                state.succeeded, state.failed, state.skipped
             )
         } else {
-            format!(" Done: {} ok, {} skipped ", app.succeeded, app.skipped)
+            format!(" Done: {} ok, {} skipped ", state.succeeded, state.skipped)
         }
     } else {
-        format!(" {} {}/{} ", app.mode, completed, total)
+        format!(" {} {}/{} ", state.mode, completed, total)
     };
 
-    let color = if app.done {
-        if app.failed > 0 {
+    let color = if state.done {
+        if state.failed > 0 {
             Color::Red
         } else {
             Color::Green

@@ -4,10 +4,10 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::Frame;
 
-use crate::tui::app::{App, TaskStatus};
+use crate::tui::state::{TaskStatus, UiState};
 
-pub fn render(f: &mut Frame, area: Rect, app: &App) {
-    let task = match app.selected_task() {
+pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
+    let task = match state.selected_task() {
         Some(t) => t,
         None => {
             let empty = Paragraph::new("No tasks")
@@ -37,15 +37,12 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         ),
     };
 
-    // Build log lines with syntax highlighting
-    let inner_height = area.height.saturating_sub(2) as usize; // borders
+    let inner_height = area.height.saturating_sub(2) as usize;
     let total_lines = task.log_lines.len();
 
-    // Compute scroll offset to show the end of logs
     let scroll = if total_lines > inner_height {
-        // If auto-scrolling, show the latest lines
         let max_scroll = total_lines.saturating_sub(inner_height);
-        app.log_scroll.min(max_scroll)
+        state.log_scroll.min(max_scroll)
     } else {
         0
     };

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Rewrite interactive TUI around a pure `UiState` / `Message` reducer with an async event loop (engine events, keys, spinner ticks)
+
+### Fixed
+- Log view no longer snaps to the bottom while manually scrolled (follow mode; `End` re-enables)
+- Esc clears an active task filter instead of always quitting (`q` / Ctrl+C still cancel and quit)
+- Help bar documents `j`/`k`, `Home`/`End`, filter clear, and follow hints
+- Jump selection to the first failed task when a run finishes with failures
+- Cap per-task log buffers to avoid unbounded memory growth
+
 ## [2.4.5]
 
 ### Performance
