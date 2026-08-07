@@ -100,10 +100,7 @@ impl CommandExecutor for SymlinkCommand {
 fn ensure_real_dir(path: &Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
     match path.symlink_metadata() {
         Ok(meta) if meta.file_type().is_symlink() => {
-            ctx.log(format!(
-                "Unwrapping directory symlink: {}",
-                path.display()
-            ));
+            ctx.log(format!("Unwrapping directory symlink: {}", path.display()));
             remove_symlink_inode(path, use_sudo)?;
             create_dir(path, use_sudo)
         }
@@ -148,7 +145,10 @@ fn create_symlink(
         if force {
             ctx.log(format!("Removing existing: {}", dest.display()));
             if use_sudo {
-                if dest.is_dir() && !dest.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink())
+                if dest.is_dir()
+                    && !dest
+                        .symlink_metadata()
+                        .is_ok_and(|m| m.file_type().is_symlink())
                 {
                     sudo::sudo_remove_dir(dest)?;
                 } else {

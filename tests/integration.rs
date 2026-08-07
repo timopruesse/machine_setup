@@ -389,14 +389,12 @@ async fn test_symlink_unwraps_nested_dir_symlink_without_corrupting_source() {
     #[cfg(windows)]
     std::os::windows::fs::symlink_dir(&src_pack, target_skills.join("route-agents")).unwrap();
 
-    assert!(
-        target_skills
-            .join("route-agents")
-            .symlink_metadata()
-            .unwrap()
-            .file_type()
-            .is_symlink()
-    );
+    assert!(target_skills
+        .join("route-agents")
+        .symlink_metadata()
+        .unwrap()
+        .file_type()
+        .is_symlink());
 
     let config_path = dir.path().join("config.yaml");
     fs::write(
@@ -424,7 +422,9 @@ tasks:
     let _ = runner.run_all(true).await;
 
     let dest_pack = target_skills.join("route-agents");
-    let dest_meta = dest_pack.symlink_metadata().expect("dest pack should exist");
+    let dest_meta = dest_pack
+        .symlink_metadata()
+        .expect("dest pack should exist");
     assert!(
         dest_meta.is_dir() && !dest_meta.file_type().is_symlink(),
         "dest pack must be a real directory, not a leftover dir symlink"
@@ -492,30 +492,27 @@ tasks:
     let _ = runner.run_all(true).await;
 
     let dest_pack = target_skills.join("route-agents");
-    assert!(
-        !dest_pack
-            .symlink_metadata()
-            .unwrap()
-            .file_type()
-            .is_symlink()
+    assert!(!dest_pack
+        .symlink_metadata()
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert!(dest_pack
+        .join("NEW.md")
+        .symlink_metadata()
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert!(!src_pack
+        .join("NEW.md")
+        .symlink_metadata()
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(
+        fs::read_to_string(src_pack.join("NEW.md")).unwrap(),
+        "new-leaf"
     );
-    assert!(
-        dest_pack
-            .join("NEW.md")
-            .symlink_metadata()
-            .unwrap()
-            .file_type()
-            .is_symlink()
-    );
-    assert!(
-        !src_pack
-            .join("NEW.md")
-            .symlink_metadata()
-            .unwrap()
-            .file_type()
-            .is_symlink()
-    );
-    assert_eq!(fs::read_to_string(src_pack.join("NEW.md")).unwrap(), "new-leaf");
 }
 
 // ─── History tests ───
