@@ -3,4 +3,37 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      clap:
+        patterns:
+          - "clap*"
+      tokio:
+        patterns:
+          - "tokio*"
+      tui:
+        patterns:
+          - "ratatui*"
+          - "crossterm*"
+      serde:
+        patterns:
+          - "serde*"
+      tracing:
+        patterns:
+          - "tracing*"
+      errors:
+        patterns:
+          - "thiserror*"
+          - "anyhow*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
