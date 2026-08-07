@@ -9,11 +9,15 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use rayon::ThreadPool;
 use tempfile::TempDir;
 
 use machine_setup::config;
 use machine_setup::engine::commands::fs_ops::{self, DirectFs, FileOps};
-use machine_setup::engine::commands::tree::{self, install_tree, uninstall_tree};
+use machine_setup::engine::commands::tree::{
+    self, install_tree_with_pool, uninstall_tree_with_pool,
+};
+use machine_setup::engine::concurrency::resolve_limit;
 use machine_setup::engine::mode::Mode;
 use machine_setup::engine::runner::TaskRunner;
 use machine_setup::engine::sink::NullSink;
@@ -53,15 +57,26 @@ fn fixture_1k() -> &'static TreeFixture {
     FIXTURE.get_or_init(|| TreeFixture::generate(N_FILES))
 }
 
+fn bench_pool() -> &'static ThreadPool {
+    static POOL: OnceLock<ThreadPool> = OnceLock::new();
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(resolve_limit(None))
+            .build()
+            .expect("bench pool")
+    })
+}
+
 fn sudo_enabled() -> bool {
     std::env::var_os("MACHINE_SETUP_BENCH_SUDO").is_some_and(|v| v != "0")
 }
 
 fn copy_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
-    install_tree(
+    install_tree_with_pool(
         src,
         dest,
         &[],
+        Some(bench_pool()),
         |dir| ops.mkdir_p(dir),
         |file, dest| ops.copy_file(file, dest),
     )
@@ -69,10 +84,12 @@ fn copy_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
 }
 
 fn link_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
-    install_tree(
+    // Symlink create is cheap; keep sequential (matches production SymlinkCommand).
+    install_tree_with_pool(
         src,
         dest,
         &[],
+        None,
         |dir| tree::ensure_real_dir(ops, dir, |_| {}),
         |file, dest| ops.create_symlink(file, dest),
     )
@@ -130,10 +147,11 @@ fn bench_mtime_skip(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(3));
     group.bench_function("1k_already_synced", |b| {
         b.iter(|| {
-            install_tree(
+            install_tree_with_pool(
                 fixture.src(),
                 synced.path(),
                 &[],
+                Some(bench_pool()),
                 |dir| ops.mkdir_p(dir),
                 |src, dest| {
                     if dest.exists() {
@@ -186,12 +204,18 @@ fn bench_uninstall_tree(c: &mut Criterion) {
                 dest
             },
             |dest| {
-                uninstall_tree(fixture.src(), dest.path(), &[], |path| {
-                    if path.exists() {
-                        ops.remove_file(path)?;
-                    }
-                    Ok(())
-                })
+                uninstall_tree_with_pool(
+                    fixture.src(),
+                    dest.path(),
+                    &[],
+                    Some(bench_pool()),
+                    |path| {
+                        if path.exists() {
+                            ops.remove_file(path)?;
+                        }
+                        Ok(())
+                    },
+                )
                 .expect("uninstall_tree");
             },
             BatchSize::LargeInput,

@@ -1,6 +1,7 @@
 pub mod clone;
 pub mod copy;
 pub mod fs_ops;
+pub mod progress_log;
 pub mod run;
 pub mod setup;
 pub mod symlink;

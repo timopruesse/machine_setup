@@ -1,7 +1,9 @@
-# Defer parallel file apply inside Tree materialization
+# Parallel file apply inside Tree materialization
 
-In-tree concurrent `on_file` for DirectFs is deferred until Command bench
-baselines show sequential walk/apply as the next cliff after SudoFs hybrid and
-the Concurrency gate. Keep the `install_tree` / `uninstall_tree` interface;
-parallelism would be implementation-only. Do not introduce a second concurrency
-knob independent of `num_threads`.
+Directory installs create parents sequentially (WalkDir order), then apply
+collected files on the **shared** Rayon pool owned by the Concurrency gate
+(sized by `num_threads`, default: physical CPUs − 1). Sibling Command entries
+share that pool so `parallel: true` tasks do not oversubscribe. Threshold:
+fewer than 32 files stay sequential. SudoFs walks stay single-threaded (script
+batch on flush). Symlink stays sequential (metadata-cheap). No second
+concurrency knob.

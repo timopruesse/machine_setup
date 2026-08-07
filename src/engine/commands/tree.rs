@@ -9,13 +9,23 @@
 //! Destination resolution — the "is the target a file path or a directory to
 //! drop the file into" rule — lives here as one pure, table-tested function
 //! instead of being copy-pasted across four install/uninstall bodies.
+//!
+//! Directory installs create parents sequentially (WalkDir order), then apply
+//! files on the shared ConcurrencyGate Rayon pool (ADR-0004). Small trees and
+//! single-threaded pools stay sequential. No second concurrency knob.
 
 use std::path::{Path, PathBuf};
+
+use rayon::prelude::*;
+use rayon::ThreadPool;
 
 use crate::error::{Error, Result};
 use crate::utils::path::walk_relative;
 
 use super::fs_ops::FileOps;
+
+/// Below this many files, thread-pool apply costs more than it saves.
+const PARALLEL_FILE_THRESHOLD: usize = 32;
 
 /// Where a single source file lands, and which directory (if any) must exist
 /// before it is placed there.
@@ -49,46 +59,66 @@ pub fn resolve_single_file_dest(src: &Path, target: &Path) -> ResolvedDest {
     }
 }
 
-/// Apply an operation across a source onto `target`.
-///
-/// For a single file, resolves the destination, ensures the needed directory
-/// via `ensure_dir`, then calls `on_file(src_file, dest)`. For a directory,
-/// ensures `target` and walks the source (honoring `ignore`), ensuring
-/// directories via `ensure_dir` and calling `on_file` for each file. Because
-/// WalkDir yields a directory before its contents, every file's parent already
-/// exists by the time `on_file` runs.
-///
-/// Callers choose directory semantics: `copy` passes `|d| ops.mkdir_p(d)`;
-/// `symlink` passes [`ensure_real_dir`] so leftover directory symlinks cannot
-/// redirect leaf operations into the source tree.
+/// Apply an operation across a source onto `target` (sequential file apply).
 pub fn install_tree<F, E>(
     src: &Path,
     target: &Path,
     ignore: &[String],
-    mut ensure_dir: E,
-    mut on_file: F,
+    ensure_dir: E,
+    on_file: F,
 ) -> Result<()>
 where
     E: FnMut(&Path) -> Result<()>,
-    F: FnMut(&Path, &Path) -> Result<()>,
+    F: Fn(&Path, &Path) -> Result<()> + Sync,
+{
+    install_tree_with_pool(src, target, ignore, None, ensure_dir, on_file)
+}
+
+/// Like [`install_tree`], applying files on `pool` when it has more than one
+/// thread and the tree is large enough.
+///
+/// For a single file, resolves the destination, ensures the needed directory
+/// via `ensure_dir`, then calls `on_file(src_file, dest)`. For a directory,
+/// ensures `target` and walks the source (honoring `ignore`), ensuring
+/// directories via `ensure_dir`, then applies collected files. Because WalkDir
+/// yields a directory before its contents, every file's parent already exists
+/// by the time `on_file` runs.
+///
+/// Callers choose directory semantics: `copy` passes `|d| ops.mkdir_p(d)`;
+/// `symlink` passes [`ensure_real_dir`] so leftover directory symlinks cannot
+/// redirect leaf operations into the source tree.
+pub fn install_tree_with_pool<F, E>(
+    src: &Path,
+    target: &Path,
+    ignore: &[String],
+    pool: Option<&ThreadPool>,
+    mut ensure_dir: E,
+    on_file: F,
+) -> Result<()>
+where
+    E: FnMut(&Path) -> Result<()>,
+    F: Fn(&Path, &Path) -> Result<()> + Sync,
 {
     if src.is_file() {
         let resolved = resolve_single_file_dest(src, target);
         if let Some(dir) = &resolved.dir_to_create {
             ensure_dir(dir)?;
         }
-        on_file(src, &resolved.dest)?;
-    } else {
-        ensure_dir(target)?;
-        walk_relative(src, target, ignore, |entry, dest| {
-            if entry.file_type().is_dir() {
-                ensure_dir(dest)
-            } else {
-                on_file(entry.path(), dest)
-            }
-        })?;
+        return on_file(src, &resolved.dest);
     }
-    Ok(())
+
+    ensure_dir(target)?;
+    let mut files = Vec::new();
+    walk_relative(src, target, ignore, |entry, dest| {
+        if entry.file_type().is_dir() {
+            ensure_dir(dest)
+        } else {
+            files.push((entry.path().to_path_buf(), dest.to_path_buf()));
+            Ok(())
+        }
+    })?;
+
+    apply_files(pool, &files, &on_file)
 }
 
 /// Ensure `path` is a real directory — never leave a directory symlink in place.
@@ -113,37 +143,95 @@ pub fn ensure_real_dir(ops: &dyn FileOps, path: &Path, mut log: impl FnMut(Strin
     }
 }
 
-/// Undo an operation across a source onto `target`.
-///
-/// For a single file, resolves the destination and calls `on_dest(dest)`. For
-/// a directory, walks the source and calls `on_dest` for each file's mapped
-/// destination. Directory destinations are left in place — only the files an
-/// install would have created are targeted.
-pub fn uninstall_tree<F>(src: &Path, target: &Path, ignore: &[String], mut on_dest: F) -> Result<()>
+/// Undo an operation across a source onto `target` (sequential removes).
+pub fn uninstall_tree<F>(src: &Path, target: &Path, ignore: &[String], on_dest: F) -> Result<()>
 where
-    F: FnMut(&Path) -> Result<()>,
+    F: Fn(&Path) -> Result<()> + Sync,
+{
+    uninstall_tree_with_pool(src, target, ignore, None, on_dest)
+}
+
+/// Like [`uninstall_tree`], removing on `pool` when parallel apply is worth it.
+pub fn uninstall_tree_with_pool<F>(
+    src: &Path,
+    target: &Path,
+    ignore: &[String],
+    pool: Option<&ThreadPool>,
+    on_dest: F,
+) -> Result<()>
+where
+    F: Fn(&Path) -> Result<()> + Sync,
 {
     if src.is_file() {
         let dest = resolve_single_file_dest(src, target).dest;
-        on_dest(&dest)?;
-    } else {
-        walk_relative(src, target, ignore, |entry, dest| {
-            if entry.file_type().is_file() {
-                on_dest(dest)
-            } else {
-                Ok(())
-            }
-        })?;
+        return on_dest(&dest);
     }
-    Ok(())
+
+    let mut dests = Vec::new();
+    walk_relative(src, target, ignore, |entry, dest| {
+        if entry.file_type().is_file() {
+            dests.push(dest.to_path_buf());
+        }
+        Ok(())
+    })?;
+
+    apply_dests(pool, &dests, &on_dest)
+}
+
+fn apply_files<F>(pool: Option<&ThreadPool>, files: &[(PathBuf, PathBuf)], on_file: &F) -> Result<()>
+where
+    F: Fn(&Path, &Path) -> Result<()> + Sync,
+{
+    if !should_parallelize(pool, files.len()) {
+        for (src, dest) in files {
+            on_file(src, dest)?;
+        }
+        return Ok(());
+    }
+
+    let pool = pool.expect("should_parallelize implies pool");
+    pool.install(|| {
+        files
+            .par_iter()
+            .try_for_each(|(src, dest)| on_file(src, dest))
+    })
+}
+
+fn apply_dests<F>(pool: Option<&ThreadPool>, dests: &[PathBuf], on_dest: &F) -> Result<()>
+where
+    F: Fn(&Path) -> Result<()> + Sync,
+{
+    if !should_parallelize(pool, dests.len()) {
+        for dest in dests {
+            on_dest(dest)?;
+        }
+        return Ok(());
+    }
+
+    let pool = pool.expect("should_parallelize implies pool");
+    pool.install(|| dests.par_iter().try_for_each(|dest| on_dest(dest)))
+}
+
+fn should_parallelize(pool: Option<&ThreadPool>, n: usize) -> bool {
+    match pool {
+        Some(pool) => pool.current_num_threads() > 1 && n >= PARALLEL_FILE_THRESHOLD,
+        None => false,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::commands::fs_ops::{DirectFs, RecordingFs};
-    use std::cell::RefCell;
+    use std::sync::Mutex;
     use tempfile::tempdir;
+
+    fn test_pool(threads: usize) -> ThreadPool {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap()
+    }
 
     #[test]
     fn test_resolve_dest_target_with_extension_is_file_path() {
@@ -178,7 +266,7 @@ mod tests {
         let target = dir.path().join("out/file.txt");
 
         let ops = RecordingFs::default();
-        let applied = RefCell::new(Vec::new());
+        let applied = Mutex::new(Vec::new());
         install_tree(
             &src,
             &target,
@@ -186,7 +274,8 @@ mod tests {
             |d| ops.mkdir_p(d),
             |s, d| {
                 applied
-                    .borrow_mut()
+                    .lock()
+                    .unwrap()
                     .push(format!("{} -> {}", s.display(), d.display()));
                 Ok(())
             },
@@ -199,7 +288,7 @@ mod tests {
             vec![format!("mkdir_p {}", dir.path().join("out").display())]
         );
         assert_eq!(
-            applied.into_inner(),
+            applied.into_inner().unwrap(),
             vec![format!("{} -> {}", src.display(), target.display())]
         );
     }
@@ -214,7 +303,7 @@ mod tests {
         let target = dir.path().join("dst");
 
         let ops = RecordingFs::default();
-        let files = RefCell::new(Vec::new());
+        let files = Mutex::new(Vec::new());
         install_tree(
             &src,
             &target,
@@ -222,14 +311,15 @@ mod tests {
             |d| ops.mkdir_p(d),
             |s, _d| {
                 files
-                    .borrow_mut()
+                    .lock()
+                    .unwrap()
                     .push(s.file_name().unwrap().to_string_lossy().into_owned());
                 Ok(())
             },
         )
         .unwrap();
 
-        let mut applied = files.into_inner();
+        let mut applied = files.into_inner().unwrap();
         applied.sort();
         assert_eq!(applied, vec!["a.txt", "b.txt"]);
         // Directories were created via ops (target + sub at least).
@@ -248,7 +338,7 @@ mod tests {
         let target = dir.path().join("dst");
 
         let ops = RecordingFs::default();
-        let files = RefCell::new(Vec::new());
+        let files = Mutex::new(Vec::new());
         install_tree(
             &src,
             &target,
@@ -256,14 +346,48 @@ mod tests {
             |d| ops.mkdir_p(d),
             |s, _d| {
                 files
-                    .borrow_mut()
+                    .lock()
+                    .unwrap()
                     .push(s.file_name().unwrap().to_string_lossy().into_owned());
                 Ok(())
             },
         )
         .unwrap();
 
-        assert_eq!(files.into_inner(), vec!["keep.txt"]);
+        assert_eq!(files.into_inner().unwrap(), vec!["keep.txt"]);
+    }
+
+    #[test]
+    fn test_install_tree_parallel_applies_all_files() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        for i in 0..64 {
+            std::fs::write(src.join(format!("f{i}.txt")), b"x").unwrap();
+        }
+        let target = dir.path().join("dst");
+        let pool = test_pool(4);
+
+        let applied = Mutex::new(0usize);
+        install_tree_with_pool(
+            &src,
+            &target,
+            &[],
+            Some(&pool),
+            |d| {
+                std::fs::create_dir_all(d)?;
+                Ok(())
+            },
+            |_s, d| {
+                std::fs::write(d, b"y")?;
+                *applied.lock().unwrap() += 1;
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(*applied.lock().unwrap(), 64);
+        assert_eq!(std::fs::read(target.join("f0.txt")).unwrap(), b"y");
     }
 
     #[test]
@@ -273,14 +397,17 @@ mod tests {
         std::fs::write(&src, b"data").unwrap();
         let target = dir.path().join("out/file.txt");
 
-        let removed = RefCell::new(Vec::new());
+        let removed = Mutex::new(Vec::new());
         uninstall_tree(&src, &target, &[], |d| {
-            removed.borrow_mut().push(d.display().to_string());
+            removed.lock().unwrap().push(d.display().to_string());
             Ok(())
         })
         .unwrap();
 
-        assert_eq!(removed.into_inner(), vec![target.display().to_string()]);
+        assert_eq!(
+            removed.into_inner().unwrap(),
+            vec![target.display().to_string()]
+        );
     }
 
     #[test]
@@ -292,16 +419,17 @@ mod tests {
         std::fs::write(src.join("sub/b.txt"), b"b").unwrap();
         let target = dir.path().join("dst");
 
-        let removed = RefCell::new(Vec::new());
+        let removed = Mutex::new(Vec::new());
         uninstall_tree(&src, &target, &[], |d| {
             removed
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .push(d.file_name().unwrap().to_string_lossy().into_owned());
             Ok(())
         })
         .unwrap();
 
-        let mut got = removed.into_inner();
+        let mut got = removed.into_inner().unwrap();
         got.sort();
         assert_eq!(got, vec!["a.txt", "b.txt"]);
     }
@@ -316,14 +444,15 @@ mod tests {
         std::os::unix::fs::symlink(&real, &link).unwrap();
 
         let ops = DirectFs;
-        let logs = RefCell::new(Vec::new());
-        ensure_real_dir(&ops, &link, |msg| logs.borrow_mut().push(msg)).unwrap();
+        let logs = Mutex::new(Vec::new());
+        ensure_real_dir(&ops, &link, |msg| logs.lock().unwrap().push(msg)).unwrap();
 
         let meta = link.symlink_metadata().unwrap();
         assert!(meta.is_dir() && !meta.file_type().is_symlink());
         assert!(real.exists());
         assert!(logs
             .into_inner()
+            .unwrap()
             .iter()
             .any(|m| m.contains("Unwrapping directory symlink")));
     }

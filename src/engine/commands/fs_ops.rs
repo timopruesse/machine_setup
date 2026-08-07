@@ -64,8 +64,11 @@ impl FileOps for DirectFs {
     }
 
     fn copy_file(&self, src: &Path, dest: &Path) -> Result<()> {
+        // Tree materialization already ensures parents; only create when missing.
         if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)?;
+            if !parent.is_dir() {
+                std::fs::create_dir_all(parent)?;
+            }
         }
         std::fs::copy(src, dest)?;
         Ok(())

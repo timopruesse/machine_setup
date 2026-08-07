@@ -8,5 +8,6 @@ Sub-config Runners share the parent's gate and their leaf commands acquire
 normally. That avoids a deadlock when `num_threads: 1` and a parent Task would
 otherwise hold the only permit across nested work. Sync File ops (`copy` /
 `symlink`) run via `spawn_blocking`. We accepted that a fat `parallel: true`
-Task can starve siblings; per-Task sub-quotas are a future fix. A dedicated FS
-thread pool waits until in-tree parallel apply needs it.
+Task can starve siblings; per-Task sub-quotas are a future fix. The gate also
+owns a shared Rayon pool of the same size for in-tree DirectFs file apply
+(ADR-0004) so sibling commands do not each spawn a private worker set.

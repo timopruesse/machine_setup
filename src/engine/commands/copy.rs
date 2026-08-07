@@ -8,6 +8,7 @@ use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
 
 use super::fs_ops::{self, FileOps};
+use super::progress_log::FileProgress;
 use super::tree;
 use super::CommandExecutor;
 
@@ -45,7 +46,11 @@ impl CommandExecutor for CopyCommand {
 impl CopyCommand {
     /// Directory Install with empty ignore → one `sudo cp -a` (ADR-0002).
     /// Update keeps mtime-skip via per-file + script batch.
-    fn eligible_for_bulk(src: &Path, args: &CopyArgs, mode: Mode) -> bool {
+    ///
+    /// Non-sudo Install uses parallel DirectFs apply (ADR-0004) instead of a
+    /// bulk `cp -a`: Command bench on WSL showed process-spawned `cp` slower
+    /// than in-process parallel `std::fs::copy` for typical tree sizes.
+    fn eligible_for_bulk_sudo(src: &Path, args: &CopyArgs, mode: Mode) -> bool {
         args.sudo && matches!(mode, Mode::Install) && src.is_dir() && args.ignore.is_empty()
     }
 
@@ -60,7 +65,7 @@ impl CopyCommand {
             )));
         }
 
-        if Self::eligible_for_bulk(&src, &self.args, ctx.mode) {
+        if Self::eligible_for_bulk_sudo(&src, &self.args, ctx.mode) {
             ctx.log(format!(
                 "Bulk copy (sudo): {} -> {}",
                 src.display(),
@@ -70,13 +75,22 @@ impl CopyCommand {
         }
 
         let ops = fs_ops::select(self.args.sudo);
-        tree::install_tree(
+        let progress = FileProgress::new(ctx, "copy");
+        // SudoFs only buffers; DirectFs uses the shared gate pool (ADR-0004).
+        let pool = if self.args.sudo {
+            None
+        } else {
+            Some(ctx.gate.pool())
+        };
+        tree::install_tree_with_pool(
             &src,
             &target,
             &self.args.ignore,
+            pool,
             |dir| ops.mkdir_p(dir),
-            |file, dest| copy_one(ops.as_ref(), file, dest, ctx),
+            |file, dest| copy_one(ops.as_ref(), file, dest, &progress),
         )?;
+        progress.finish();
         ops.flush()
     }
 
@@ -85,33 +99,40 @@ impl CopyCommand {
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
 
         let ops = fs_ops::select(self.args.sudo);
-        tree::uninstall_tree(&src, &target, &self.args.ignore, |dest| {
+        let progress = FileProgress::new(ctx, "copy remove");
+        let pool = if self.args.sudo {
+            None
+        } else {
+            Some(ctx.gate.pool())
+        };
+        tree::uninstall_tree_with_pool(&src, &target, &self.args.ignore, pool, |dest| {
             if dest.exists() {
-                ctx.log(format!("Removing: {}", dest.display()));
+                progress.note_apply(|| format!("Removing: {}", dest.display()));
                 ops.remove_file(dest)
             } else {
                 Ok(())
             }
         })?;
+        progress.finish();
         ops.flush()
     }
 }
 
 /// Copy a single file, skipping when the destination is already at least as
 /// new as the source.
-fn copy_one(ops: &dyn FileOps, src: &Path, dest: &Path, ctx: &CommandContext) -> Result<()> {
+fn copy_one(ops: &dyn FileOps, src: &Path, dest: &Path, progress: &FileProgress<'_>) -> Result<()> {
     if dest.exists() {
         if let (Ok(src_meta), Ok(dest_meta)) = (std::fs::metadata(src), std::fs::metadata(dest)) {
             if let (Ok(src_mod), Ok(dest_mod)) = (src_meta.modified(), dest_meta.modified()) {
                 if dest_mod >= src_mod {
-                    ctx.log(format!("Skipping (target newer): {}", dest.display()));
+                    progress.note_skip(|| format!("Skipping (target newer): {}", dest.display()));
                     return Ok(());
                 }
             }
         }
     }
 
-    ctx.log(format!("Copying: {} -> {}", src.display(), dest.display()));
+    progress.note_apply(|| format!("Copying: {} -> {}", src.display(), dest.display()));
     ops.copy_file(src, dest)
 }
 
@@ -120,6 +141,22 @@ mod tests {
     use super::*;
     use crate::engine::commands::fs_ops::RecordingFs;
     use tempfile::tempdir;
+
+    fn ctx_for(dir: &Path) -> CommandContext {
+        let (events, _rx) = crate::engine::sink::ChannelSink::channel();
+        CommandContext {
+            events,
+            gate: std::sync::Arc::new(
+                crate::engine::concurrency::ConcurrencyGate::from_num_threads(Some(1)),
+            ),
+            mode: Mode::Install,
+            config_dir: dir.to_path_buf(),
+            temp_dir: dir.to_path_buf(),
+            default_shell: crate::config::types::Shell::Bash,
+            task_name: "t".to_string(),
+            depth: 0,
+        }
+    }
 
     #[test]
     fn test_copy_one_skips_when_dest_newer() {
@@ -130,22 +167,10 @@ mod tests {
         // Create dest after src so its mtime is >= src.
         std::fs::write(&dest, b"new").unwrap();
 
-        let (events, _rx) = crate::engine::sink::ChannelSink::channel();
-        let ctx = CommandContext {
-            events,
-            gate: std::sync::Arc::new(
-                crate::engine::concurrency::ConcurrencyGate::from_num_threads(Some(1)),
-            ),
-            mode: Mode::Install,
-            config_dir: dir.path().to_path_buf(),
-            temp_dir: dir.path().to_path_buf(),
-            default_shell: crate::config::types::Shell::Bash,
-            task_name: "t".to_string(),
-            depth: 0,
-        };
-
+        let ctx = ctx_for(dir.path());
+        let progress = FileProgress::new(&ctx, "copy");
         let ops = RecordingFs::default();
-        copy_one(&ops, &src, &dest, &ctx).unwrap();
+        copy_one(&ops, &src, &dest, &progress).unwrap();
         // Skipped: no copy_file recorded.
         assert!(ops.calls().is_empty());
     }
@@ -157,22 +182,10 @@ mod tests {
         let dest = dir.path().join("d.txt");
         std::fs::write(&src, b"data").unwrap();
 
-        let (events, _rx) = crate::engine::sink::ChannelSink::channel();
-        let ctx = CommandContext {
-            events,
-            gate: std::sync::Arc::new(
-                crate::engine::concurrency::ConcurrencyGate::from_num_threads(Some(1)),
-            ),
-            mode: Mode::Install,
-            config_dir: dir.path().to_path_buf(),
-            temp_dir: dir.path().to_path_buf(),
-            default_shell: crate::config::types::Shell::Bash,
-            task_name: "t".to_string(),
-            depth: 0,
-        };
-
+        let ctx = ctx_for(dir.path());
+        let progress = FileProgress::new(&ctx, "copy");
         let ops = RecordingFs::default();
-        copy_one(&ops, &src, &dest, &ctx).unwrap();
+        copy_one(&ops, &src, &dest, &progress).unwrap();
         assert_eq!(
             ops.calls(),
             vec![format!("copy_file {} {}", src.display(), dest.display())]
@@ -180,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn test_eligible_for_bulk_copy() {
+    fn test_eligible_for_bulk_sudo() {
         let dir = tempdir().unwrap();
         let src_dir = dir.path().join("src");
         std::fs::create_dir_all(&src_dir).unwrap();
@@ -193,12 +206,12 @@ mod tests {
             ignore: vec![],
             sudo: true,
         };
-        assert!(CopyCommand::eligible_for_bulk(
+        assert!(CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &sudo_dir,
             Mode::Install
         ));
-        assert!(!CopyCommand::eligible_for_bulk(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &sudo_dir,
             Mode::Update
@@ -208,7 +221,7 @@ mod tests {
             ignore: vec!["x".into()],
             ..sudo_dir.clone()
         };
-        assert!(!CopyCommand::eligible_for_bulk(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &with_ignore,
             Mode::Install
@@ -218,12 +231,12 @@ mod tests {
             sudo: false,
             ..sudo_dir.clone()
         };
-        assert!(!CopyCommand::eligible_for_bulk(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &no_sudo,
             Mode::Install
         ));
-        assert!(!CopyCommand::eligible_for_bulk(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_file,
             &CopyArgs {
                 src: src_file.to_string_lossy().into(),
