@@ -1,9 +1,10 @@
 //! Concurrency gate — global cap on in-flight Task / Command executor work.
 //!
 //! See ADR-0003. Does not order Tasks by dependency (that is the Task graph).
-//! Also owns the shared Rayon pool used for in-tree file apply (ADR-0004).
+//! Also owns the shared Rayon pool used for in-tree file apply (ADR-0004);
+//! the pool is created lazily on first [`ConcurrencyGate::pool`] call.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use rayon::ThreadPool;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -14,25 +15,28 @@ pub struct ConcurrencyGate {
     sem: Arc<Semaphore>,
     /// Configured permit count (for tests / diagnostics).
     pub limit: usize,
-    /// Shared FS apply pool — sized by `limit`, shared across Command entries.
-    pool: Arc<ThreadPool>,
+    /// Shared FS apply pool — sized by `limit`, created on first use.
+    pool: Arc<OnceLock<ThreadPool>>,
 }
 
 impl ConcurrencyGate {
     /// Build a gate from `AppConfig.num_threads` (None → CPUs − 1, at least 1).
+    ///
+    /// Does not start Rayon workers; call [`Self::pool`] when tree apply needs them.
     pub fn from_num_threads(num_threads: Option<usize>) -> Self {
         let limit = resolve_limit(num_threads);
-        let pool = build_fs_pool(limit);
         Self {
             sem: Arc::new(Semaphore::new(limit)),
             limit,
-            pool: Arc::new(pool),
+            pool: Arc::new(OnceLock::new()),
         }
     }
 
     /// Shared Rayon pool for in-tree DirectFs file apply.
+    ///
+    /// Initializes the pool on first call (thread-safe), sized by `limit`.
     pub fn pool(&self) -> &ThreadPool {
-        &self.pool
+        self.pool.get_or_init(|| build_fs_pool(self.limit))
     }
 
     /// Acquire one permit; held for the lifetime of the returned guard.
@@ -80,6 +84,14 @@ mod tests {
     #[test]
     fn resolve_limit_default_at_least_one() {
         assert!(resolve_limit(None) >= 1);
+    }
+
+    #[test]
+    fn fs_pool_lazy_until_first_pool_call() {
+        let gate = ConcurrencyGate::from_num_threads(Some(2));
+        assert!(gate.pool.get().is_none());
+        let _ = gate.pool();
+        assert!(gate.pool.get().is_some());
     }
 
     #[tokio::test]

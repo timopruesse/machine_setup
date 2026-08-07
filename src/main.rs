@@ -8,8 +8,7 @@ use cli::{Cli, Command};
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     // Handle completions (no config needed)
@@ -67,6 +66,18 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Execution verbs only: boot a multi-thread runtime here, not for sync verbs above.
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(run_execution(cli, app_config, task_names))
+}
+
+async fn run_execution(
+    cli: Cli,
+    app_config: config::types::AppConfig,
+    task_names: Vec<String>,
+) -> anyhow::Result<()> {
     // Resolve config directory for relative paths (URLs fall back to cwd)
     let cwd = std::env::current_dir().unwrap_or_default();
     let config_dir = config::resolve_config_dir(&cli.config, &cwd);

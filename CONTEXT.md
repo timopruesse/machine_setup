@@ -89,8 +89,10 @@ The Runner's global cap on in-flight leaf Command executor work, driven by
 `num_threads` (default: physical CPUs − 1). Permits are per Command entry;
 `machine_setup` does not hold a permit so nested Sub-configs can share the
 gate. Sync File ops work runs via `spawn_blocking` so it does not block Tokio
-workers. Does **not** order Tasks by dependency — that remains the **Task graph**.
-_Avoid_: scheduler, thread pool (until a dedicated FS pool exists).
+workers. Owns a shared Rayon FS apply pool (same size as the permit limit),
+created lazily on first tree-apply use. Does **not** order Tasks by
+dependency — that remains the **Task graph**.
+_Avoid_: scheduler (do not call the FS pool the "scheduler").
 
 **File ops**:
 The privilege seam for filesystem primitives (`mkdir`, copy, symlink, removal),
@@ -120,9 +122,11 @@ The measurement module for Command executor / Tree materialization / Runner
 wall-clock speed — Criterion microbenches plus thin Runner smoke over
 generate-once fixtures, plus a registry microbench (parse Command entries →
 `create_executor`) so **Command kind catalog** changes have a signal when tree
-benches barely move. Report-only (no absolute ms CI asserts). SudoFs cases
-opt-in via `MACHINE_SETUP_BENCH_SUDO=1`. Deepening steps capture before/after
-locally; soft regression thresholds are a human call, not CI.
+benches barely move. Also tracks fixed bring-up (`TaskRunner::new`, empty-task
+smoke). Process `--help` wall-clock stays outside Criterion (manual / OS
+spawn). Report-only (no absolute ms CI asserts). SudoFs cases opt-in via
+`MACHINE_SETUP_BENCH_SUDO=1`. Deepening steps capture before/after locally;
+soft regression thresholds are a human call, not CI.
 _Avoid_: performance test (ambiguous with correctness tests), profiling.
 
 ## Relationships

@@ -2,6 +2,10 @@
 //!
 //! Generate-once fixtures per process; SudoFs cases require
 //! `MACHINE_SETUP_BENCH_SUDO=1`.
+//!
+//! Fixed bring-up: `startup/task_runner_new` and `runner_smoke/empty_task`.
+//! Process `--help` wall-clock is intentionally outside Criterion (manual /
+//! OS process spawn — flaky under CI).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -313,6 +317,42 @@ async fn run_case(case: RunnerCase) {
     runner.run_all(true).await.expect("run");
 }
 
+fn prepare_empty_runner_case() -> RunnerCase {
+    let work = tempfile::tempdir().expect("work");
+    let cfg_dir = work.path().join("cfg");
+    fs::create_dir_all(&cfg_dir).unwrap();
+    // Empty `run` — no shell spawn; measures Runner / gate / history bring-up.
+    let yaml = format!(
+        r#"
+default_shell: bash
+parallel: false
+temp_dir: {temp}
+tasks:
+  noop:
+    commands:
+      - run: {{}}
+"#,
+        temp = work.path().join("ms").display(),
+    );
+    let cfg_path = cfg_dir.join("config.yaml");
+    fs::write(&cfg_path, yaml).unwrap();
+    RunnerCase {
+        work,
+        cfg_path,
+        cfg_dir,
+    }
+}
+
+fn tiny_runner_config() -> config::types::AppConfig {
+    let yaml = r#"
+tasks:
+  noop:
+    commands:
+      - run: {}
+"#;
+    serde_yaml::from_str(yaml).expect("tiny config")
+}
+
 fn bench_runner_smoke(c: &mut Criterion) {
     let fixture = fixture_1k();
     let rt = tokio::runtime::Runtime::new().expect("runtime");
@@ -335,6 +375,34 @@ fn bench_runner_smoke(c: &mut Criterion) {
             || prepare_runner_case(fixture.src(), true),
             |case| run_case(case),
             BatchSize::LargeInput,
+        );
+    });
+
+    group.bench_function("empty_task", |b| {
+        b.to_async(&rt).iter_batched(
+            prepare_empty_runner_case,
+            |case| run_case(case),
+            BatchSize::SmallInput,
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_startup(c: &mut Criterion) {
+    let mut group = c.benchmark_group("startup");
+    group.sample_size(100);
+    group.warm_up_time(Duration::from_millis(500));
+    group.measurement_time(Duration::from_secs(2));
+
+    // Gate construction only — Rayon pool stays lazy until first tree apply.
+    group.bench_function("task_runner_new", |b| {
+        b.iter_batched(
+            tiny_runner_config,
+            |config| {
+                let _runner = TaskRunner::new(config, Mode::Install, NullSink::shared());
+            },
+            BatchSize::SmallInput,
         );
     });
 
@@ -369,6 +437,7 @@ criterion_group!(
     bench_symlink_tree,
     bench_uninstall_tree,
     bench_runner_smoke,
+    bench_startup,
     bench_registry,
 );
 criterion_main!(benches);

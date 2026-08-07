@@ -1,6 +1,6 @@
 [package]
 name = "machine_setup"
-version = "2.4.4"
+version = "2.4.5"
 edition = "2021"
 description = "A CLI tool with TUI for automating machine configuration and setup tasks"
 license = "MIT OR Apache-2.0"
@@ -11,8 +11,16 @@ authors = ["Timo Pruesse"]
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 
-# Async runtime
-tokio = { version = "1", features = ["full"] }
+# Async runtime (trimmed — avoid `full` for faster sync-verb startup / smaller binary)
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+    "process",
+    "io-util",
+    "signal",
+] }
 
 # TUI
 ratatui = "0.30"
@@ -52,3 +60,8 @@ criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 [[bench]]
 name = "command_bench"
 harness = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
