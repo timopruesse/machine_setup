@@ -1,9 +1,7 @@
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 
-use crate::cli::Command;
+use crate::config::graph::TaskGraph;
 use crate::config::history::History;
 use crate::config::types::{AppConfig, TaskConfig};
 use crate::error::{Error, Result};
@@ -12,21 +10,26 @@ use crate::utils::path::expand_path;
 use super::commands::{create_executor, CommandExecutor};
 use super::context::CommandContext;
 use super::event::TaskEvent;
+use super::mode::Mode;
 
 pub struct TaskRunner {
     config: AppConfig,
-    mode: Command,
+    mode: Mode,
     event_tx: mpsc::UnboundedSender<TaskEvent>,
     config_dir: PathBuf,
     depth: usize,
 }
 
+/// Running counts of task outcomes across all layers of a run.
+#[derive(Default)]
+struct Tally {
+    succeeded: usize,
+    failed: usize,
+    skipped: usize,
+}
+
 impl TaskRunner {
-    pub fn new(
-        config: AppConfig,
-        mode: Command,
-        event_tx: mpsc::UnboundedSender<TaskEvent>,
-    ) -> Self {
+    pub fn new(config: AppConfig, mode: Mode, event_tx: mpsc::UnboundedSender<TaskEvent>) -> Self {
         Self {
             config,
             mode,
@@ -62,99 +65,28 @@ impl TaskRunner {
 
     /// Run specific tasks by name.
     pub async fn run_tasks(&self, task_names: &[String], force: bool) -> Result<()> {
-        // Resolve dependency order via topological sort. When no task has
+        // Resolve dependency order via the task graph. When no task has
         // dependencies, this borrows `task_names` instead of cloning it.
-        let ordered = self.topological_sort(task_names)?;
+        let graph = TaskGraph::new(&self.config.tasks);
+        let ordered = graph.topo_order(task_names)?;
         let ordered: &[String] = &ordered;
 
         let temp_dir = expand_path(&self.config.temp_dir, None);
         let mut history = History::load(&temp_dir).unwrap_or_default();
 
-        let mut succeeded = 0usize;
-        let mut failed = 0usize;
-        let mut skipped = 0usize;
-
-        if self.config.parallel {
-            // Parallel execution with dependency layers
-            let layers = self.dependency_layers(ordered);
-
-            for layer in layers {
-                let mut handles = Vec::new();
-
-                for name in &layer {
-                    let task_config = &self.config.tasks[name];
-
-                    if let Some(reason) = self.should_skip(task_config, name, force, &history) {
-                        self.send(TaskEvent::TaskSkipped {
-                            task_name: name.clone(),
-                            reason,
-                        });
-                        skipped += 1;
-                        continue;
-                    }
-
-                    let ctx = self.create_context(name, &temp_dir);
-                    let task = task_config.clone();
-                    let mode = self.mode.clone();
-                    let depth = self.depth;
-                    let name = name.clone();
-                    handles.push(tokio::spawn(async move {
-                        let result = run_task_with_retry(&name, &task, &ctx, mode, depth).await;
-                        (name, result)
-                    }));
-                }
-
-                for handle in handles {
-                    match handle.await {
-                        Ok((name, Ok(()))) => {
-                            self.update_history(&mut history, &name);
-                            succeeded += 1;
-                        }
-                        Ok((name, Err(e))) => {
-                            self.send(TaskEvent::TaskFailed {
-                                task_name: name,
-                                error: e.to_string(),
-                            });
-                            failed += 1;
-                        }
-                        Err(_) => {
-                            failed += 1;
-                        }
-                    }
-                }
-            }
+        // Both execution modes are the same loop over layers; sequential is the
+        // degenerate case where each task is its own layer (so the join below
+        // runs them one at a time, in dependency order).
+        let layers: Vec<Vec<String>> = if self.config.parallel {
+            graph.layers(ordered)
         } else {
-            // Sequential execution
-            for name in ordered {
-                let task_config = &self.config.tasks[name];
+            ordered.iter().map(|name| vec![name.clone()]).collect()
+        };
 
-                if let Some(reason) = self.should_skip(task_config, name, force, &history) {
-                    self.send(TaskEvent::TaskSkipped {
-                        task_name: name.clone(),
-                        reason,
-                    });
-                    skipped += 1;
-                    continue;
-                }
-
-                let ctx = self.create_context(name, &temp_dir);
-
-                match run_task_with_retry(name, task_config, &ctx, self.mode.clone(), self.depth)
-                    .await
-                {
-                    Ok(()) => {
-                        self.update_history(&mut history, name);
-                        succeeded += 1;
-                    }
-                    Err(e) => {
-                        self.send(TaskEvent::TaskFailed {
-                            task_name: name.clone(),
-                            error: e.to_string(),
-                        });
-                        failed += 1;
-                    }
-                }
-            }
+        let mut tally = Tally::default();
+        for layer in &layers {
+            self.run_layer(layer, force, &temp_dir, &mut history, &mut tally)
+                .await;
         }
 
         // Save history
@@ -163,15 +95,70 @@ impl TaskRunner {
         }
 
         self.send(TaskEvent::AllDone {
-            succeeded,
-            failed,
-            skipped,
+            succeeded: tally.succeeded,
+            failed: tally.failed,
+            skipped: tally.skipped,
         });
 
-        if failed > 0 {
-            Err(Error::Other(format!("{failed} task(s) failed")))
+        if tally.failed > 0 {
+            Err(Error::Other(format!("{} task(s) failed", tally.failed)))
         } else {
             Ok(())
+        }
+    }
+
+    /// Run one dependency layer: skip what should be skipped, spawn the rest,
+    /// then join — recording each task's outcome into `tally` and history. A
+    /// layer of one task (sequential mode) runs that task to completion before
+    /// the caller advances to the next layer.
+    async fn run_layer(
+        &self,
+        layer: &[String],
+        force: bool,
+        temp_dir: &Path,
+        history: &mut History,
+        tally: &mut Tally,
+    ) {
+        let mut handles = Vec::new();
+
+        for name in layer {
+            let task_config = &self.config.tasks[name];
+
+            if let Some(reason) = self.should_skip(task_config, name, force, history) {
+                self.send(TaskEvent::TaskSkipped {
+                    task_name: name.clone(),
+                    reason,
+                });
+                tally.skipped += 1;
+                continue;
+            }
+
+            let ctx = self.create_context(name, temp_dir);
+            let task = task_config.clone();
+            let name = name.clone();
+            handles.push(tokio::spawn(async move {
+                let result = run_task_with_retry(&name, &task, &ctx).await;
+                (name, result)
+            }));
+        }
+
+        for handle in handles {
+            match handle.await {
+                Ok((name, Ok(()))) => {
+                    self.update_history(history, &name);
+                    tally.succeeded += 1;
+                }
+                Ok((name, Err(e))) => {
+                    self.send(TaskEvent::TaskFailed {
+                        task_name: name,
+                        error: e.to_string(),
+                    });
+                    tally.failed += 1;
+                }
+                Err(_) => {
+                    tally.failed += 1;
+                }
+            }
         }
     }
 
@@ -205,127 +192,11 @@ impl TaskRunner {
         }
 
         // Check history
-        if self.mode == Command::Install && !force && history.is_installed(name) {
+        if self.mode == Mode::Install && !force && history.is_installed(name) {
             return Some("Already installed (use --force to reinstall)".to_string());
         }
 
         None
-    }
-
-    /// Topological sort of tasks respecting depends_on.
-    /// Returns tasks in dependency order. Includes transitive dependencies
-    /// of the requested tasks. Borrows the input when no sorting is needed.
-    fn topological_sort<'a>(&self, requested: &'a [String]) -> Result<Cow<'a, [String]>> {
-        let all_tasks = &self.config.tasks;
-
-        // If no task has dependencies, preserve original order
-        let has_deps = requested
-            .iter()
-            .filter_map(|n| all_tasks.get(n))
-            .any(|t| !t.depends_on.is_empty());
-        if !has_deps {
-            return Ok(Cow::Borrowed(requested));
-        }
-
-        // Collect all needed tasks (requested + transitive deps)
-        let mut needed: HashSet<String> = HashSet::new();
-        let mut queue: VecDeque<String> = requested.iter().cloned().collect();
-        while let Some(name) = queue.pop_front() {
-            if needed.contains(&name) {
-                continue;
-            }
-            if let Some(task) = all_tasks.get(&name) {
-                needed.insert(name.clone());
-                for dep in &task.depends_on {
-                    if !all_tasks.contains_key(dep) {
-                        return Err(Error::MissingDependency(name.clone(), dep.clone()));
-                    }
-                    if !needed.contains(dep) {
-                        queue.push_back(dep.clone());
-                    }
-                }
-            }
-        }
-
-        // Build in-degree map for needed tasks
-        let mut in_degree: HashMap<&str, usize> = HashMap::new();
-        let mut dependents: HashMap<&str, Vec<&str>> = HashMap::new();
-        for name in &needed {
-            in_degree.entry(name.as_str()).or_insert(0);
-            if let Some(task) = all_tasks.get(name) {
-                for dep in &task.depends_on {
-                    if needed.contains(dep) {
-                        *in_degree.entry(name.as_str()).or_insert(0) += 1;
-                        dependents
-                            .entry(dep.as_str())
-                            .or_default()
-                            .push(name.as_str());
-                    }
-                }
-            }
-        }
-
-        // Kahn's algorithm
-        let mut queue: VecDeque<&str> = in_degree
-            .iter()
-            .filter(|(_, &deg)| deg == 0)
-            .map(|(&name, _)| name)
-            .collect();
-        let mut sorted = Vec::new();
-
-        while let Some(node) = queue.pop_front() {
-            sorted.push(node.to_string());
-            if let Some(deps) = dependents.get(node) {
-                for &dep in deps {
-                    if let Some(deg) = in_degree.get_mut(dep) {
-                        *deg -= 1;
-                        if *deg == 0 {
-                            queue.push_back(dep);
-                        }
-                    }
-                }
-            }
-        }
-
-        if sorted.len() != needed.len() {
-            let remaining: Vec<String> = needed
-                .iter()
-                .filter(|n| !sorted.contains(n))
-                .cloned()
-                .collect();
-            return Err(Error::CyclicDependency(remaining.join(", ")));
-        }
-
-        Ok(Cow::Owned(sorted))
-    }
-
-    /// Group tasks into dependency layers for parallel execution.
-    /// Tasks in the same layer have no dependencies on each other.
-    fn dependency_layers(&self, ordered: &[String]) -> Vec<Vec<String>> {
-        let all_tasks = &self.config.tasks;
-        let mut layers: Vec<Vec<String>> = Vec::new();
-        let mut task_layer: HashMap<&str, usize> = HashMap::new();
-
-        for name in ordered {
-            let layer = if let Some(task) = all_tasks.get(name) {
-                task.depends_on
-                    .iter()
-                    .filter_map(|dep| task_layer.get(dep.as_str()))
-                    .max()
-                    .map(|&l| l + 1)
-                    .unwrap_or(0)
-            } else {
-                0
-            };
-
-            task_layer.insert(name.as_str(), layer);
-            while layers.len() <= layer {
-                layers.push(Vec::new());
-            }
-            layers[layer].push(name.clone());
-        }
-
-        layers
     }
 
     /// Get ordered task names (for list command / TUI display).
@@ -343,7 +214,7 @@ impl TaskRunner {
     fn create_context(&self, task_name: &str, temp_dir: &Path) -> CommandContext {
         CommandContext {
             event_tx: self.event_tx.clone(),
-            mode: self.mode.clone(),
+            mode: self.mode,
             config_dir: self.config_dir.clone(),
             temp_dir: temp_dir.to_path_buf(),
             default_shell: self.config.default_shell.clone(),
@@ -354,10 +225,9 @@ impl TaskRunner {
 
     fn update_history(&self, history: &mut History, task_name: &str) {
         match self.mode {
-            Command::Install => history.mark_installed(task_name),
-            Command::Update => history.mark_updated(task_name),
-            Command::Uninstall => history.mark_uninstalled(task_name),
-            Command::List | Command::Validate | Command::Completions { .. } => {}
+            Mode::Install => history.mark_installed(task_name),
+            Mode::Update => history.mark_updated(task_name),
+            Mode::Uninstall => history.mark_uninstalled(task_name),
         }
     }
 
@@ -367,17 +237,11 @@ impl TaskRunner {
 }
 
 /// Run a task with retry support.
-async fn run_task_with_retry(
-    name: &str,
-    task: &TaskConfig,
-    ctx: &CommandContext,
-    mode: Command,
-    depth: usize,
-) -> Result<()> {
+async fn run_task_with_retry(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
     let max_attempts = task.retry + 1;
 
     for attempt in 1..=max_attempts {
-        match run_task(name, task, ctx, mode.clone(), depth).await {
+        match run_task(name, task, ctx).await {
             Ok(()) => return Ok(()),
             Err(e) if attempt < max_attempts => {
                 let _ = ctx.event_tx.send(TaskEvent::TaskRetry {
@@ -395,17 +259,11 @@ async fn run_task_with_retry(
     unreachable!()
 }
 
-async fn run_task(
-    name: &str,
-    task: &TaskConfig,
-    ctx: &CommandContext,
-    mode: Command,
-    depth: usize,
-) -> Result<()> {
+async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
     let _ = ctx.event_tx.send(TaskEvent::TaskStarted {
         task_name: name.to_string(),
         command_count: task.commands.len(),
-        depth,
+        depth: ctx.depth,
     });
 
     let executors: Vec<Box<dyn CommandExecutor>> =
@@ -417,10 +275,7 @@ async fn run_task(
 
         for executor in executors {
             let ctx = ctx.clone();
-            let mode = mode.clone();
-            handles.push(tokio::spawn(async move {
-                run_command(executor.as_ref(), &ctx, mode).await
-            }));
+            handles.push(tokio::spawn(async move { executor.execute(&ctx).await }));
         }
 
         for handle in handles {
@@ -435,7 +290,7 @@ async fn run_task(
                 command_desc: desc.clone(),
             });
 
-            match run_command(executor.as_ref(), ctx, mode.clone()).await {
+            match executor.execute(ctx).await {
                 Ok(()) => {
                     let _ = ctx.event_tx.send(TaskEvent::CommandCompleted {
                         task_name: name.to_string(),
@@ -459,17 +314,4 @@ async fn run_task(
     });
 
     Ok(())
-}
-
-async fn run_command(
-    executor: &dyn CommandExecutor,
-    ctx: &CommandContext,
-    mode: Command,
-) -> Result<()> {
-    match mode {
-        Command::Install => executor.install(ctx).await,
-        Command::Update => executor.update(ctx).await,
-        Command::Uninstall => executor.uninstall(ctx).await,
-        Command::List | Command::Validate | Command::Completions { .. } => Ok(()),
-    }
 }

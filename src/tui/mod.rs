@@ -28,7 +28,7 @@ fn restore_terminal() {
 pub async fn run(
     mut event_rx: mpsc::UnboundedReceiver<TaskEvent>,
     task_names: Vec<String>,
-    mode: crate::cli::Command,
+    mode: crate::engine::mode::Mode,
     cancel: CancellationToken,
 ) -> anyhow::Result<()> {
     // Install panic hook that restores the terminal

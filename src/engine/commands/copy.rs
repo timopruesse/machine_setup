@@ -3,10 +3,12 @@ use std::path::Path;
 
 use crate::config::types::CopyArgs;
 use crate::engine::context::CommandContext;
+use crate::engine::mode::Mode;
 use crate::error::{Error, Result};
-use crate::utils::path::{expand_path, walk_relative};
-use crate::utils::sudo;
+use crate::utils::path::expand_path;
 
+use super::fs_ops::{self, FileOps};
+use super::tree;
 use super::CommandExecutor;
 
 pub struct CopyCommand {
@@ -21,10 +23,22 @@ impl CopyCommand {
 
 #[async_trait]
 impl CommandExecutor for CopyCommand {
-    async fn install(&self, ctx: &CommandContext) -> Result<()> {
+    async fn execute(&self, ctx: &CommandContext) -> Result<()> {
+        match ctx.mode {
+            Mode::Install | Mode::Update => self.apply(ctx),
+            Mode::Uninstall => self.remove(ctx),
+        }
+    }
+
+    fn description(&self) -> String {
+        self.args.to_string()
+    }
+}
+
+impl CopyCommand {
+    fn apply(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
-        let use_sudo = self.args.sudo;
 
         if !src.exists() {
             return Err(Error::PathError(format!(
@@ -33,86 +47,35 @@ impl CommandExecutor for CopyCommand {
             )));
         }
 
-        if src.is_file() {
-            let dest = if target.extension().is_some() || !target.is_dir() {
-                if let Some(parent) = target.parent() {
-                    mkdir(parent, use_sudo)?;
-                }
-                target.clone()
-            } else {
-                mkdir(&target, use_sudo)?;
-                target.join(src.file_name().unwrap())
-            };
-            copy_file(&src, &dest, use_sudo, ctx)?;
-        } else {
-            mkdir(&target, use_sudo)?;
-            copy_directory(&src, &target, &self.args.ignore, use_sudo, ctx)?;
-        }
-
-        Ok(())
+        let ops = fs_ops::select(self.args.sudo);
+        tree::install_tree(
+            &src,
+            &target,
+            &self.args.ignore,
+            |dir| ops.mkdir_p(dir),
+            |file, dest| copy_one(ops.as_ref(), file, dest, ctx),
+        )
     }
 
-    async fn update(&self, ctx: &CommandContext) -> Result<()> {
-        ctx.log("Copy update: re-running install");
-        self.install(ctx).await
-    }
-
-    async fn uninstall(&self, ctx: &CommandContext) -> Result<()> {
+    fn remove(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
-        let use_sudo = self.args.sudo;
 
-        if src.is_file() {
-            let dest = if target.extension().is_some() || !target.is_dir() {
-                target.clone()
-            } else {
-                target.join(src.file_name().unwrap())
-            };
+        let ops = fs_ops::select(self.args.sudo);
+        tree::uninstall_tree(&src, &target, &self.args.ignore, |dest| {
             if dest.exists() {
                 ctx.log(format!("Removing: {}", dest.display()));
-                remove_file(&dest, use_sudo)?;
-            }
-        } else {
-            walk_relative(&src, &target, &self.args.ignore, |entry, dest| {
-                if entry.file_type().is_file() && dest.exists() {
-                    ctx.log(format!("Removing: {}", dest.display()));
-                    remove_file(dest, use_sudo)?;
-                }
+                ops.remove_file(dest)
+            } else {
                 Ok(())
-            })?;
-        }
-
-        Ok(())
-    }
-
-    fn description(&self) -> String {
-        self.args.to_string()
+            }
+        })
     }
 }
 
-fn mkdir(path: &Path, use_sudo: bool) -> Result<()> {
-    if path.is_dir() {
-        return Ok(());
-    }
-    if use_sudo {
-        sudo::sudo_mkdir(path)
-    } else {
-        std::fs::create_dir_all(path)?;
-        Ok(())
-    }
-}
-
-fn remove_file(path: &Path, use_sudo: bool) -> Result<()> {
-    if use_sudo {
-        sudo::sudo_remove(path)
-    } else {
-        std::fs::remove_file(path)?;
-        Ok(())
-    }
-}
-
-fn copy_file(src: &Path, dest: &Path, use_sudo: bool, ctx: &CommandContext) -> Result<()> {
-    // Skip if target is newer
+/// Copy a single file, skipping when the destination is already at least as
+/// new as the source.
+fn copy_one(ops: &dyn FileOps, src: &Path, dest: &Path, ctx: &CommandContext) -> Result<()> {
     if dest.exists() {
         if let (Ok(src_meta), Ok(dest_meta)) = (std::fs::metadata(src), std::fs::metadata(dest)) {
             if let (Ok(src_mod), Ok(dest_mod)) = (src_meta.modified(), dest_meta.modified()) {
@@ -125,30 +88,64 @@ fn copy_file(src: &Path, dest: &Path, use_sudo: bool, ctx: &CommandContext) -> R
     }
 
     ctx.log(format!("Copying: {} -> {}", src.display(), dest.display()));
-
-    if use_sudo {
-        sudo::sudo_copy(src, dest)
-    } else {
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::copy(src, dest)?;
-        Ok(())
-    }
+    ops.copy_file(src, dest)
 }
 
-fn copy_directory(
-    src: &Path,
-    target: &Path,
-    ignore: &[String],
-    use_sudo: bool,
-    ctx: &CommandContext,
-) -> Result<()> {
-    walk_relative(src, target, ignore, |entry, dest| {
-        if entry.file_type().is_dir() {
-            mkdir(dest, use_sudo)
-        } else {
-            copy_file(entry.path(), dest, use_sudo, ctx)
-        }
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::commands::fs_ops::RecordingFs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_copy_one_skips_when_dest_newer() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s.txt");
+        let dest = dir.path().join("d.txt");
+        std::fs::write(&src, b"old").unwrap();
+        // Create dest after src so its mtime is >= src.
+        std::fs::write(&dest, b"new").unwrap();
+
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = CommandContext {
+            event_tx: tx,
+            mode: Mode::Install,
+            config_dir: dir.path().to_path_buf(),
+            temp_dir: dir.path().to_path_buf(),
+            default_shell: crate::config::types::Shell::Bash,
+            task_name: "t".to_string(),
+            depth: 0,
+        };
+
+        let ops = RecordingFs::default();
+        copy_one(&ops, &src, &dest, &ctx).unwrap();
+        // Skipped: no copy_file recorded.
+        assert!(ops.calls().is_empty());
+    }
+
+    #[test]
+    fn test_copy_one_copies_when_dest_missing() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s.txt");
+        let dest = dir.path().join("d.txt");
+        std::fs::write(&src, b"data").unwrap();
+
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = CommandContext {
+            event_tx: tx,
+            mode: Mode::Install,
+            config_dir: dir.path().to_path_buf(),
+            temp_dir: dir.path().to_path_buf(),
+            default_shell: crate::config::types::Shell::Bash,
+            task_name: "t".to_string(),
+            depth: 0,
+        };
+
+        let ops = RecordingFs::default();
+        copy_one(&ops, &src, &dest, &ctx).unwrap();
+        assert_eq!(
+            ops.calls(),
+            vec![format!("copy_file {} {}", src.display(), dest.display())]
+        );
+    }
 }

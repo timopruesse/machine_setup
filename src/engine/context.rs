@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
-use crate::cli::Command;
 use crate::config::types::Shell;
 
 use super::event::TaskEvent;
+use super::mode::Mode;
 
 /// Context passed to each command during execution.
 #[derive(Clone)]
@@ -13,7 +13,7 @@ pub struct CommandContext {
     pub event_tx: mpsc::UnboundedSender<TaskEvent>,
 
     /// Current execution mode (install/update/uninstall).
-    pub mode: Command,
+    pub mode: Mode,
 
     /// Directory where the config file is located (for resolving relative paths).
     pub config_dir: PathBuf,

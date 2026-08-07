@@ -1,3 +1,4 @@
+pub mod graph;
 pub mod history;
 pub mod os;
 pub mod types;

@@ -3,6 +3,7 @@ use tokio::process::Command;
 
 use crate::config::types::RunArgs;
 use crate::engine::context::CommandContext;
+use crate::engine::mode::Mode;
 use crate::error::{Error, Result};
 use crate::utils::{process, shell};
 
@@ -20,16 +21,8 @@ impl RunCommand {
 
 #[async_trait]
 impl CommandExecutor for RunCommand {
-    async fn install(&self, ctx: &CommandContext) -> Result<()> {
-        run_for_mode(&self.args, &crate::cli::Command::Install, ctx).await
-    }
-
-    async fn update(&self, ctx: &CommandContext) -> Result<()> {
-        run_for_mode(&self.args, &crate::cli::Command::Update, ctx).await
-    }
-
-    async fn uninstall(&self, ctx: &CommandContext) -> Result<()> {
-        run_for_mode(&self.args, &crate::cli::Command::Uninstall, ctx).await
+    async fn execute(&self, ctx: &CommandContext) -> Result<()> {
+        run_for_mode(&self.args, ctx.mode, ctx).await
     }
 
     fn description(&self) -> String {
@@ -37,11 +30,7 @@ impl CommandExecutor for RunCommand {
     }
 }
 
-async fn run_for_mode(
-    args: &RunArgs,
-    mode: &crate::cli::Command,
-    ctx: &CommandContext,
-) -> Result<()> {
+async fn run_for_mode(args: &RunArgs, mode: Mode, ctx: &CommandContext) -> Result<()> {
     let commands = args.commands_for_mode(mode);
     if commands.is_empty() {
         ctx.log(format!("No commands defined for mode: {mode}"));
