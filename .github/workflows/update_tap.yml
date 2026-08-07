@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tap
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: timopruesse/homebrew-repo
           token: ${{ secrets.REPO_TOKEN }}
