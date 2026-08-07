@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod clone;
 pub mod copy;
 pub mod fs_ops;
@@ -6,13 +7,15 @@ pub mod run;
 pub mod setup;
 pub mod symlink;
 pub mod tree;
+pub mod tree_op;
 
 use async_trait::async_trait;
 
-use crate::config::types::CommandEntry;
 use crate::error::Result;
 
 use super::context::CommandContext;
+
+pub use catalog::create_executor;
 
 /// Trait for executable commands.
 ///
@@ -31,18 +34,5 @@ pub trait CommandExecutor: Send + Sync {
     /// acquire on the shared gate without deadlocking (ADR-0003).
     fn occupies_concurrency_slot(&self) -> bool {
         true
-    }
-}
-
-/// Create a command executor from a config entry. Takes ownership so the
-/// args struct moves directly into the executor without an intermediate
-/// clone inside each match arm.
-pub fn create_executor(entry: CommandEntry) -> Box<dyn CommandExecutor> {
-    match entry {
-        CommandEntry::Copy(args) => Box::new(copy::CopyCommand::new(args)),
-        CommandEntry::Symlink(args) => Box::new(symlink::SymlinkCommand::new(args)),
-        CommandEntry::Clone(args) => Box::new(clone::CloneCommand::new(args)),
-        CommandEntry::Run(args) => Box::new(run::RunCommand::new(args)),
-        CommandEntry::MachineSetup(args) => Box::new(setup::SetupCommand::new(args)),
     }
 }

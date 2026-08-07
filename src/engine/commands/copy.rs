@@ -4,12 +4,11 @@ use std::path::Path;
 use crate::config::types::CopyArgs;
 use crate::engine::context::CommandContext;
 use crate::engine::mode::Mode;
-use crate::error::{Error, Result};
-use crate::utils::path::expand_path;
+use crate::error::Result;
 
-use super::fs_ops::{self, FileOps};
+use super::fs_ops::FileOps;
 use super::progress_log::FileProgress;
-use super::tree;
+use super::tree_op::{self, TreeOpKind};
 use super::CommandExecutor;
 
 pub struct CopyCommand {
@@ -25,17 +24,15 @@ impl CopyCommand {
 #[async_trait]
 impl CommandExecutor for CopyCommand {
     async fn execute(&self, ctx: &CommandContext) -> Result<()> {
-        let args = self.args.clone();
-        let ctx = ctx.clone();
-        tokio::task::spawn_blocking(move || {
-            let cmd = CopyCommand { args };
-            match ctx.mode {
-                Mode::Install | Mode::Update => cmd.apply(&ctx),
-                Mode::Uninstall => cmd.remove(&ctx),
-            }
-        })
+        tree_op::execute(
+            &self.args.src,
+            &self.args.target,
+            CopyKind {
+                args: self.args.clone(),
+            },
+            ctx,
+        )
         .await
-        .map_err(|e| Error::Other(e.to_string()))?
     }
 
     fn description(&self) -> String {
@@ -43,7 +40,11 @@ impl CommandExecutor for CopyCommand {
     }
 }
 
-impl CopyCommand {
+struct CopyKind {
+    args: CopyArgs,
+}
+
+impl CopyKind {
     /// Directory Install with empty ignore → one `sudo cp -a` (ADR-0002).
     /// Update keeps mtime-skip via per-file + script batch.
     ///
@@ -53,68 +54,85 @@ impl CopyCommand {
     fn eligible_for_bulk_sudo(src: &Path, args: &CopyArgs, mode: Mode) -> bool {
         args.sudo && matches!(mode, Mode::Install) && src.is_dir() && args.ignore.is_empty()
     }
+}
 
-    fn apply(&self, ctx: &CommandContext) -> Result<()> {
-        let src = expand_path(&self.args.src, Some(&ctx.config_dir));
-        let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+impl TreeOpKind for CopyKind {
+    fn ignore(&self) -> &[String] {
+        &self.args.ignore
+    }
 
-        if !src.exists() {
-            return Err(Error::PathError(format!(
-                "Source does not exist: {}",
-                src.display()
-            )));
+    fn sudo(&self) -> bool {
+        self.args.sudo
+    }
+
+    fn progress_install(&self) -> &'static str {
+        "copy"
+    }
+
+    fn progress_uninstall(&self) -> &'static str {
+        "copy remove"
+    }
+
+    fn install_pool<'a>(&self, ctx: &'a CommandContext) -> Option<&'a rayon::ThreadPool> {
+        // SudoFs only buffers; DirectFs uses the shared gate pool (ADR-0004).
+        if self.args.sudo {
+            None
+        } else {
+            Some(ctx.gate.pool())
         }
+    }
 
-        if Self::eligible_for_bulk_sudo(&src, &self.args, ctx.mode) {
+    fn uninstall_pool<'a>(&self, ctx: &'a CommandContext) -> Option<&'a rayon::ThreadPool> {
+        if self.args.sudo {
+            None
+        } else {
+            Some(ctx.gate.pool())
+        }
+    }
+
+    fn try_short_circuit_install(
+        &self,
+        src: &Path,
+        target: &Path,
+        ctx: &CommandContext,
+    ) -> Option<Result<()>> {
+        if Self::eligible_for_bulk_sudo(src, &self.args, ctx.mode) {
             ctx.log(format!(
                 "Bulk copy (sudo): {} -> {}",
                 src.display(),
                 target.display()
             ));
-            return crate::utils::sudo::sudo_copy_tree(&src, &target);
+            return Some(crate::utils::sudo::sudo_copy_tree(src, target));
         }
-
-        let ops = fs_ops::select(self.args.sudo);
-        let progress = FileProgress::new(ctx, "copy");
-        // SudoFs only buffers; DirectFs uses the shared gate pool (ADR-0004).
-        let pool = if self.args.sudo {
-            None
-        } else {
-            Some(ctx.gate.pool())
-        };
-        tree::install_tree_with_pool(
-            &src,
-            &target,
-            &self.args.ignore,
-            pool,
-            |dir| ops.mkdir_p(dir),
-            |file, dest| copy_one(ops.as_ref(), file, dest, &progress),
-        )?;
-        progress.finish();
-        ops.flush()
+        None
     }
 
-    fn remove(&self, ctx: &CommandContext) -> Result<()> {
-        let src = expand_path(&self.args.src, Some(&ctx.config_dir));
-        let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+    fn ensure_dir(&self, ops: &dyn FileOps, dir: &Path, _ctx: &CommandContext) -> Result<()> {
+        ops.mkdir_p(dir)
+    }
 
-        let ops = fs_ops::select(self.args.sudo);
-        let progress = FileProgress::new(ctx, "copy remove");
-        let pool = if self.args.sudo {
-            None
+    fn on_install_file(
+        &self,
+        ops: &dyn FileOps,
+        src: &Path,
+        dest: &Path,
+        progress: &FileProgress<'_>,
+    ) -> Result<()> {
+        copy_one(ops, src, dest, progress)
+    }
+
+    fn on_uninstall_file(
+        &self,
+        ops: &dyn FileOps,
+        dest: &Path,
+        progress: &FileProgress<'_>,
+    ) -> Result<()> {
+        if dest.exists() {
+            progress.note_apply(|| format!("Removing: {}", dest.display()));
+            ops.remove_file(dest)
         } else {
-            Some(ctx.gate.pool())
-        };
-        tree::uninstall_tree_with_pool(&src, &target, &self.args.ignore, pool, |dest| {
-            if dest.exists() {
-                progress.note_apply(|| format!("Removing: {}", dest.display()));
-                ops.remove_file(dest)
-            } else {
-                Ok(())
-            }
-        })?;
-        progress.finish();
-        ops.flush()
+            Ok(())
+        }
     }
 }
 
@@ -140,6 +158,7 @@ fn copy_one(ops: &dyn FileOps, src: &Path, dest: &Path, progress: &FileProgress<
 mod tests {
     use super::*;
     use crate::engine::commands::fs_ops::RecordingFs;
+    use crate::engine::mode::Mode;
     use tempfile::tempdir;
 
     fn ctx_for(dir: &Path) -> CommandContext {
@@ -206,12 +225,12 @@ mod tests {
             ignore: vec![],
             sudo: true,
         };
-        assert!(CopyCommand::eligible_for_bulk_sudo(
+        assert!(CopyKind::eligible_for_bulk_sudo(
             &src_dir,
             &sudo_dir,
             Mode::Install
         ));
-        assert!(!CopyCommand::eligible_for_bulk_sudo(
+        assert!(!CopyKind::eligible_for_bulk_sudo(
             &src_dir,
             &sudo_dir,
             Mode::Update
@@ -221,7 +240,7 @@ mod tests {
             ignore: vec!["x".into()],
             ..sudo_dir.clone()
         };
-        assert!(!CopyCommand::eligible_for_bulk_sudo(
+        assert!(!CopyKind::eligible_for_bulk_sudo(
             &src_dir,
             &with_ignore,
             Mode::Install
@@ -231,12 +250,12 @@ mod tests {
             sudo: false,
             ..sudo_dir.clone()
         };
-        assert!(!CopyCommand::eligible_for_bulk_sudo(
+        assert!(!CopyKind::eligible_for_bulk_sudo(
             &src_dir,
             &no_sudo,
             Mode::Install
         ));
-        assert!(!CopyCommand::eligible_for_bulk_sudo(
+        assert!(!CopyKind::eligible_for_bulk_sudo(
             &src_file,
             &CopyArgs {
                 src: src_file.to_string_lossy().into(),

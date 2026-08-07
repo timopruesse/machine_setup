@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use super::graph::TaskGraph;
-use super::types::{AppConfig, CommandEntry};
-use crate::utils::shell::validate_env_key;
+use super::types::AppConfig;
+use crate::engine::commands::catalog::{self, KindSeverity};
 
 #[derive(Debug)]
 pub enum Severity {
@@ -86,63 +86,15 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
         }
 
         for cmd in &task.commands {
-            match cmd {
-                CommandEntry::Run(args) => {
-                    if args.all_command_strings().next().is_none() {
-                        issues.push(ValidationIssue {
-                            task_name: name.clone(),
-                            message: format!("Run command has no commands defined: {cmd}"),
-                            severity: Severity::Warning,
-                        });
-                    }
-                    for key in args.env.keys() {
-                        if !validate_env_key(key) {
-                            issues.push(ValidationIssue {
-                                task_name: name.clone(),
-                                message: format!("Invalid environment variable name: {key:?}"),
-                                severity: Severity::Error,
-                            });
-                        }
-                    }
-                }
-                CommandEntry::Copy(args) => {
-                    let src = crate::utils::path::expand_path(&args.src, Some(config_dir));
-                    if !src.exists() {
-                        issues.push(ValidationIssue {
-                            task_name: name.clone(),
-                            message: format!("Copy source does not exist: {}", src.display()),
-                            severity: Severity::Warning,
-                        });
-                    }
-                }
-                CommandEntry::Symlink(args) => {
-                    let src = crate::utils::path::expand_path(&args.src, Some(config_dir));
-                    if !src.exists() {
-                        issues.push(ValidationIssue {
-                            task_name: name.clone(),
-                            message: format!("Symlink source does not exist: {}", src.display()),
-                            severity: Severity::Warning,
-                        });
-                    }
-                }
-                CommandEntry::MachineSetup(args) => {
-                    if !crate::config::is_url(&args.config) {
-                        let path = crate::utils::path::expand_path(&args.config, Some(config_dir));
-                        // Check with common extensions too
-                        let exists = path.exists()
-                            || path.with_extension("yaml").exists()
-                            || path.with_extension("yml").exists()
-                            || path.with_extension("json").exists();
-                        if !exists {
-                            issues.push(ValidationIssue {
-                                task_name: name.clone(),
-                                message: format!("Sub-config not found: {}", path.display()),
-                                severity: Severity::Error,
-                            });
-                        }
-                    }
-                }
-                CommandEntry::Clone(_) => {}
+            for kind_issue in catalog::validate_entry(cmd, config_dir) {
+                issues.push(ValidationIssue {
+                    task_name: name.clone(),
+                    message: kind_issue.message,
+                    severity: match kind_issue.severity {
+                        KindSeverity::Error => Severity::Error,
+                        KindSeverity::Warning => Severity::Warning,
+                    },
+                });
             }
         }
     }

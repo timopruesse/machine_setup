@@ -13,6 +13,8 @@ use rayon::ThreadPool;
 use tempfile::TempDir;
 
 use machine_setup::config;
+use machine_setup::config::types::CommandEntry;
+use machine_setup::engine::commands::create_executor;
 use machine_setup::engine::commands::fs_ops::{self, DirectFs, FileOps};
 use machine_setup::engine::commands::tree::{
     self, install_tree_with_pool, uninstall_tree_with_pool,
@@ -21,6 +23,23 @@ use machine_setup::engine::concurrency::resolve_limit;
 use machine_setup::engine::mode::Mode;
 use machine_setup::engine::runner::TaskRunner;
 use machine_setup::engine::sink::NullSink;
+
+/// Mixed Command entries — deserialize + `create_executor` only (no execute).
+const REGISTRY_YAML: &str = r#"
+- run:
+    commands: "echo hello"
+- copy:
+    src: /tmp/ms-bench-src
+    target: /tmp/ms-bench-dst
+- symlink:
+    src: /tmp/ms-bench-link-src
+    target: /tmp/ms-bench-link-dst
+- clone:
+    url: https://example.com/repo.git
+    target: /tmp/ms-bench-clone
+- machine_setup:
+    config: /tmp/ms-bench-nested.yaml
+"#;
 
 const N_FILES: usize = 1_000;
 
@@ -322,6 +341,26 @@ fn bench_runner_smoke(c: &mut Criterion) {
     group.finish();
 }
 
+fn parse_and_create_executors(
+    yaml: &str,
+) -> Vec<Box<dyn machine_setup::engine::commands::CommandExecutor>> {
+    let entries: Vec<CommandEntry> = serde_yaml::from_str(yaml).expect("registry yaml");
+    entries.into_iter().map(create_executor).collect()
+}
+
+fn bench_registry(c: &mut Criterion) {
+    let mut group = c.benchmark_group("registry");
+    group.sample_size(100);
+    group.warm_up_time(Duration::from_millis(500));
+    group.measurement_time(Duration::from_secs(2));
+
+    group.bench_function("parse_and_create_executors", |b| {
+        b.iter(|| parse_and_create_executors(std::hint::black_box(REGISTRY_YAML)));
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_tree_install_direct,
@@ -330,5 +369,6 @@ criterion_group!(
     bench_symlink_tree,
     bench_uninstall_tree,
     bench_runner_smoke,
+    bench_registry,
 );
 criterion_main!(benches);

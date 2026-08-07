@@ -1,10 +1,12 @@
-//! Tree materialization shared by the `copy` and `symlink` executors.
+//! Tree materialization shared by tree-shaped Command executors via the
+//! **Tree-op driver**.
 //!
-//! Both executors face the same shape: map a source — a single file, or a
-//! whole directory tree — onto a target, honoring an ignore list, and either
-//! apply an operation per file (install) or undo it per file (uninstall). The
-//! only genuine difference between them is what happens to one file (copy its
-//! bytes vs. create a symlink), so that is the single parameter callers supply.
+//! Both `copy` and `symlink` face the same shape: map a source — a single file,
+//! or a whole directory tree — onto a target, honoring an ignore list, and
+//! either apply an operation per file (install) or undo it per file
+//! (uninstall). Kind-specific per-file work and privilege policy live in the
+//! Tree-op driver / `TreeOpKind`; this module owns destination resolution and
+//! the walk.
 //!
 //! Destination resolution — the "is the target a file path or a directory to
 //! drop the file into" rule — lives here as one pure, table-tested function

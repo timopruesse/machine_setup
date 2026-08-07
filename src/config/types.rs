@@ -149,13 +149,8 @@ impl<'de> Deserialize<'de> for CommandEntry {
 
 impl std::fmt::Display for CommandEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CommandEntry::Copy(args) => args.fmt(f),
-            CommandEntry::Symlink(args) => args.fmt(f),
-            CommandEntry::Clone(args) => args.fmt(f),
-            CommandEntry::Run(args) => args.fmt(f),
-            CommandEntry::MachineSetup(args) => args.fmt(f),
-        }
+        // Behavioral display lives in the Command kind catalog (ADR-0006).
+        f.write_str(&crate::engine::commands::catalog::description(self))
     }
 }
 
@@ -341,21 +336,7 @@ impl<'de> Deserialize<'de> for StringOrVec {
 impl AppConfig {
     /// Check if any commands in the selected tasks require sudo.
     pub fn requires_sudo(&self, task_names: &[String]) -> bool {
-        let selected: std::collections::HashSet<&str> =
-            task_names.iter().map(String::as_str).collect();
-        self.tasks
-            .iter()
-            .filter(|(name, _)| selected.contains(name.as_str()))
-            .any(|(_, task)| {
-                task.commands.iter().any(|cmd| match cmd {
-                    CommandEntry::Run(args) => {
-                        args.all_command_strings().any(|s| s.contains("sudo"))
-                    }
-                    CommandEntry::Copy(args) => args.sudo,
-                    CommandEntry::Symlink(args) => args.sudo,
-                    _ => false,
-                })
-            })
+        crate::engine::commands::catalog::tasks_require_sudo(self, task_names)
     }
 }
 

@@ -42,6 +42,19 @@ The thing that runs one command entry for the current mode — one per command
 entry type, behind the `CommandExecutor` interface (single `execute` method).
 _Avoid_: handler, command (see Flagged ambiguities).
 
+**Command kind catalog**:
+The single owner of Command-entry-kind behavior — parse helpers used after
+deserialize, validate, `create_executor`, `requires_sudo`, and display wiring
+co-located with Command executors. The `CommandEntry` enum stays public for
+exhaustiveness; Deserialize may match keys only to construct the enum.
+Modules outside the catalog must not `match` on variants for behavior. New
+kinds register here once. A new kind is justified only when the op needs
+**Tree materialization**, **File ops**, **Sub-config** nesting, or Mode
+semantics `run` cannot express — not for YAML sugar over shell recipes
+(ADR-0006).
+_Avoid_: command registry, plugin map, dispatcher (unless a second adapter
+justifies a real plugin seam — see ADR-0006).
+
 **Task event**:
 A message describing execution progress (`TaskEvent`) — lifecycle and
 per-line/per-file output alike. Emitted through the **Task event sink**; the
@@ -94,11 +107,22 @@ a per-file operation. Directory installs mkdir sequentially, then apply files on
 the Concurrency gate's shared Rayon pool (ADR-0004).
 _Avoid_: file walker, copier.
 
+**Tree-op driver**:
+The shared Command-executor shell around Tree materialization for tree-shaped
+kinds — path expand, existence checks, `spawn_blocking`, File ops selection,
+progress, flush. Kind-specific policy (bulk sudo, `force`, pool choice) stays in
+thin per-kind Command executors that supply a per-file strategy. Does not move
+privilege planning into File ops (ADR-0002).
+_Avoid_: unified tree command, generic file command.
+
 **Command bench**:
 The measurement module for Command executor / Tree materialization / Runner
 wall-clock speed — Criterion microbenches plus thin Runner smoke over
-generate-once fixtures. Report-only (no absolute ms CI asserts). SudoFs cases
-opt-in via `MACHINE_SETUP_BENCH_SUDO=1`.
+generate-once fixtures, plus a registry microbench (parse Command entries →
+`create_executor`) so **Command kind catalog** changes have a signal when tree
+benches barely move. Report-only (no absolute ms CI asserts). SudoFs cases
+opt-in via `MACHINE_SETUP_BENCH_SUDO=1`. Deepening steps capture before/after
+locally; soft regression thresholds are a human call, not CI.
 _Avoid_: performance test (ambiguous with correctness tests), profiling.
 
 ## Relationships
@@ -108,17 +132,21 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
 - The **Task graph** orders **Tasks**; the **Runner** executes them in that
   order under one **Mode**, admitting work through the **Concurrency gate**.
   Nested **Sub-config** Runners share the parent's **Concurrency gate**.
-- The **Runner** turns each **Command entry** into a **Command executor** and
-  calls `execute`, which acts according to the current **Mode**.
-- The `copy` and `symlink` **Command executors** drive **Tree materialization**,
-  which performs each file operation through a **File ops** adapter (executors
-  may choose a bulk SudoFs path when eligible).
+- The **Runner** turns each **Command entry** into a **Command executor** via the
+  **Command kind catalog** and calls `execute`, which acts according to the
+  current **Mode**.
+- Validation and `requires_sudo` for **Command entries** go through the
+  **Command kind catalog** — not ad-hoc matches in foreign modules.
+- The `copy` and `symlink` **Command executors** use the **Tree-op driver**, which
+  drives **Tree materialization** through a **File ops** adapter (executors may
+  still choose a bulk SudoFs path when eligible).
 - A `machine_setup` **Command entry** loads a **Sub-config** and runs it with a
   nested **Runner**.
 - The **Runner** and Command executors emit **Task events** through the
   **Task event sink** and consult/update **History**.
-- The **Command bench** exercises Tree materialization, File ops, and the
-  Runner across the same seams production uses (NullSink in smoke runs).
+- The **Command bench** exercises Tree materialization, File ops, the Runner,
+  and **Command kind catalog** registration (registry microbench) across the
+  same seams production uses (NullSink in smoke runs).
 
 ## Example dialogue
 

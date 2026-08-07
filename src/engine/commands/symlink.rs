@@ -3,13 +3,12 @@ use std::path::Path;
 
 use crate::config::types::SymlinkArgs;
 use crate::engine::context::CommandContext;
-use crate::engine::mode::Mode;
 use crate::error::{Error, Result};
-use crate::utils::path::expand_path;
 
-use super::fs_ops::{self, FileOps};
+use super::fs_ops::FileOps;
 use super::progress_log::FileProgress;
 use super::tree;
+use super::tree_op::{self, TreeOpKind};
 use super::CommandExecutor;
 
 pub struct SymlinkCommand {
@@ -25,17 +24,15 @@ impl SymlinkCommand {
 #[async_trait]
 impl CommandExecutor for SymlinkCommand {
     async fn execute(&self, ctx: &CommandContext) -> Result<()> {
-        let args = self.args.clone();
-        let ctx = ctx.clone();
-        tokio::task::spawn_blocking(move || {
-            let cmd = SymlinkCommand { args };
-            match ctx.mode {
-                Mode::Install | Mode::Update => cmd.apply(&ctx),
-                Mode::Uninstall => cmd.remove(&ctx),
-            }
-        })
+        tree_op::execute(
+            &self.args.src,
+            &self.args.target,
+            SymlinkKind {
+                args: self.args.clone(),
+            },
+            ctx,
+        )
         .await
-        .map_err(|e| Error::Other(e.to_string()))?
     }
 
     fn description(&self) -> String {
@@ -43,45 +40,57 @@ impl CommandExecutor for SymlinkCommand {
     }
 }
 
-impl SymlinkCommand {
-    fn apply(&self, ctx: &CommandContext) -> Result<()> {
-        let src = expand_path(&self.args.src, Some(&ctx.config_dir));
-        let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+struct SymlinkKind {
+    args: SymlinkArgs,
+}
 
-        if !src.exists() {
-            return Err(Error::PathError(format!(
-                "Source does not exist: {}",
-                src.display()
-            )));
-        }
-
-        let ops = fs_ops::select(self.args.sudo);
-        let force = self.args.force;
-        let progress = FileProgress::new(ctx, "symlink");
-        // Symlink create is metadata-cheap; keep sequential (Command bench).
-        tree::install_tree_with_pool(
-            &src,
-            &target,
-            &self.args.ignore,
-            None,
-            |dir| tree::ensure_real_dir(ops.as_ref(), dir, |msg| ctx.log(msg)),
-            |file, dest| symlink_one(ops.as_ref(), file, dest, force, &progress),
-        )?;
-        progress.finish();
-        ops.flush()
+impl TreeOpKind for SymlinkKind {
+    fn ignore(&self) -> &[String] {
+        &self.args.ignore
     }
 
-    fn remove(&self, ctx: &CommandContext) -> Result<()> {
-        let src = expand_path(&self.args.src, Some(&ctx.config_dir));
-        let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+    fn sudo(&self) -> bool {
+        self.args.sudo
+    }
 
-        let ops = fs_ops::select(self.args.sudo);
-        let progress = FileProgress::new(ctx, "symlink remove");
-        tree::uninstall_tree_with_pool(&src, &target, &self.args.ignore, None, |dest| {
-            remove_link(ops.as_ref(), dest, &progress)
-        })?;
-        progress.finish();
-        ops.flush()
+    fn progress_install(&self) -> &'static str {
+        "symlink"
+    }
+
+    fn progress_uninstall(&self) -> &'static str {
+        "symlink remove"
+    }
+
+    fn install_pool<'a>(&self, _ctx: &'a CommandContext) -> Option<&'a rayon::ThreadPool> {
+        // Symlink create is metadata-cheap; keep sequential (Command bench).
+        None
+    }
+
+    fn uninstall_pool<'a>(&self, _ctx: &'a CommandContext) -> Option<&'a rayon::ThreadPool> {
+        None
+    }
+
+    fn ensure_dir(&self, ops: &dyn FileOps, dir: &Path, ctx: &CommandContext) -> Result<()> {
+        tree::ensure_real_dir(ops, dir, |msg| ctx.log(msg))
+    }
+
+    fn on_install_file(
+        &self,
+        ops: &dyn FileOps,
+        src: &Path,
+        dest: &Path,
+        progress: &FileProgress<'_>,
+    ) -> Result<()> {
+        symlink_one(ops, src, dest, self.args.force, progress)
+    }
+
+    fn on_uninstall_file(
+        &self,
+        ops: &dyn FileOps,
+        dest: &Path,
+        progress: &FileProgress<'_>,
+    ) -> Result<()> {
+        remove_link(ops, dest, progress)
     }
 }
 
@@ -149,6 +158,7 @@ fn remove_link(ops: &dyn FileOps, dest: &Path, progress: &FileProgress<'_>) -> R
 mod tests {
     use super::*;
     use crate::engine::commands::fs_ops::RecordingFs;
+    use crate::engine::mode::Mode;
     use tempfile::tempdir;
 
     fn ctx_for(
