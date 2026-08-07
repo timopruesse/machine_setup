@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use std::sync::Arc;
 
 use crate::config::types::MachineSetupArgs;
 use crate::engine::context::CommandContext;
@@ -26,6 +27,12 @@ impl CommandExecutor for SetupCommand {
     fn description(&self) -> String {
         self.args.to_string()
     }
+
+    fn occupies_concurrency_slot(&self) -> bool {
+        // Nested Runner shares the parent gate; holding a permit here would
+        // deadlock when nested leaf commands try to acquire (ADR-0003).
+        false
+    }
 }
 
 async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result<()> {
@@ -48,7 +55,8 @@ async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result
     // and unresolvable paths fall back to the parent's config_dir.
     let sub_config_dir = crate::config::resolve_config_dir(&config_str, &ctx.config_dir);
 
-    let runner = crate::engine::runner::TaskRunner::new(config, ctx.mode, ctx.event_tx.clone())
+    let runner = crate::engine::runner::TaskRunner::new(config, ctx.mode, Arc::clone(&ctx.events))
+        .with_gate(Arc::clone(&ctx.gate))
         .with_config_dir(sub_config_dir)
         .with_depth(ctx.depth + 1);
 

@@ -1,16 +1,21 @@
 use std::path::PathBuf;
-use tokio::sync::mpsc;
+use std::sync::Arc;
 
 use crate::config::types::Shell;
 
+use super::concurrency::ConcurrencyGate;
 use super::event::TaskEvent;
 use super::mode::Mode;
+use super::sink::{SharedSink, TaskEventSink};
 
 /// Context passed to each command during execution.
 #[derive(Clone)]
 pub struct CommandContext {
-    /// Channel for sending events to the UI/logger.
-    pub event_tx: mpsc::UnboundedSender<TaskEvent>,
+    /// Sink for Task events (lifecycle + command output).
+    pub events: SharedSink,
+
+    /// Global concurrency gate (Tasks + Command entries).
+    pub gate: Arc<ConcurrencyGate>,
 
     /// Current execution mode (install/update/uninstall).
     pub mode: Mode,
@@ -32,9 +37,14 @@ pub struct CommandContext {
 }
 
 impl CommandContext {
+    /// Emit a Task event through the sink.
+    pub fn emit(&self, event: TaskEvent) {
+        TaskEventSink::emit(self.events.as_ref(), event);
+    }
+
     /// Send a command output event.
     pub fn log(&self, line: impl Into<String>) {
-        let _ = self.event_tx.send(TaskEvent::CommandOutput {
+        self.emit(TaskEvent::CommandOutput {
             task_name: self.task_name.clone(),
             line: line.into(),
         });

@@ -43,8 +43,9 @@ entry type, behind the `CommandExecutor` interface (single `execute` method).
 _Avoid_: handler, command (see Flagged ambiguities).
 
 **Task event**:
-A message emitted by the runner describing execution progress, consumed by the
-TUI or the plain logger (`TaskEvent`).
+A message describing execution progress (`TaskEvent`) — lifecycle and
+per-line/per-file output alike. Emitted through the **Task event sink**; the
+TUI and plain logger consume events from the channel-backed adapter.
 _Avoid_: message, log, signal.
 
 **History**:
@@ -61,33 +62,63 @@ should refer to them by these names.
 The single home for everything derived from `depends_on` edges — topological
 order, parallel layers, cycle detection, and missing-edge detection
 (`TaskGraph`). Both the runner and the validator read from it.
-_Avoid_: dependency resolver, DAG, scheduler.
+_Avoid_: dependency resolver, DAG, scheduler (do not reuse "scheduler" for
+concurrency — see **Concurrency gate**).
+
+**Task event sink**:
+The seam for emitting **Task events**. Adapters: **ChannelSink** (mpsc →
+TUI/plain) and **NullSink** (benches). The Runner and `CommandContext` both
+emit through this interface — not a raw sender.
+_Avoid_: logger, event bus, observer.
+
+**Concurrency gate**:
+The Runner's global cap on in-flight leaf Command executor work, driven by
+`num_threads` (default: physical CPUs − 1). Permits are per Command entry;
+`machine_setup` does not hold a permit so nested Sub-configs can share the
+gate. Sync File ops work runs via `spawn_blocking` so it does not block Tokio
+workers. Does **not** order Tasks by dependency — that remains the **Task graph**.
+_Avoid_: scheduler, thread pool (until a dedicated FS pool exists).
 
 **File ops**:
 The privilege seam for filesystem primitives (`mkdir`, copy, symlink, removal),
 with two adapters — **DirectFs** (`std::fs`) and **SudoFs** (`sudo`) — chosen
-once per command from its `sudo` flag (`FileOps`).
+once per command from its `sudo` flag (`FileOps`). SudoFs may script-batch
+per-file ops and flush once; eligible directory `copy` installs may use a bulk
+privileged path. Symlink sudo stays script-batched.
 _Avoid_: fs helper, file utils.
 
 **Tree materialization**:
 The shared traversal behind `copy` and `symlink`: destination resolution (the
 file-vs-directory target rule) plus the install/uninstall walk, parameterized by
-a per-file operation.
+a per-file operation. In-tree parallel file apply is deferred until Command
+bench numbers show DirectFs walk/apply as the next cliff.
 _Avoid_: file walker, copier.
+
+**Command bench**:
+The measurement module for Command executor / Tree materialization / Runner
+wall-clock speed — Criterion microbenches plus thin Runner smoke over
+generate-once fixtures. Report-only (no absolute ms CI asserts). SudoFs cases
+opt-in via `MACHINE_SETUP_BENCH_SUDO=1`.
+_Avoid_: performance test (ambiguous with correctness tests), profiling.
 
 ## Relationships
 
 - A **Task** contains one or more **Command entries** and may declare
   dependencies on other tasks.
 - The **Task graph** orders **Tasks**; the **Runner** executes them in that
-  order under one **Mode**.
+  order under one **Mode**, admitting work through the **Concurrency gate**.
+  Nested **Sub-config** Runners share the parent's **Concurrency gate**.
 - The **Runner** turns each **Command entry** into a **Command executor** and
   calls `execute`, which acts according to the current **Mode**.
 - The `copy` and `symlink` **Command executors** drive **Tree materialization**,
-  which performs each file operation through a **File ops** adapter.
+  which performs each file operation through a **File ops** adapter (executors
+  may choose a bulk SudoFs path when eligible).
 - A `machine_setup` **Command entry** loads a **Sub-config** and runs it with a
   nested **Runner**.
-- The **Runner** emits **Task events** and consults/updates **History**.
+- The **Runner** and Command executors emit **Task events** through the
+  **Task event sink** and consult/update **History**.
+- The **Command bench** exercises Tree materialization, File ops, and the
+  Runner across the same seams production uses (NullSink in smoke runs).
 
 ## Example dialogue
 

@@ -1,6 +1,5 @@
 use std::fs;
 use tempfile::tempdir;
-use tokio::sync::mpsc;
 
 use machine_setup::config;
 use machine_setup::engine::event::TaskEvent;
@@ -17,9 +16,9 @@ async fn run_config(yaml: &str, mode: Mode) -> Vec<TaskEvent> {
     // Use test-local temp_dir so history doesn't leak between tests
     config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
 
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
 
-    let runner = TaskRunner::new(config, mode, tx).with_config_dir(dir.path().to_path_buf());
+    let runner = TaskRunner::new(config, mode, events).with_config_dir(dir.path().to_path_buf());
 
     let _ = runner.run_all(true).await;
 
@@ -281,9 +280,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (events, _rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     // Verify file was copied
@@ -324,9 +323,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (events, _rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     assert!(target_dir.join("keep.txt").exists());
@@ -362,9 +361,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (events, _rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let link = target_dir.join("dotfile");
@@ -416,9 +415,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (events, _rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let dest_pack = target_skills.join("route-agents");
@@ -486,9 +485,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, _rx) = mpsc::unbounded_channel();
+    let (events, _rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let dest_pack = target_skills.join("route-agents");
@@ -537,16 +536,16 @@ tasks:
 
     // First run
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx1, _rx1) = mpsc::unbounded_channel();
+    let (events1, _rx1) = machine_setup::engine::sink::ChannelSink::channel();
     let runner1 =
-        TaskRunner::new(config, Mode::Install, tx1).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run (should skip)
     let config2 = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx2, mut rx2) = mpsc::unbounded_channel();
+    let (events2, mut rx2) = machine_setup::engine::sink::ChannelSink::channel();
     let runner2 =
-        TaskRunner::new(config2, Mode::Install, tx2).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config2, Mode::Install, events2).with_config_dir(dir.path().to_path_buf());
     let _ = runner2.run_all(false).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -579,16 +578,16 @@ tasks:
 
     // First run
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx1, _rx1) = mpsc::unbounded_channel();
+    let (events1, _rx1) = machine_setup::engine::sink::ChannelSink::channel();
     let runner1 =
-        TaskRunner::new(config, Mode::Install, tx1).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events1).with_config_dir(dir.path().to_path_buf());
     let _ = runner1.run_all(false).await;
 
     // Second run with force
     let config2 = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx2, mut rx2) = mpsc::unbounded_channel();
+    let (events2, mut rx2) = machine_setup::engine::sink::ChannelSink::channel();
     let runner2 =
-        TaskRunner::new(config2, Mode::Install, tx2).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config2, Mode::Install, events2).with_config_dir(dir.path().to_path_buf());
     let _ = runner2.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -625,6 +624,34 @@ tasks:
 
     assert!(task_completed(&events, "a"));
     assert!(task_completed(&events, "b"));
+}
+
+#[tokio::test]
+async fn test_num_threads_one_still_runs_parallel_tasks() {
+    // Concurrency gate with limit 1 must serialize Tasks but still complete.
+    let events = run_config(
+        r#"
+default_shell: bash
+parallel: true
+num_threads: 1
+tasks:
+  a:
+    commands:
+      - run:
+          commands: "echo a-done"
+  b:
+    commands:
+      - run:
+          commands: "echo b-done"
+"#,
+        Mode::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "a"));
+    assert!(task_completed(&events, "b"));
+    assert!(find_output(&events, "a", "a-done"));
+    assert!(find_output(&events, "b", "b-done"));
 }
 
 #[tokio::test]
@@ -683,9 +710,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();
@@ -694,6 +721,57 @@ tasks:
     }
 
     assert!(find_output(&events, "sub_task", "from_sub_config"));
+}
+
+#[tokio::test]
+async fn test_nested_sub_config_with_num_threads_one() {
+    // Regression: shared ConcurrencyGate must not deadlock when the parent
+    // machine_setup command would otherwise hold the only permit.
+    let dir = tempdir().unwrap();
+    fs::write(
+        dir.path().join("sub.yaml"),
+        r#"
+tasks:
+  nested:
+    commands:
+      - run:
+          commands: "echo nested-ok"
+"#,
+    )
+    .unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        r#"
+default_shell: bash
+num_threads: 1
+tasks:
+  parent:
+    commands:
+      - machine_setup:
+          config: "./sub.yaml"
+"#,
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner =
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
+
+    let run = tokio::time::timeout(std::time::Duration::from_secs(5), runner.run_all(true)).await;
+    assert!(
+        run.is_ok(),
+        "nested sub-config deadlocked under num_threads: 1"
+    );
+    assert!(run.unwrap().is_ok());
+
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+    assert!(find_output(&events, "nested", "nested-ok"));
 }
 
 // ─── Config format tests ───
@@ -709,9 +787,9 @@ async fn test_json_config() {
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();
@@ -744,9 +822,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     let mut events = Vec::new();
@@ -839,9 +917,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -897,9 +975,9 @@ tasks:
     .unwrap();
 
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -1101,9 +1179,9 @@ tasks:
     let mut config = config::load_config(config_path.to_str().unwrap()).unwrap();
     config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
 
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
     let runner =
-        TaskRunner::new(config, Mode::Install, tx).with_config_dir(dir.path().to_path_buf());
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
     let _ = runner.run_all(true).await;
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -1168,8 +1246,8 @@ tasks:
 /// Run a config at `config_path` once in the given mode, against `base_dir`.
 async fn run_at(config_path: &std::path::Path, base_dir: &std::path::Path, mode: Mode) {
     let config = config::load_config(config_path.to_str().unwrap()).unwrap();
-    let (tx, _rx) = mpsc::unbounded_channel();
-    let runner = TaskRunner::new(config, mode, tx).with_config_dir(base_dir.to_path_buf());
+    let (events, _rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner = TaskRunner::new(config, mode, events).with_config_dir(base_dir.to_path_buf());
     let _ = runner.run_all(true).await;
 }
 

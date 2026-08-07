@@ -24,6 +24,13 @@ pub trait CommandExecutor: Send + Sync {
 
     /// Short description for display.
     fn description(&self) -> String;
+
+    /// Whether this Command entry holds a ConcurrencyGate permit while
+    /// `execute` runs. `machine_setup` returns false so a nested Runner can
+    /// acquire on the shared gate without deadlocking (ADR-0003).
+    fn occupies_concurrency_slot(&self) -> bool {
+        true
+    }
 }
 
 /// Create a command executor from a config entry. Takes ownership so the

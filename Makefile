@@ -8,6 +8,9 @@ lint:
 	cargo fmt --all -- --check
 	cargo clippy -- -D warnings
 
+bench:
+	cargo bench --bench command_bench
+
 build:
 	cargo build --release
 
