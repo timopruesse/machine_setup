@@ -1,7 +1,7 @@
 use std::io;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
@@ -12,7 +12,7 @@ use crate::engine::event::TaskEvent;
 use super::message::{Effect, Input, Message};
 use super::reduce::reduce;
 use super::render;
-use super::state::UiState;
+use super::state::{TaskStatus, UiState};
 
 /// Async UI loop: engine events + keyboard + spinner ticks.
 /// Returns the final [`UiState`] for the post-run summary.
@@ -42,23 +42,34 @@ pub async fn run_loop(
 
     let mut ticker = tokio::time::interval(Duration::from_millis(150));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // First tick completes immediately; skip it so we don't double-draw on entry.
+    ticker.tick().await;
 
     terminal.draw(|f| render(f, &state))?;
 
+    // Once the engine drops its sender, `recv()` stays Ready(None) forever. With
+    // `biased` select that starves keyboard input — fuse the arm off after close.
+    let mut events_open = true;
+
     loop {
+        let mut dirty = false;
+
         tokio::select! {
             biased;
             _ = cancel.cancelled() => {
                 break;
             }
-            maybe_event = event_rx.recv() => {
+            maybe_event = event_rx.recv(), if events_open => {
                 match maybe_event {
                     Some(first) => {
                         state = apply_engine_batch(&mut event_rx, state, first);
+                        dirty = true;
                     }
                     None => {
+                        events_open = false;
                         if !state.done {
                             state.done = true;
+                            dirty = true;
                         }
                     }
                 }
@@ -68,6 +79,7 @@ pub async fn run_loop(
                 if let Some(input) = map_key(&state, key) {
                     let (next, effect) = reduce(state, Message::Input(input));
                     state = next;
+                    dirty = true;
                     match effect {
                         Effect::None => {}
                         Effect::Quit => break,
@@ -79,12 +91,18 @@ pub async fn run_loop(
                 }
             }
             _ = ticker.tick() => {
-                let (next, _) = reduce(state, Message::Tick);
-                state = next;
+                // Only animate when something is running (avoids idle redraw storms).
+                if state.tasks.iter().any(|t| matches!(t.status, TaskStatus::Running)) {
+                    let (next, _) = reduce(state, Message::Tick);
+                    state = next;
+                    dirty = true;
+                }
             }
         }
 
-        terminal.draw(|f| render(f, &state))?;
+        if dirty {
+            terminal.draw(|f| render(f, &state))?;
+        }
     }
 
     Ok(state)
@@ -114,6 +132,20 @@ fn apply_engine_batch(
 }
 
 fn map_key(state: &UiState, key: KeyEvent) -> Option<Input> {
+    // Ignore key release so one physical press == one input.
+    if key.kind == KeyEventKind::Release {
+        return None;
+    }
+    // Allow Repeat only for navigation keys (held j/k).
+    if key.kind == KeyEventKind::Repeat
+        && !matches!(
+            key.code,
+            KeyCode::Up | KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('k')
+        )
+    {
+        return None;
+    }
+
     if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
         return Some(Input::CancelAndQuit);
     }
@@ -178,5 +210,13 @@ mod tests {
             map_key(&state, key(KeyCode::Esc)),
             Some(Input::ClearFilterOrQuit)
         );
+    }
+
+    #[test]
+    fn key_release_is_ignored() {
+        let state = UiState::new(vec!["a".into()], Mode::Install);
+        let mut release = key(KeyCode::Char('q'));
+        release.kind = KeyEventKind::Release;
+        assert_eq!(map_key(&state, release), None);
     }
 }
