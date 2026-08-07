@@ -90,8 +90,8 @@ _Avoid_: fs helper, file utils.
 **Tree materialization**:
 The shared traversal behind `copy` and `symlink`: destination resolution (the
 file-vs-directory target rule) plus the install/uninstall walk, parameterized by
-a per-file operation. In-tree parallel file apply is deferred until Command
-bench numbers show DirectFs walk/apply as the next cliff.
+a per-file operation. Directory installs mkdir sequentially, then apply files on
+the Concurrency gate's shared Rayon pool (ADR-0004).
 _Avoid_: file walker, copier.
 
 **Command bench**:

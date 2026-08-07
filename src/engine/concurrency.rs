@@ -1,9 +1,11 @@
 //! Concurrency gate — global cap on in-flight Task / Command executor work.
 //!
 //! See ADR-0003. Does not order Tasks by dependency (that is the Task graph).
+//! Also owns the shared Rayon pool used for in-tree file apply (ADR-0004).
 
 use std::sync::Arc;
 
+use rayon::ThreadPool;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 /// Shared limit on concurrent Task and Command executor work.
@@ -12,16 +14,25 @@ pub struct ConcurrencyGate {
     sem: Arc<Semaphore>,
     /// Configured permit count (for tests / diagnostics).
     pub limit: usize,
+    /// Shared FS apply pool — sized by `limit`, shared across Command entries.
+    pool: Arc<ThreadPool>,
 }
 
 impl ConcurrencyGate {
     /// Build a gate from `AppConfig.num_threads` (None → CPUs − 1, at least 1).
     pub fn from_num_threads(num_threads: Option<usize>) -> Self {
         let limit = resolve_limit(num_threads);
+        let pool = build_fs_pool(limit);
         Self {
             sem: Arc::new(Semaphore::new(limit)),
             limit,
+            pool: Arc::new(pool),
         }
+    }
+
+    /// Shared Rayon pool for in-tree DirectFs file apply.
+    pub fn pool(&self) -> &ThreadPool {
+        &self.pool
     }
 
     /// Acquire one permit; held for the lifetime of the returned guard.
@@ -32,6 +43,14 @@ impl ConcurrencyGate {
             .await
             .expect("ConcurrencyGate semaphore is never closed")
     }
+}
+
+fn build_fs_pool(limit: usize) -> ThreadPool {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(limit)
+        .thread_name(|i| format!("machine-setup-fs-{i}"))
+        .build()
+        .expect("ConcurrencyGate Rayon pool")
 }
 
 /// Resolve `num_threads` to a positive permit count.

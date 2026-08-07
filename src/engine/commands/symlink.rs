@@ -8,6 +8,7 @@ use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
 
 use super::fs_ops::{self, FileOps};
+use super::progress_log::FileProgress;
 use super::tree;
 use super::CommandExecutor;
 
@@ -56,13 +57,17 @@ impl SymlinkCommand {
 
         let ops = fs_ops::select(self.args.sudo);
         let force = self.args.force;
-        tree::install_tree(
+        let progress = FileProgress::new(ctx, "symlink");
+        // Symlink create is metadata-cheap; keep sequential (Command bench).
+        tree::install_tree_with_pool(
             &src,
             &target,
             &self.args.ignore,
+            None,
             |dir| tree::ensure_real_dir(ops.as_ref(), dir, |msg| ctx.log(msg)),
-            |file, dest| symlink_one(ops.as_ref(), file, dest, force, ctx),
+            |file, dest| symlink_one(ops.as_ref(), file, dest, force, &progress),
         )?;
+        progress.finish();
         ops.flush()
     }
 
@@ -71,9 +76,11 @@ impl SymlinkCommand {
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
 
         let ops = fs_ops::select(self.args.sudo);
-        tree::uninstall_tree(&src, &target, &self.args.ignore, |dest| {
-            remove_link(ops.as_ref(), dest, ctx)
+        let progress = FileProgress::new(ctx, "symlink remove");
+        tree::uninstall_tree_with_pool(&src, &target, &self.args.ignore, None, |dest| {
+            remove_link(ops.as_ref(), dest, &progress)
         })?;
+        progress.finish();
         ops.flush()
     }
 }
@@ -85,42 +92,54 @@ fn symlink_one(
     src: &Path,
     dest: &Path,
     force: bool,
-    ctx: &CommandContext,
+    progress: &FileProgress<'_>,
 ) -> Result<()> {
     if dest.exists() || dest.symlink_metadata().is_ok() {
         if force {
-            ctx.log(format!("Removing existing: {}", dest.display()));
+            progress.note_apply(|| format!("Removing existing: {}", dest.display()));
             ops.remove_path(dest)?;
         } else {
-            ctx.log(format!("Skipping (already exists): {}", dest.display()));
+            progress.note_skip(|| format!("Skipping (already exists): {}", dest.display()));
             return Ok(());
         }
     }
 
     if let Some(parent) = dest.parent() {
-        tree::ensure_real_dir(ops, parent, |msg| ctx.log(msg))?;
+        // Parent was ensured by install_tree; only unwrap leftover dir symlinks.
+        tree::ensure_real_dir(ops, parent, |_| {})?;
     }
 
-    if let (Ok(src_canon), Ok(dest_canon)) =
-        (std::fs::canonicalize(src), std::fs::canonicalize(dest))
-    {
-        if src_canon == dest_canon {
-            return Err(Error::PathError(format!(
-                "Refusing to create self-symlink: {} -> {}",
-                src.display(),
-                dest.display()
-            )));
-        }
+    if would_self_symlink(src, dest) {
+        return Err(Error::PathError(format!(
+            "Refusing to create self-symlink: {} -> {}",
+            src.display(),
+            dest.display()
+        )));
     }
 
-    ctx.log(format!("Symlink: {} -> {}", src.display(), dest.display()));
+    progress.note_apply(|| format!("Symlink: {} -> {}", src.display(), dest.display()));
     ops.create_symlink(src, dest)
 }
 
+/// Cheap self-link check: path equality first; canonicalize only when both exist.
+fn would_self_symlink(src: &Path, dest: &Path) -> bool {
+    if src == dest {
+        return true;
+    }
+    // Dest usually does not exist yet — skip canonicalize syscalls in that case.
+    if dest.symlink_metadata().is_err() {
+        return false;
+    }
+    match (src.canonicalize(), dest.canonicalize()) {
+        (Ok(src_canon), Ok(dest_canon)) => src_canon == dest_canon,
+        _ => false,
+    }
+}
+
 /// Remove the symlink an install would have created at `dest`, if present.
-fn remove_link(ops: &dyn FileOps, dest: &Path, ctx: &CommandContext) -> Result<()> {
+fn remove_link(ops: &dyn FileOps, dest: &Path, progress: &FileProgress<'_>) -> Result<()> {
     if dest.symlink_metadata().is_ok() {
-        ctx.log(format!("Removing symlink: {}", dest.display()));
+        progress.note_apply(|| format!("Removing symlink: {}", dest.display()));
         ops.remove_symlink(dest)?;
     }
     Ok(())
@@ -161,9 +180,10 @@ mod tests {
         std::fs::write(&src, b"x").unwrap();
         let dest = dir.path().join("link");
         let (ctx, _rx) = ctx_for(dir.path());
+        let progress = FileProgress::new(&ctx, "symlink");
 
         let ops = RecordingFs::default();
-        symlink_one(&ops, &src, &dest, false, &ctx).unwrap();
+        symlink_one(&ops, &src, &dest, false, &progress).unwrap();
         assert_eq!(
             ops.calls(),
             vec![format!(
@@ -182,9 +202,10 @@ mod tests {
         let dest = dir.path().join("existing");
         std::fs::write(&dest, b"old").unwrap();
         let (ctx, _rx) = ctx_for(dir.path());
+        let progress = FileProgress::new(&ctx, "symlink");
 
         let ops = RecordingFs::default();
-        symlink_one(&ops, &src, &dest, false, &ctx).unwrap();
+        symlink_one(&ops, &src, &dest, false, &progress).unwrap();
         // Skipped: nothing touched.
         assert!(ops.calls().is_empty());
     }
@@ -197,9 +218,10 @@ mod tests {
         let dest = dir.path().join("existing");
         std::fs::write(&dest, b"old").unwrap();
         let (ctx, _rx) = ctx_for(dir.path());
+        let progress = FileProgress::new(&ctx, "symlink");
 
         let ops = RecordingFs::default();
-        symlink_one(&ops, &src, &dest, true, &ctx).unwrap();
+        symlink_one(&ops, &src, &dest, true, &progress).unwrap();
         assert_eq!(
             ops.calls(),
             vec![
@@ -210,13 +232,29 @@ mod tests {
     }
 
     #[test]
+    fn test_would_self_symlink_path_equality() {
+        let p = Path::new("/tmp/x");
+        assert!(would_self_symlink(p, p));
+    }
+
+    #[test]
+    fn test_would_self_symlink_skips_canonicalize_when_dest_missing() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s");
+        std::fs::write(&src, b"x").unwrap();
+        let dest = dir.path().join("missing-link");
+        assert!(!would_self_symlink(&src, &dest));
+    }
+
+    #[test]
     fn test_remove_link_noop_when_absent() {
         let dir = tempdir().unwrap();
         let dest = dir.path().join("nope");
         let (ctx, _rx) = ctx_for(dir.path());
+        let progress = FileProgress::new(&ctx, "symlink remove");
 
         let ops = RecordingFs::default();
-        remove_link(&ops, &dest, &ctx).unwrap();
+        remove_link(&ops, &dest, &progress).unwrap();
         assert!(ops.calls().is_empty());
     }
 }
