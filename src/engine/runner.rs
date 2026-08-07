@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use tokio::sync::mpsc;
+use std::sync::Arc;
 
 use crate::config::graph::TaskGraph;
 use crate::config::history::History;
@@ -8,14 +8,17 @@ use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
 
 use super::commands::{create_executor, CommandExecutor};
+use super::concurrency::ConcurrencyGate;
 use super::context::CommandContext;
 use super::event::TaskEvent;
 use super::mode::Mode;
+use super::sink::{SharedSink, TaskEventSink};
 
 pub struct TaskRunner {
     config: AppConfig,
     mode: Mode,
-    event_tx: mpsc::UnboundedSender<TaskEvent>,
+    events: SharedSink,
+    gate: Arc<ConcurrencyGate>,
     config_dir: PathBuf,
     depth: usize,
 }
@@ -29,14 +32,22 @@ struct Tally {
 }
 
 impl TaskRunner {
-    pub fn new(config: AppConfig, mode: Mode, event_tx: mpsc::UnboundedSender<TaskEvent>) -> Self {
+    pub fn new(config: AppConfig, mode: Mode, events: SharedSink) -> Self {
+        let gate = Arc::new(ConcurrencyGate::from_num_threads(config.num_threads));
         Self {
             config,
             mode,
-            event_tx,
+            events,
+            gate,
             config_dir: std::env::current_dir().unwrap_or_default(),
             depth: 0,
         }
+    }
+
+    /// Override the concurrency gate (e.g. nested Sub-config sharing the parent).
+    pub fn with_gate(mut self, gate: Arc<ConcurrencyGate>) -> Self {
+        self.gate = gate;
+        self
     }
 
     pub fn with_config_dir(mut self, dir: PathBuf) -> Self {
@@ -111,6 +122,10 @@ impl TaskRunner {
     /// then join — recording each task's outcome into `tally` and history. A
     /// layer of one task (sequential mode) runs that task to completion before
     /// the caller advances to the next layer.
+    ///
+    /// ConcurrencyGate permits are acquired per Command entry inside
+    /// [`run_task`] (not per Task), so nested Sub-configs can share the gate
+    /// without deadlocking (ADR-0003).
     async fn run_layer(
         &self,
         layer: &[String],
@@ -213,7 +228,8 @@ impl TaskRunner {
 
     fn create_context(&self, task_name: &str, temp_dir: &Path) -> CommandContext {
         CommandContext {
-            event_tx: self.event_tx.clone(),
+            events: Arc::clone(&self.events),
+            gate: Arc::clone(&self.gate),
             mode: self.mode,
             config_dir: self.config_dir.clone(),
             temp_dir: temp_dir.to_path_buf(),
@@ -232,7 +248,7 @@ impl TaskRunner {
     }
 
     fn send(&self, event: TaskEvent) {
-        let _ = self.event_tx.send(event);
+        TaskEventSink::emit(self.events.as_ref(), event);
     }
 }
 
@@ -244,7 +260,7 @@ async fn run_task_with_retry(name: &str, task: &TaskConfig, ctx: &CommandContext
         match run_task(name, task, ctx).await {
             Ok(()) => return Ok(()),
             Err(e) if attempt < max_attempts => {
-                let _ = ctx.event_tx.send(TaskEvent::TaskRetry {
+                ctx.emit(TaskEvent::TaskRetry {
                     task_name: name.to_string(),
                     attempt,
                     max_attempts,
@@ -260,7 +276,7 @@ async fn run_task_with_retry(name: &str, task: &TaskConfig, ctx: &CommandContext
 }
 
 async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
-    let _ = ctx.event_tx.send(TaskEvent::TaskStarted {
+    ctx.emit(TaskEvent::TaskStarted {
         task_name: name.to_string(),
         command_count: task.commands.len(),
         depth: ctx.depth,
@@ -270,35 +286,35 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
         task.commands.iter().cloned().map(create_executor).collect();
 
     if task.parallel {
-        // Run commands in parallel
         let mut handles = Vec::new();
 
         for executor in executors {
             let ctx = ctx.clone();
-            handles.push(tokio::spawn(async move { executor.execute(&ctx).await }));
+            handles.push(tokio::spawn(async move {
+                execute_with_gate(executor.as_ref(), &ctx).await
+            }));
         }
 
         for handle in handles {
             handle.await.map_err(|e| Error::Other(e.to_string()))??;
         }
     } else {
-        // Run commands sequentially
         for executor in &executors {
             let desc = executor.description();
-            let _ = ctx.event_tx.send(TaskEvent::CommandStarted {
+            ctx.emit(TaskEvent::CommandStarted {
                 task_name: name.to_string(),
                 command_desc: desc.clone(),
             });
 
-            match executor.execute(ctx).await {
+            match execute_with_gate(executor.as_ref(), ctx).await {
                 Ok(()) => {
-                    let _ = ctx.event_tx.send(TaskEvent::CommandCompleted {
+                    ctx.emit(TaskEvent::CommandCompleted {
                         task_name: name.to_string(),
                         command_desc: desc,
                     });
                 }
                 Err(e) => {
-                    let _ = ctx.event_tx.send(TaskEvent::CommandFailed {
+                    ctx.emit(TaskEvent::CommandFailed {
                         task_name: name.to_string(),
                         command_desc: desc,
                         error: e.to_string(),
@@ -309,9 +325,20 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
         }
     }
 
-    let _ = ctx.event_tx.send(TaskEvent::TaskCompleted {
+    ctx.emit(TaskEvent::TaskCompleted {
         task_name: name.to_string(),
     });
 
     Ok(())
+}
+
+/// Acquire a ConcurrencyGate permit for leaf Command entries only.
+async fn execute_with_gate(executor: &dyn CommandExecutor, ctx: &CommandContext) -> Result<()> {
+    if executor.occupies_concurrency_slot() {
+        let permit = ctx.gate.acquire().await;
+        let _permit = permit;
+        executor.execute(ctx).await
+    } else {
+        executor.execute(ctx).await
+    }
 }

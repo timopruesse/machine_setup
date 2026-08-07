@@ -24,10 +24,17 @@ impl SymlinkCommand {
 #[async_trait]
 impl CommandExecutor for SymlinkCommand {
     async fn execute(&self, ctx: &CommandContext) -> Result<()> {
-        match ctx.mode {
-            Mode::Install | Mode::Update => self.apply(ctx),
-            Mode::Uninstall => self.remove(ctx),
-        }
+        let args = self.args.clone();
+        let ctx = ctx.clone();
+        tokio::task::spawn_blocking(move || {
+            let cmd = SymlinkCommand { args };
+            match ctx.mode {
+                Mode::Install | Mode::Update => cmd.apply(&ctx),
+                Mode::Uninstall => cmd.remove(&ctx),
+            }
+        })
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
     }
 
     fn description(&self) -> String {
@@ -55,7 +62,8 @@ impl SymlinkCommand {
             &self.args.ignore,
             |dir| tree::ensure_real_dir(ops.as_ref(), dir, |msg| ctx.log(msg)),
             |file, dest| symlink_one(ops.as_ref(), file, dest, force, ctx),
-        )
+        )?;
+        ops.flush()
     }
 
     fn remove(&self, ctx: &CommandContext) -> Result<()> {
@@ -65,7 +73,8 @@ impl SymlinkCommand {
         let ops = fs_ops::select(self.args.sudo);
         tree::uninstall_tree(&src, &target, &self.args.ignore, |dest| {
             remove_link(ops.as_ref(), dest, ctx)
-        })
+        })?;
+        ops.flush()
     }
 }
 
@@ -129,9 +138,12 @@ mod tests {
         CommandContext,
         tokio::sync::mpsc::UnboundedReceiver<crate::engine::event::TaskEvent>,
     ) {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (events, rx) = crate::engine::sink::ChannelSink::channel();
         let ctx = CommandContext {
-            event_tx: tx,
+            events,
+            gate: std::sync::Arc::new(
+                crate::engine::concurrency::ConcurrencyGate::from_num_threads(Some(1)),
+            ),
             mode: Mode::Install,
             config_dir: dir.to_path_buf(),
             temp_dir: dir.to_path_buf(),

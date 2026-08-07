@@ -2,11 +2,9 @@ use machine_setup::{cli, config, engine, error, tui};
 
 use clap::{CommandFactory, Parser};
 use std::io::IsTerminal;
-use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use cli::{Cli, Command};
-use engine::event::TaskEvent;
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
@@ -74,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
     let config_dir = config::resolve_config_dir(&cli.config, &cwd);
 
     // Create event channel and cancellation token
-    let (event_tx, event_rx) = mpsc::unbounded_channel::<TaskEvent>();
+    let (events, event_rx) = engine::sink::ChannelSink::channel();
     let cancel = CancellationToken::new();
 
     // Determine if we should use the TUI
@@ -91,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
         .expect("list/validate/completions are handled before this point");
 
     // Set up runner (moves app_config)
-    let runner = TaskRunner::new(app_config, mode, event_tx).with_config_dir(config_dir);
+    let runner = TaskRunner::new(app_config, mode, events).with_config_dir(config_dir);
     let force = cli.force;
     let task_names_clone = task_names.clone();
 

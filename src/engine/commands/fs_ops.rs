@@ -38,12 +38,17 @@ pub trait FileOps: Send + Sync {
     /// Remove a symlink at `path`, handling directory symlinks on platforms
     /// (Windows) that distinguish them from file symlinks.
     fn remove_symlink(&self, path: &Path) -> Result<()>;
+
+    /// Flush any buffered work (SudoFs script batch). DirectFs is a no-op.
+    fn flush(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Pick the adapter for a command based on whether it requested `sudo`.
 pub fn select(use_sudo: bool) -> Box<dyn FileOps> {
     if use_sudo {
-        Box::new(SudoFs)
+        Box::new(SudoFs::default())
     } else {
         Box::new(DirectFs)
     }
@@ -120,23 +125,53 @@ impl FileOps for DirectFs {
 }
 
 /// Privileged filesystem access via `sudo`.
-pub struct SudoFs;
+///
+/// Ops are buffered and applied in one `sudo bash -s` on [`FileOps::flush`]
+/// (ADR-0002). Callers that need an immediate single op can still use the
+/// helpers in [`crate::utils::sudo`] directly (e.g. bulk `cp -a`).
+pub struct SudoFs {
+    pending: std::sync::Mutex<Vec<sudo::SudoOp>>,
+}
+
+impl Default for SudoFs {
+    fn default() -> Self {
+        Self {
+            pending: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl SudoFs {
+    fn push(&self, op: sudo::SudoOp) {
+        self.pending.lock().expect("SudoFs lock").push(op);
+    }
+}
 
 impl FileOps for SudoFs {
     fn mkdir_p(&self, path: &Path) -> Result<()> {
-        sudo::sudo_mkdir(path)
+        self.push(sudo::SudoOp::Mkdir(path.to_path_buf()));
+        Ok(())
     }
 
     fn copy_file(&self, src: &Path, dest: &Path) -> Result<()> {
-        sudo::sudo_copy(src, dest)
+        self.push(sudo::SudoOp::Copy {
+            src: src.to_path_buf(),
+            dest: dest.to_path_buf(),
+        });
+        Ok(())
     }
 
     fn create_symlink(&self, src: &Path, dest: &Path) -> Result<()> {
-        sudo::sudo_symlink(src, dest)
+        self.push(sudo::SudoOp::Symlink {
+            src: src.to_path_buf(),
+            dest: dest.to_path_buf(),
+        });
+        Ok(())
     }
 
     fn remove_file(&self, path: &Path) -> Result<()> {
-        sudo::sudo_remove(path)
+        self.push(sudo::SudoOp::Remove(path.to_path_buf()));
+        Ok(())
     }
 
     fn remove_path(&self, path: &Path) -> Result<()> {
@@ -148,12 +183,23 @@ impl FileOps for SudoFs {
         {
             return self.remove_symlink(path);
         }
-        sudo::sudo_remove_dir(path)
+        self.push(sudo::SudoOp::RemoveDir(path.to_path_buf()));
+        Ok(())
     }
 
     fn remove_symlink(&self, path: &Path) -> Result<()> {
         // `rm -f` on a symlink removes the link itself, file or dir target.
-        sudo::sudo_remove(path)
+        self.push(sudo::SudoOp::Remove(path.to_path_buf()));
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<()> {
+        let ops = std::mem::take(&mut *self.pending.lock().expect("SudoFs lock"));
+        if ops.is_empty() {
+            return Ok(());
+        }
+        let script = sudo::build_sudo_script(&ops);
+        sudo::sudo_bash_script(&script)
     }
 }
 
@@ -293,10 +339,12 @@ mod tests {
     }
 
     #[test]
-    fn test_recording_fs_captures_calls() {
-        let ops = RecordingFs::default();
+    fn test_sudofs_buffers_until_flush() {
+        let ops = SudoFs::default();
         ops.mkdir_p(Path::new("/a")).unwrap();
         ops.copy_file(Path::new("/a/s"), Path::new("/a/d")).unwrap();
-        assert_eq!(ops.calls(), vec!["mkdir_p /a", "copy_file /a/s /a/d"]);
+        let pending = ops.pending.lock().unwrap().clone();
+        assert_eq!(pending.len(), 2);
+        // Do not call flush() — that would invoke real sudo.
     }
 }

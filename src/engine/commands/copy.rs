@@ -24,10 +24,17 @@ impl CopyCommand {
 #[async_trait]
 impl CommandExecutor for CopyCommand {
     async fn execute(&self, ctx: &CommandContext) -> Result<()> {
-        match ctx.mode {
-            Mode::Install | Mode::Update => self.apply(ctx),
-            Mode::Uninstall => self.remove(ctx),
-        }
+        let args = self.args.clone();
+        let ctx = ctx.clone();
+        tokio::task::spawn_blocking(move || {
+            let cmd = CopyCommand { args };
+            match ctx.mode {
+                Mode::Install | Mode::Update => cmd.apply(&ctx),
+                Mode::Uninstall => cmd.remove(&ctx),
+            }
+        })
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
     }
 
     fn description(&self) -> String {
@@ -36,6 +43,12 @@ impl CommandExecutor for CopyCommand {
 }
 
 impl CopyCommand {
+    /// Directory Install with empty ignore → one `sudo cp -a` (ADR-0002).
+    /// Update keeps mtime-skip via per-file + script batch.
+    fn eligible_for_bulk(src: &Path, args: &CopyArgs, mode: Mode) -> bool {
+        args.sudo && matches!(mode, Mode::Install) && src.is_dir() && args.ignore.is_empty()
+    }
+
     fn apply(&self, ctx: &CommandContext) -> Result<()> {
         let src = expand_path(&self.args.src, Some(&ctx.config_dir));
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
@@ -47,6 +60,15 @@ impl CopyCommand {
             )));
         }
 
+        if Self::eligible_for_bulk(&src, &self.args, ctx.mode) {
+            ctx.log(format!(
+                "Bulk copy (sudo): {} -> {}",
+                src.display(),
+                target.display()
+            ));
+            return crate::utils::sudo::sudo_copy_tree(&src, &target);
+        }
+
         let ops = fs_ops::select(self.args.sudo);
         tree::install_tree(
             &src,
@@ -54,7 +76,8 @@ impl CopyCommand {
             &self.args.ignore,
             |dir| ops.mkdir_p(dir),
             |file, dest| copy_one(ops.as_ref(), file, dest, ctx),
-        )
+        )?;
+        ops.flush()
     }
 
     fn remove(&self, ctx: &CommandContext) -> Result<()> {
@@ -69,7 +92,8 @@ impl CopyCommand {
             } else {
                 Ok(())
             }
-        })
+        })?;
+        ops.flush()
     }
 }
 
@@ -106,9 +130,12 @@ mod tests {
         // Create dest after src so its mtime is >= src.
         std::fs::write(&dest, b"new").unwrap();
 
-        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let (events, _rx) = crate::engine::sink::ChannelSink::channel();
         let ctx = CommandContext {
-            event_tx: tx,
+            events,
+            gate: std::sync::Arc::new(
+                crate::engine::concurrency::ConcurrencyGate::from_num_threads(Some(1)),
+            ),
             mode: Mode::Install,
             config_dir: dir.path().to_path_buf(),
             temp_dir: dir.path().to_path_buf(),
@@ -130,9 +157,12 @@ mod tests {
         let dest = dir.path().join("d.txt");
         std::fs::write(&src, b"data").unwrap();
 
-        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let (events, _rx) = crate::engine::sink::ChannelSink::channel();
         let ctx = CommandContext {
-            event_tx: tx,
+            events,
+            gate: std::sync::Arc::new(
+                crate::engine::concurrency::ConcurrencyGate::from_num_threads(Some(1)),
+            ),
             mode: Mode::Install,
             config_dir: dir.path().to_path_buf(),
             temp_dir: dir.path().to_path_buf(),
@@ -147,5 +177,61 @@ mod tests {
             ops.calls(),
             vec![format!("copy_file {} {}", src.display(), dest.display())]
         );
+    }
+
+    #[test]
+    fn test_eligible_for_bulk_copy() {
+        let dir = tempdir().unwrap();
+        let src_dir = dir.path().join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let src_file = dir.path().join("f.txt");
+        std::fs::write(&src_file, b"x").unwrap();
+
+        let sudo_dir = CopyArgs {
+            src: src_dir.to_string_lossy().into(),
+            target: "/t".into(),
+            ignore: vec![],
+            sudo: true,
+        };
+        assert!(CopyCommand::eligible_for_bulk(
+            &src_dir,
+            &sudo_dir,
+            Mode::Install
+        ));
+        assert!(!CopyCommand::eligible_for_bulk(
+            &src_dir,
+            &sudo_dir,
+            Mode::Update
+        ));
+
+        let with_ignore = CopyArgs {
+            ignore: vec!["x".into()],
+            ..sudo_dir.clone()
+        };
+        assert!(!CopyCommand::eligible_for_bulk(
+            &src_dir,
+            &with_ignore,
+            Mode::Install
+        ));
+
+        let no_sudo = CopyArgs {
+            sudo: false,
+            ..sudo_dir.clone()
+        };
+        assert!(!CopyCommand::eligible_for_bulk(
+            &src_dir,
+            &no_sudo,
+            Mode::Install
+        ));
+        assert!(!CopyCommand::eligible_for_bulk(
+            &src_file,
+            &CopyArgs {
+                src: src_file.to_string_lossy().into(),
+                target: "/t".into(),
+                ignore: vec![],
+                sudo: true,
+            },
+            Mode::Install
+        ));
     }
 }
