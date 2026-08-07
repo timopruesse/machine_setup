@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.4.3]
+
 ### Fixed
 - Directory `symlink` walks now unwrap leftover destination directory symlinks into real directories (removing only the link inode) before creating file symlinks, so nested leftovers like `~/skills/pack → <src>/skills/pack` can no longer turn source files into self-symlinks
 
