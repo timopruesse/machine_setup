@@ -4,7 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
-use crate::tui::format::{format_duration, run_elapsed, task_elapsed};
+use crate::tui::format::{format_duration, run_elapsed, task_elapsed, task_palette_color};
 use crate::tui::state::{TaskStatus, UiState};
 
 pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
@@ -21,19 +21,23 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
     let spinner = state.spinner_frame();
     // Approximate usable width for truncating the command hint.
     let hint_budget = list_area.width.saturating_sub(12) as usize;
+    let running = state.running_count();
 
     let items: Vec<ListItem> = state
         .filtered_indices
         .iter()
         .filter_map(|&i| state.tasks.get(i).map(|task| (i, task)))
         .map(|(i, task)| {
+            let accent = task
+                .color_idx
+                .map(task_palette_color)
+                .unwrap_or(Color::Yellow);
+
             let (symbol, style) = match &task.status {
                 TaskStatus::Pending => ("·", Style::default().fg(Color::DarkGray)),
                 TaskStatus::Running => (
                     spinner,
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(accent).add_modifier(Modifier::BOLD),
                 ),
                 TaskStatus::Completed => ("✓", Style::default().fg(Color::Green)),
                 TaskStatus::Failed(_) => (
@@ -98,7 +102,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
         .position(|&i| i == state.selected);
 
     let total_time = format_duration(run_elapsed(state.run_started, state.run_elapsed));
-    let total_title = Line::from(vec![
+    let mut bottom_spans = vec![
         Span::styled(" total ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             total_time,
@@ -106,9 +110,16 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" "),
-    ])
-    .right_aligned();
+    ];
+    if running >= 1 {
+        bottom_spans.push(Span::styled(
+            format!(" · {running} running "),
+            Style::default().fg(Color::Yellow),
+        ));
+    } else {
+        bottom_spans.push(Span::raw(" "));
+    }
+    let total_title = Line::from(bottom_spans).right_aligned();
 
     let list = List::new(items).block(
         Block::default()

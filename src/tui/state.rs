@@ -5,6 +5,12 @@ use crate::engine::mode::Mode;
 /// Max log lines retained per task (oldest dropped).
 pub const LOG_CAP: usize = 2000;
 
+/// Max lines retained in the parallel merge buffer (oldest dropped).
+pub const MERGE_CAP: usize = 2000;
+
+/// Number of distinct accent colors for running / merge tags.
+pub const TASK_PALETTE_LEN: usize = 8;
+
 /// Status of a task in the TUI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskStatus {
@@ -26,6 +32,18 @@ impl TaskStatus {
             TaskStatus::Completed | TaskStatus::Failed(_) | TaskStatus::Skipped(_)
         )
     }
+
+    pub fn is_running(&self) -> bool {
+        matches!(self, TaskStatus::Running)
+    }
+}
+
+/// One line in the ephemeral parallel merge stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeLine {
+    pub task_name: String,
+    pub color_idx: usize,
+    pub text: String,
 }
 
 /// State for a single task in the TUI.
@@ -42,6 +60,8 @@ pub struct TaskState {
     pub started_at: Option<Instant>,
     /// Frozen duration once the task reaches a terminal status.
     pub duration: Option<Duration>,
+    /// Stable accent into [`TASK_PALETTE_LEN`] for this run.
+    pub color_idx: Option<usize>,
 }
 
 impl TaskState {
@@ -55,6 +75,7 @@ impl TaskState {
             depth: 0,
             started_at: None,
             duration: None,
+            color_idx: None,
         }
     }
 
@@ -96,7 +117,7 @@ pub struct UiState {
     pub succeeded: usize,
     pub failed: usize,
     pub skipped: usize,
-    /// Auto-follow: track the first running task
+    /// Auto-follow: soft-track a running task when selection is idle
     pub auto_select_running: bool,
     pub search_mode: bool,
     pub search_query: String,
@@ -107,6 +128,12 @@ pub struct UiState {
     pub run_started: Instant,
     /// Frozen run duration once all tasks are done.
     pub run_elapsed: Option<Duration>,
+    /// Live multiplex while ≥2 tasks are running.
+    pub merge_lines: Vec<MergeLine>,
+    /// Task indices that failed during the current merge burst (order preserved).
+    pub merge_failed: Vec<usize>,
+    /// Next palette slot to hand out.
+    pub next_color: usize,
 }
 
 impl UiState {
@@ -130,6 +157,9 @@ impl UiState {
             tick: 0,
             run_started: Instant::now(),
             run_elapsed: None,
+            merge_lines: Vec::new(),
+            merge_failed: Vec::new(),
+            next_color: 0,
         }
     }
 
@@ -143,6 +173,14 @@ impl UiState {
 
     pub fn completed_tasks(&self) -> usize {
         self.succeeded + self.failed + self.skipped
+    }
+
+    pub fn running_count(&self) -> usize {
+        self.tasks.iter().filter(|t| t.status.is_running()).count()
+    }
+
+    pub fn in_merge_mode(&self) -> bool {
+        self.running_count() >= 2
     }
 
     /// True when a filter query is retained (search mode or non-empty query).
@@ -159,6 +197,30 @@ impl UiState {
     pub fn freeze_run_elapsed(&mut self) {
         if self.run_elapsed.is_none() {
             self.run_elapsed = Some(self.run_started.elapsed());
+        }
+    }
+
+    /// Assign a stable palette index for `task_name` if needed.
+    pub fn ensure_task_color(&mut self, task_name: &str) -> usize {
+        if let Some(task) = self.tasks.iter().find(|t| t.name == task_name) {
+            if let Some(idx) = task.color_idx {
+                return idx;
+            }
+        }
+        let idx = self.next_color % TASK_PALETTE_LEN;
+        self.next_color = self.next_color.wrapping_add(1);
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.name == task_name) {
+            task.color_idx = Some(idx);
+        }
+        idx
+    }
+
+    /// Append a merge line, enforcing [`MERGE_CAP`].
+    pub fn push_merge(&mut self, line: MergeLine) {
+        self.merge_lines.push(line);
+        if self.merge_lines.len() > MERGE_CAP {
+            let excess = self.merge_lines.len() - MERGE_CAP;
+            self.merge_lines.drain(0..excess);
         }
     }
 }

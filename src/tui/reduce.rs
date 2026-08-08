@@ -1,7 +1,7 @@
 use crate::engine::event::TaskEvent;
 
 use super::message::{Effect, Input, Message};
-use super::state::{TaskState, TaskStatus, UiState};
+use super::state::{MergeLine, TaskState, TaskStatus, UiState};
 
 /// Pure state transition. No I/O.
 pub fn reduce(mut state: UiState, msg: Message) -> (UiState, Effect) {
@@ -25,73 +25,142 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             command_count,
             depth,
         } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.mark_running();
             task.command_count = command_count;
             task.depth = depth;
-            task.push_log(format!("Starting ({command_count} commands)..."));
+            let line = format!("Starting ({command_count} commands)...");
+            task.push_log(line.clone());
             let name = task_name;
-            if state.auto_select_running {
-                select_task(state, &name);
-            }
-            follow_selected_log(state);
+            state.ensure_task_color(&name);
+            finish_engine_event(
+                state,
+                running_before,
+                &name,
+                Some(&line),
+                SoftSelect::Prefer(&name),
+            );
         }
         TaskEvent::TaskSkipped { task_name, reason } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.freeze_duration();
             task.status = TaskStatus::Skipped(reason.clone());
-            task.push_log(format!("Skipped: {reason}"));
+            let line = format!("Skipped: {reason}");
+            task.push_log(line.clone());
             state.skipped += 1;
-            follow_selected_log(state);
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::AnyRunning,
+            );
         }
         TaskEvent::CommandStarted {
             task_name,
             command_desc,
         } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.current_command = Some(command_desc.clone());
-            task.push_log(format!("> {command_desc}"));
-            follow_selected_log(state);
+            let line = format!("> {command_desc}");
+            task.push_log(line.clone());
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::None,
+            );
         }
         TaskEvent::CommandOutput { task_name, line } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
-            task.push_log(format!("  {line}"));
-            follow_selected_log(state);
+            let line = format!("  {line}");
+            task.push_log(line.clone());
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::None,
+            );
         }
         TaskEvent::CommandCompleted {
             task_name,
             command_desc,
         } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.current_command = None;
-            task.push_log(format!("  [done] {command_desc}"));
-            follow_selected_log(state);
+            let line = format!("  [done] {command_desc}");
+            task.push_log(line.clone());
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::None,
+            );
         }
         TaskEvent::CommandFailed {
             task_name,
             command_desc,
             error,
         } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.current_command = None;
-            task.push_log(format!("  [FAILED] {command_desc}: {error}"));
-            follow_selected_log(state);
+            let line = format!("  [FAILED] {command_desc}: {error}");
+            task.push_log(line.clone());
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::None,
+            );
         }
         TaskEvent::TaskCompleted { task_name } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.freeze_duration();
             task.status = TaskStatus::Completed;
-            task.push_log("Completed successfully.".to_string());
+            let line = "Completed successfully.".to_string();
+            task.push_log(line.clone());
             state.succeeded += 1;
-            follow_selected_log(state);
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::AnyRunning,
+            );
         }
         TaskEvent::TaskFailed { task_name, error } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.freeze_duration();
             task.status = TaskStatus::Failed(error.clone());
-            task.push_log(format!("FAILED: {error}"));
+            let line = format!("FAILED: {error}");
+            task.push_log(line.clone());
             state.failed += 1;
-            follow_selected_log(state);
+            if running_before >= 2 {
+                if let Some(idx) = state.tasks.iter().position(|t| t.name == task_name) {
+                    if !state.merge_failed.contains(&idx) {
+                        state.merge_failed.push(idx);
+                    }
+                }
+            }
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::AnyRunning,
+            );
         }
         TaskEvent::TaskRetry {
             task_name,
@@ -99,14 +168,25 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             max_attempts,
             error,
         } => {
+            let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.mark_running();
-            task.push_log(format!("  Retry {attempt}/{max_attempts}: {error}"));
-            follow_selected_log(state);
+            let line = format!("  Retry {attempt}/{max_attempts}: {error}");
+            task.push_log(line.clone());
+            state.ensure_task_color(&task_name);
+            finish_engine_event(
+                state,
+                running_before,
+                &task_name,
+                Some(&line),
+                SoftSelect::Prefer(&task_name),
+            );
         }
         TaskEvent::AllDone { .. } => {
             state.done = true;
             state.freeze_run_elapsed();
+            state.merge_lines.clear();
+            state.merge_failed.clear();
             if let Some(idx) = state.tasks.iter().position(|t| t.status.is_failed()) {
                 // Clear any active filter so the jumped failure is visible in the list.
                 state.search_mode = false;
@@ -119,6 +199,94 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
                 }
             }
         }
+    }
+}
+
+enum SoftSelect<'a> {
+    None,
+    Prefer(&'a str),
+    AnyRunning,
+}
+
+fn finish_engine_event(
+    state: &mut UiState,
+    running_before: usize,
+    task_name: &str,
+    merge_line: Option<&str>,
+    soft: SoftSelect<'_>,
+) {
+    let running_after = state.running_count();
+    if let Some(line) = merge_line {
+        maybe_merge_append(state, running_before, running_after, task_name, line);
+    }
+    if running_before >= 2 && running_after <= 1 {
+        leave_merge(state);
+    } else {
+        match soft {
+            SoftSelect::None => {}
+            SoftSelect::Prefer(name) => soft_auto_select(state, Some(name)),
+            SoftSelect::AnyRunning => soft_auto_select(state, None),
+        }
+    }
+    follow_selected_log(state);
+}
+
+fn maybe_merge_append(
+    state: &mut UiState,
+    running_before: usize,
+    running_after: usize,
+    task_name: &str,
+    line: &str,
+) {
+    if running_before < 2 && running_after < 2 {
+        return;
+    }
+    let color_idx = state.ensure_task_color(task_name);
+    state.push_merge(MergeLine {
+        task_name: task_name.to_string(),
+        color_idx,
+        text: line.to_string(),
+    });
+}
+
+fn leave_merge(state: &mut UiState) {
+    if let Some(&idx) = state.merge_failed.first() {
+        state.selected = idx;
+        state.log_follow = false;
+        if let Some(task) = state.tasks.get(idx) {
+            state.log_scroll = task.log_lines.len().saturating_sub(1);
+        }
+    } else if state.auto_select_running {
+        if let Some(idx) = state.tasks.iter().position(|t| t.status.is_running()) {
+            state.selected = idx;
+            state.log_scroll = 0;
+            state.log_follow = true;
+        }
+    }
+    state.merge_lines.clear();
+    state.merge_failed.clear();
+}
+
+fn soft_auto_select(state: &mut UiState, preferred: Option<&str>) {
+    if !state.auto_select_running {
+        return;
+    }
+    let selected_running = state
+        .tasks
+        .get(state.selected)
+        .map(|t| t.status.is_running())
+        .unwrap_or(false);
+    if selected_running {
+        return;
+    }
+    if let Some(name) = preferred {
+        select_task(state, name);
+        return;
+    }
+    if let Some(idx) = state.tasks.iter().position(|t| t.status.is_running()) {
+        state.selected = idx;
+        state.log_scroll = 0;
+        state.log_follow = true;
     }
 }
 
@@ -270,22 +438,34 @@ fn follow_selected_log(state: &mut UiState) {
     }
 }
 
+fn active_log_len(state: &UiState) -> usize {
+    if state.in_merge_mode() {
+        state.merge_lines.len()
+    } else {
+        state
+            .tasks
+            .get(state.selected)
+            .map(|t| t.log_lines.len())
+            .unwrap_or(0)
+    }
+}
+
 fn stick_log_to_end(state: &mut UiState) {
-    if let Some(task) = state.tasks.get(state.selected) {
-        let line_count = task.log_lines.len();
-        if line_count > 0 {
-            state.log_scroll = line_count.saturating_sub(1);
-        }
+    let line_count = active_log_len(state);
+    if line_count > 0 {
+        state.log_scroll = line_count.saturating_sub(1);
     }
 }
 
 fn maybe_reenable_follow_at_bottom(state: &mut UiState) {
-    if let Some(task) = state.tasks.get(state.selected) {
-        let end = task.log_lines.len().saturating_sub(1);
-        if state.log_scroll >= end {
-            state.log_follow = true;
-            state.log_scroll = end;
-        }
+    let line_count = active_log_len(state);
+    if line_count == 0 {
+        return;
+    }
+    let end = line_count.saturating_sub(1);
+    if state.log_scroll >= end {
+        state.log_follow = true;
+        state.log_scroll = end;
     }
 }
 
@@ -795,5 +975,148 @@ mod tests {
         assert_eq!(effect, Effect::None);
         assert!(!state.search_mode);
         assert!(!state.filter_active());
+    }
+
+    // --- parallel merge ---
+
+    fn start_task(state: UiState, name: &str) -> UiState {
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskStarted {
+                task_name: name.into(),
+                command_count: 1,
+                depth: 0,
+            }),
+        );
+        state
+    }
+
+    #[test]
+    fn merge_enters_on_second_running_task_live_only() {
+        let state = state_with(&["a", "b"]);
+        let state = start_task(state, "a");
+        assert!(state.merge_lines.is_empty());
+        assert!(!state.in_merge_mode());
+
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::CommandOutput {
+                task_name: "a".into(),
+                line: "solo".into(),
+            }),
+        );
+        assert!(state.merge_lines.is_empty());
+
+        let state = start_task(state, "b");
+        assert!(state.in_merge_mode());
+        assert_eq!(state.merge_lines.len(), 1);
+        assert_eq!(state.merge_lines[0].task_name, "b");
+        assert!(state.merge_lines[0].text.contains("Starting"));
+    }
+
+    #[test]
+    fn merge_no_thrash_while_selected_still_running() {
+        let state = state_with(&["a", "b", "c"]);
+        let state = start_task(state, "a");
+        assert_eq!(state.selected, 0);
+        let state = start_task(state, "b");
+        assert_eq!(state.selected, 0);
+        assert!(state.in_merge_mode());
+    }
+
+    #[test]
+    fn merge_soft_follow_when_selected_stops_running() {
+        let state = state_with(&["a", "b"]);
+        let state = start_task(state, "a");
+        let state = start_task(state, "b");
+        assert_eq!(state.selected, 0);
+
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskCompleted {
+                task_name: "a".into(),
+            }),
+        );
+        // Left merge (1 running); soft-select remaining runner.
+        assert!(!state.in_merge_mode());
+        assert!(state.merge_lines.is_empty());
+        assert_eq!(state.selected, 1);
+        assert!(state.tasks[1].status.is_running());
+    }
+
+    #[test]
+    fn merge_manual_select_disables_soft_follow() {
+        let state = state_with(&["a", "b", "c"]);
+        let state = start_task(state, "a");
+        let (state, _) = reduce(state, Message::Input(Input::SelectNext));
+        assert!(!state.auto_select_running);
+        assert_eq!(state.selected, 1);
+
+        let state = start_task(state, "b");
+        let state = start_task(state, "c");
+        assert_eq!(state.selected, 1);
+        assert!(state.in_merge_mode());
+    }
+
+    #[test]
+    fn merge_leave_prefers_failed_in_burst() {
+        let state = state_with(&["a", "b"]);
+        let state = start_task(state, "a");
+        let state = start_task(state, "b");
+        assert_eq!(state.selected, 0);
+
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskFailed {
+                task_name: "b".into(),
+                error: "boom".into(),
+            }),
+        );
+        assert!(!state.in_merge_mode());
+        assert!(state.merge_lines.is_empty());
+        assert_eq!(state.selected, 1);
+        assert!(!state.log_follow);
+        assert!(state.tasks[1].status.is_failed());
+    }
+
+    #[test]
+    fn merge_selection_does_not_leave_merge_mode() {
+        let state = state_with(&["a", "b"]);
+        let state = start_task(state, "a");
+        let state = start_task(state, "b");
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::CommandOutput {
+                task_name: "a".into(),
+                line: "from-a".into(),
+            }),
+        );
+        let merge_len = state.merge_lines.len();
+        assert!(merge_len >= 2);
+
+        let (state, _) = reduce(state, Message::Input(Input::SelectNext));
+        assert_eq!(state.selected, 1);
+        assert!(state.in_merge_mode());
+        assert_eq!(state.merge_lines.len(), merge_len);
+    }
+
+    #[test]
+    fn merge_cap_drops_oldest() {
+        use crate::tui::state::MERGE_CAP;
+        let state = state_with(&["a", "b"]);
+        let state = start_task(state, "a");
+        let mut state = start_task(state, "b");
+        for i in 0..(MERGE_CAP + 20) {
+            let (s, _) = reduce(
+                state,
+                Message::Engine(TaskEvent::CommandOutput {
+                    task_name: "a".into(),
+                    line: format!("{i}"),
+                }),
+            );
+            state = s;
+        }
+        assert_eq!(state.merge_lines.len(), MERGE_CAP);
+        assert!(state.merge_lines[0].text.contains("20"));
     }
 }

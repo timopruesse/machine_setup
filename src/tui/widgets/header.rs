@@ -31,7 +31,15 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
             )
         }
     } else {
-        format!(" {} {}/{}  {elapsed} ", state.mode, completed, total)
+        let running = state.running_count();
+        if running >= 1 {
+            format!(
+                " {} {}/{}  {elapsed}  {running} running ",
+                state.mode, completed, total
+            )
+        } else {
+            format!(" {} {}/{}  {elapsed} ", state.mode, completed, total)
+        }
     };
 
     let color = if state.done {

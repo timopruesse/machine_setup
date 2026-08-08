@@ -29,7 +29,11 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
     } else {
         vec![
             key_hint("q", "quit"),
-            key_hint("j/k", "navigate"),
+            if state.in_merge_mode() {
+                key_hint("j/k", "list")
+            } else {
+                key_hint("j/k", "navigate")
+            },
             key_hint("PgUp/PgDn", "scroll"),
             key_hint("Home/End", "log"),
             key_hint("/", "search"),
