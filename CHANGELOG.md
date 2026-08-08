@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.4.7]
+
 ### Added
 - `--with-deps` to force transitive `depends_on` expansion on update/uninstall (install already expands)
 
