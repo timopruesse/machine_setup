@@ -3,22 +3,22 @@
 [![Tests](https://github.com/timopruesse/machine_setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/timopruesse/machine_setup/actions/workflows/test.yml)
 [![Builds](https://github.com/timopruesse/machine_setup/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/timopruesse/machine_setup/actions/workflows/build.yml)
 [![Crates.io](https://img.shields.io/crates/v/machine_setup)](https://crates.io/crates/machine_setup)
+[![License](https://img.shields.io/crates/l/machine_setup)](https://crates.io/crates/machine_setup)
+[![Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-blue)](CHANGELOG.md)
 
-The idea is to be able to replicate a certain setup (when resetting your machine or using a completely new machine).
-Additionally, it should be possible to update the setup easily when needed, e.g. an update to your vim config files.
-So, it will help with managing dotfiles, symlinks, etc.
+Declarative machine setup — replicate a workstation after a wipe, keep dotfiles and symlinks in sync, or hand a colleague a config that installs deps and clones the right repos.
 
-A real world example can be found in my [.dotfiles repository](https://github.com/timopruesse/.dotfiles/blob/main/machine_setup.yaml).
-
-You can also use it for other tasks such as making the onboarding process of a new colleague easier by providing them a config that installs certain dependencies and checks out important repositories.
+Real-world example: [.dotfiles `machine_setup.yaml`](https://github.com/timopruesse/.dotfiles/blob/main/machine_setup.yaml).
 
 ## What's New in v2
 
-- **TUI Dashboard**: Real-time progress display with task list, per-task log output, and keyboard navigation. Powered by [ratatui](https://ratatui.rs/). Disable with `--no-tui` for CI environments.
-- **Async Engine**: Task execution powered by [tokio](https://tokio.rs/) for proper concurrent I/O (file ops, git, shell commands with streaming output).
+- **TUI Dashboard**: Real-time progress with task list, per-task logs, elapsed times, and a parallel log stream when multiple tasks run. Powered by [ratatui](https://ratatui.rs/). Use `--no-tui` (or a non-TTY) for CI.
+- **Async Engine**: Task execution powered by [tokio](https://tokio.rs/) for concurrent I/O (file ops, git, shell commands with streaming output).
 - **Task History**: Tracks install/update/uninstall timestamps in `~/.machine_setup/history.json`. Already-installed tasks are skipped unless `--force` is used.
 - **PowerShell Support**: Use `powershell` as a shell option alongside `bash` and `zsh`.
 - **Remote Configs**: Point directly at a URL instead of a local file — great for bootstrapping a clean machine without cloning first.
+
+See [CHANGELOG.md](CHANGELOG.md) for release-by-release notes.
 
 ## Install
 
@@ -56,15 +56,16 @@ cargo install machine_setup
 
 ### Subcommands
 
-| command   | description                   | example                    |
-| --------- | ----------------------------- | -------------------------- |
-| install   | install the defined tasks     | `machine_setup install`    |
-| update    | update the defined tasks      | `machine_setup update`     |
-| uninstall | uninstall the defined tasks   | `machine_setup uninstall`  |
-| list      | list all of the defined tasks | `machine_setup list`       |
+| command      | description                              | example                              |
+| ------------ | ---------------------------------------- | ------------------------------------ |
+| install      | install the defined tasks                | `machine_setup install`              |
+| update       | update the defined tasks                 | `machine_setup update`               |
+| uninstall    | uninstall the defined tasks              | `machine_setup uninstall`            |
+| list         | list all of the defined tasks            | `machine_setup list`                 |
+| validate     | validate the config without executing    | `machine_setup validate`             |
+| completions  | generate shell completions               | `machine_setup completions zsh`      |
 
-By default, `machine_setup` will look for a file called `machine_setup` with a supported file format.
-Supported file formats are: `yaml`, `yml`, and `json`.
+By default, `machine_setup` looks for `./machine_setup`. If that path has no extension, it tries `.yaml`, then `.yml`, then `.json`. Supported formats are YAML and JSON.
 
 ### Command line parameters
 
@@ -74,7 +75,7 @@ Supported file formats are: `yaml`, `yml`, and `json`.
 | -t<br> --task     | only run the specified task                       | `machine_setup install -t my_task2`                |
 | -s<br> --select   | select a task to run                              | `machine_setup install -s`                         |
 | -f<br> --force    | force execution (bypass history checks)           | `machine_setup install --force`                    |
-| --no-tui          | disable TUI, use plain log output                 | `machine_setup install --no-tui`                   |
+| --no-tui          | disable TUI; also auto-disabled on non-TTY / CI   | `machine_setup install --no-tui`                   |
 | -h<br> --help     | display help information                          | `machine_setup --help`                             |
 | -v<br> --version  | display version information                       | `machine_setup --version`                          |
 | -d<br> --debug    | print additional debug information                | `machine_setup install --debug`                    |
@@ -102,15 +103,15 @@ machine_setup install -c https://github.com/timopruesse/.dotfiles/blob/main/mach
 
 When running in an interactive terminal, a TUI dashboard is shown with:
 - Task list with status indicators (pending, running, completed, failed, skipped)
-- Per-task scrollable log output
-- Progress bar with completion stats
-- Keyboard navigation: `Up/Down` to navigate tasks, `PgUp/PgDn` to scroll logs, `q` to quit
+- Per-task scrollable log output (and a tagged parallel stream when multiple tasks run)
+- Progress bar with completion stats and elapsed times
+- Keyboard navigation:
+  - `j`/`k` or `Up`/`Down` — navigate tasks
+  - `/` — filter tasks by name (`Enter` to apply, `Esc` to cancel or clear)
+  - `PgUp`/`PgDn` — scroll logs; `Home`/`End` — jump ( `End` re-enables follow)
+  - `q` or `Ctrl+C` — cancel and quit; `Esc` — clear filter, or quit if none
 
 The TUI is automatically disabled in non-interactive environments (piped output, CI). You can also explicitly disable it with `--no-tui`.
-
-### Supported config file formats
-
-The supported formats are `YAML` and `JSON`.
 
 ## Configure
 
@@ -132,34 +133,29 @@ Every task can contain an arbitrary number of commands.
 | os       | only run on the specified os                               | [possible values](https://doc.rust-lang.org/std/env/consts/constant.OS.html) | "linux" or ["linux", "macos"] |
 | parallel | run all of the commands in parallel (1 thread per command) | `true` or `false`                                                            | `false`                       |
 
-Check out the example configuration below:
+Minimal example (see also [`example_config.yaml`](example_config.yaml) for a fuller demo used by `make run`):
 
 ```yaml
-temp_dir: "~/my_temp" # defaults to "~/.machine_setup"
-default_shell: "zsh" # defaults to "bash"
+default_shell: "zsh"
 parallel: true
-num_threads: 2
 tasks:
-  my_task1:
-    os: ["linux", "windows"]
-    parallel: true
-    commands:
-      - copy:
-          src: "./src/files"
-          target: "/tmp/target"
-      - copy:
-          src: "./src/files_2"
-          target: "/tmp/target"
-
-  my_task2:
-    os: ["linux"]
-    parallel: true
+  tools:
+    os: ["linux", "macos"]
     commands:
       - run:
-          commands: "sudo apt-get install git -y"
+          install: "echo 'install tools'"
+          update: "echo 'update tools'"
+          uninstall: "echo 'remove tools'"
       - symlink:
-          src: "./src/config"
-          target: "~/.dotfiles"
+          src: "./dotfiles/.zshrc"
+          target: "~/.zshrc"
+          force: true
+
+  repos:
+    commands:
+      - clone:
+          url: "git@github.com:timopruesse/machine_setup.git"
+          target: "~/machine_setup"
 ```
 
 ### Extend a configuration
@@ -263,12 +259,12 @@ This command executes a shell command.
 By default, shell commands will only run during `install`.
 You can provide mode-specific commands using `install`, `update`, and `uninstall` instead of `commands`:
 
-| argument  | description              | required | example                         |
-| --------- | ------------------------ | :------: | ------------------------------- |
-| commands  | commands for all modes   |    -     | "sudo apt-get -y install git"   |
-| install   | commands for installing  |    -     | "sudo apt-get -y install git"   |
-| update    | commands for updating    |    -     | "sudo apt-get -y upgrade git"   |
-| uninstall | commands for uninstalling|    -     | "sudo apt-get -y uninstall git" |
+| argument  | description                 | required | example                         |
+| --------- | --------------------------- | :------: | ------------------------------- |
+| commands  | commands for install only   |    -     | "sudo apt-get -y install git"   |
+| install   | commands for installing     |    -     | "sudo apt-get -y install git"   |
+| update    | commands for updating       |    -     | "sudo apt-get -y upgrade git"   |
+| uninstall | commands for uninstalling   |    -     | "sudo apt-get -y uninstall git" |
 
 > Use either `commands` (runs on install only) or `install`/`update`/`uninstall` for mode-specific behavior. They are all top-level keys under `run`.
 
