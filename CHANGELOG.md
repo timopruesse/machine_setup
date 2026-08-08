@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- `--with-deps` to force transitive `depends_on` expansion on update/uninstall (install already expands)
+
+### Changed
+- `-t` / `-s` no longer pull in dependency chains on update/uninstall by default; install still expands
+- Interactive uninstall offers a multi-select of remaining dependencies (skipped with `--no-tui` / non-TTY)
+- Uninstall runs dependents before dependencies (reversed dependency layers)
+- Uninstall warns when removing a task other config tasks still depend on (confirm on TTY)
+
 ## [2.4.6]
 
 ### Added

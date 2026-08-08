@@ -88,11 +88,17 @@ impl TaskRunner {
         // Both execution modes are the same loop over layers; sequential is the
         // degenerate case where each task is its own layer (so the join below
         // runs them one at a time, in dependency order).
-        let layers: Vec<Vec<String>> = if self.config.parallel {
+        let mut layers: Vec<Vec<String>> = if self.config.parallel {
             graph.layers(ordered)
         } else {
             ordered.iter().map(|name| vec![name.clone()]).collect()
         };
+
+        // Uninstall dependents before dependencies: reverse the layer list
+        // (do not re-layer after reversing names — that would collapse layers).
+        if self.mode == Mode::Uninstall {
+            layers.reverse();
+        }
 
         let mut tally = Tally::default();
         for layer in &layers {

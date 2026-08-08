@@ -53,7 +53,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Determine which tasks to run (interactive selection must happen before TUI starts)
-    let task_names: Vec<String> = if let Some(ref task_name) = cli.task {
+    let seed: Vec<String> = if let Some(ref task_name) = cli.task {
         vec![task_name.clone()]
     } else if cli.select {
         select_tasks(&app_config)?
@@ -61,10 +61,24 @@ fn main() -> anyhow::Result<()> {
         app_config.tasks.keys().cloned().collect()
     };
 
-    if task_names.is_empty() {
+    if seed.is_empty() {
         println!("No tasks selected.");
         return Ok(());
     }
+
+    // All non-execution verbs returned above.
+    let mode = Mode::from_command(&cli.command)
+        .expect("list/validate/completions are handled before this point");
+
+    let interactive = std::io::stdin().is_terminal() && !cli.no_tui;
+    let task_names =
+        match resolve_selected_tasks(&app_config, seed, mode, cli.with_deps, interactive)? {
+            Some(names) => names,
+            None => {
+                println!("Aborted.");
+                return Ok(());
+            }
+        };
 
     // Execution verbs only: boot a multi-thread runtime here, not for sync verbs above.
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -240,4 +254,53 @@ fn select_tasks(config: &config::types::AppConfig) -> anyhow::Result<Vec<String>
         .into_iter()
         .map(|i| std::mem::take(&mut task_names[i]))
         .collect())
+}
+
+/// Apply mode-aware dependency expansion / uninstall prompts.
+/// Returns `None` if the user declines the shared-dep confirmation.
+fn resolve_selected_tasks(
+    config: &config::types::AppConfig,
+    selected: Vec<String>,
+    mode: Mode,
+    with_deps: bool,
+    interactive: bool,
+) -> anyhow::Result<Option<Vec<String>>> {
+    use config::selection;
+
+    let tasks = if mode == Mode::Uninstall && !with_deps && interactive {
+        let candidates = selection::uninstall_dep_candidates(config, &selected)?;
+        if candidates.is_empty() {
+            selected
+        } else {
+            let picks = dialoguer::MultiSelect::new()
+                .with_prompt("Also uninstall dependencies?")
+                .items(&candidates)
+                .interact()?;
+            let extras: Vec<String> = picks.into_iter().map(|i| candidates[i].clone()).collect();
+            selection::apply_extra_deps(selected, extras)
+        }
+    } else {
+        selection::expand_for_mode(config, &selected, mode, with_deps)?
+    };
+
+    if mode == Mode::Uninstall {
+        let warnings = selection::shared_dep_warnings(config, &tasks);
+        if !warnings.is_empty() {
+            eprintln!("Warning: uninstalling tasks that other tasks still depend on:");
+            for (task, dependents) in &warnings {
+                eprintln!("  '{task}' is depended on by: {}", dependents.join(", "));
+            }
+            if interactive {
+                let proceed = dialoguer::Confirm::new()
+                    .with_prompt("Continue uninstalling anyway?")
+                    .default(false)
+                    .interact()?;
+                if !proceed {
+                    return Ok(None);
+                }
+            }
+        }
+    }
+
+    Ok(Some(tasks))
 }

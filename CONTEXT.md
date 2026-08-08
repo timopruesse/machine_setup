@@ -72,9 +72,11 @@ These name the deepened modules introduced to concentrate behavior; reviews
 should refer to them by these names.
 
 **Task graph**:
-The single home for everything derived from `depends_on` edges — topological
-order, parallel layers, cycle detection, and missing-edge detection
-(`TaskGraph`). Both the runner and the validator read from it.
+The single home for everything derived from `depends_on` edges — transitive
+closure, topological order within a run set, parallel layers, shared-dep
+lookups, cycle detection, and missing-edge detection (`TaskGraph`). Mode-aware
+expansion for `-t`/`-s` lives in `config::selection` (called from `main`); the
+runner only orders the concrete list (and reverses layers on uninstall).
 _Avoid_: dependency resolver, DAG, scheduler (do not reuse "scheduler" for
 concurrency — see **Concurrency gate**).
 

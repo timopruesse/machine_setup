@@ -22,6 +22,10 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub select: bool,
 
+    /// Expand transitive dependencies of selected tasks (install / `--with-deps`)
+    #[arg(long, global = true)]
+    pub with_deps: bool,
+
     /// Force execution (bypass history checks)
     #[arg(short, long, global = true)]
     pub force: bool,

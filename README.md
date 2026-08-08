@@ -74,6 +74,7 @@ By default, `machine_setup` looks for `./machine_setup`. If that path has no ext
 | -c<br> --config   | path or URL to the config file                    | `machine_setup install -c ./config/my_setup.yaml`  |
 | -t<br> --task     | only run the specified task                       | `machine_setup install -t my_task2`                |
 | -s<br> --select   | select a task to run                              | `machine_setup install -s`                         |
+| --with-deps       | also run transitive `depends_on` tasks            | `machine_setup update -t leaf --with-deps`         |
 | -f<br> --force    | force execution (bypass history checks)           | `machine_setup install --force`                    |
 | --no-tui          | disable TUI; also auto-disabled on non-TTY / CI   | `machine_setup install --no-tui`                   |
 | -h<br> --help     | display help information                          | `machine_setup --help`                             |
@@ -128,10 +129,13 @@ Every task can contain an arbitrary number of commands.
 
 ### Task specific configuration
 
-| key      | description                                                | values                                                                       | examples                      |
-| -------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
-| os       | only run on the specified os                               | [possible values](https://doc.rust-lang.org/std/env/consts/constant.OS.html) | "linux" or ["linux", "macos"] |
-| parallel | run all of the commands in parallel (1 thread per command) | `true` or `false`                                                            | `false`                       |
+| key        | description                                                | values                                                                       | examples                      |
+| ---------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
+| os         | only run on the specified os                               | [possible values](https://doc.rust-lang.org/std/env/consts/constant.OS.html) | "linux" or ["linux", "macos"] |
+| parallel   | run all of the commands in parallel (1 thread per command) | `true` or `false`                                                            | `false`                       |
+| depends_on | run these tasks first (install always expands the chain)   | list of task names                                                           | `["base"]`                    |
+
+On `update` / `uninstall`, `-t` / `-s` run only the selected tasks unless you pass `--with-deps`. Interactive uninstall can offer remaining dependencies; uninstall also warns if other tasks still depend on something in the run set.
 
 Minimal example (see also [`example_config.yaml`](example_config.yaml) for a fuller demo used by `make run`):
 

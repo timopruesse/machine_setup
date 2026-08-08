@@ -33,6 +33,30 @@ async fn run_config(yaml: &str, mode: Mode) -> Vec<TaskEvent> {
     events
 }
 
+/// Run only the named tasks (no selection-time expansion — caller expands).
+async fn run_named_tasks(yaml: &str, mode: Mode, names: &[&str]) -> Vec<TaskEvent> {
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.yaml");
+    fs::write(&config_path, yaml).unwrap();
+
+    let mut config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
+
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner = TaskRunner::new(config, mode, events).with_config_dir(dir.path().to_path_buf());
+
+    let task_names: Vec<String> = names.iter().map(|s| s.to_string()).collect();
+    let _ = runner.run_tasks(&task_names, true).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+    events
+}
+
 /// Helper: check if events contain a specific pattern.
 fn has_event(events: &[TaskEvent], predicate: impl Fn(&TaskEvent) -> bool) -> bool {
     events.iter().any(predicate)
@@ -1092,6 +1116,148 @@ tasks:
 
     assert!(a_done < b_start);
     assert!(b_done < c_start);
+}
+
+#[tokio::test]
+async fn test_update_selected_task_does_not_run_deps() {
+    let events = run_named_tasks(
+        r#"
+tasks:
+  dep:
+    commands:
+      - run:
+          update: "echo dep_ran"
+  leaf:
+    depends_on: ["dep"]
+    commands:
+      - run:
+          update: "echo leaf_ran"
+"#,
+        Mode::Update,
+        &["leaf"],
+    )
+    .await;
+
+    assert!(task_completed(&events, "leaf"));
+    assert!(find_output(&events, "leaf", "leaf_ran"));
+    assert!(!task_completed(&events, "dep"));
+    assert!(!has_event(
+        &events,
+        |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "dep"),
+    ));
+}
+
+#[tokio::test]
+async fn test_install_expand_then_run_includes_deps() {
+    let yaml = r#"
+tasks:
+  dep:
+    commands:
+      - run:
+          commands: "echo dep_ran"
+  leaf:
+    depends_on: ["dep"]
+    commands:
+      - run:
+          commands: "echo leaf_ran"
+"#;
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.yaml");
+    fs::write(&config_path, yaml).unwrap();
+    let mut config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
+
+    let expanded =
+        config::selection::expand_for_mode(&config, &["leaf".to_string()], Mode::Install, false)
+            .unwrap();
+
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner =
+        TaskRunner::new(config, Mode::Install, events).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_tasks(&expanded, true).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+
+    assert!(task_completed(&events, "dep"));
+    assert!(task_completed(&events, "leaf"));
+    let dep_done = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "dep"))
+        .unwrap();
+    let leaf_start = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "leaf"))
+        .unwrap();
+    assert!(dep_done < leaf_start);
+}
+
+#[tokio::test]
+async fn test_uninstall_runs_dependent_before_dependency() {
+    let events = run_config(
+        r#"
+tasks:
+  second:
+    depends_on: ["first"]
+    commands:
+      - run:
+          uninstall: "echo second_uninstall"
+  first:
+    commands:
+      - run:
+          uninstall: "echo first_uninstall"
+"#,
+        Mode::Uninstall,
+    )
+    .await;
+
+    assert!(task_completed(&events, "first"));
+    assert!(task_completed(&events, "second"));
+
+    let second_done = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "second"))
+        .unwrap();
+    let first_start = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "first"))
+        .unwrap();
+    assert!(second_done < first_start);
+}
+
+#[tokio::test]
+async fn test_uninstall_with_deps_list_runs_leaf_before_dep() {
+    let events = run_named_tasks(
+        r#"
+tasks:
+  dep:
+    commands:
+      - run:
+          uninstall: "echo dep_uninstall"
+  leaf:
+    depends_on: ["dep"]
+    commands:
+      - run:
+          uninstall: "echo leaf_uninstall"
+"#,
+        Mode::Uninstall,
+        &["leaf", "dep"],
+    )
+    .await;
+
+    assert!(task_completed(&events, "leaf"));
+    assert!(task_completed(&events, "dep"));
+    let leaf_done = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "leaf"))
+        .unwrap();
+    let dep_start = events
+        .iter()
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "dep"))
+        .unwrap();
+    assert!(leaf_done < dep_start);
 }
 
 #[tokio::test]

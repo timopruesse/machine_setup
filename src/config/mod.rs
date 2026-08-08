@@ -1,6 +1,7 @@
 pub mod graph;
 pub mod history;
 pub mod os;
+pub mod selection;
 pub mod types;
 pub mod validate;
 
