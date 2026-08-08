@@ -4,6 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
+use crate::tui::format::{format_duration, run_elapsed, task_elapsed};
 use crate::tui::state::{TaskStatus, UiState};
 
 pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
@@ -18,6 +19,8 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
     };
 
     let spinner = state.spinner_frame();
+    // Approximate usable width for truncating the command hint.
+    let hint_budget = list_area.width.saturating_sub(12) as usize;
 
     let items: Vec<ListItem> = state
         .filtered_indices
@@ -25,25 +28,25 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
         .filter_map(|&i| state.tasks.get(i).map(|task| (i, task)))
         .map(|(i, task)| {
             let (symbol, style) = match &task.status {
-                TaskStatus::Pending => ("  ", Style::default().fg(Color::DarkGray)),
+                TaskStatus::Pending => ("·", Style::default().fg(Color::DarkGray)),
                 TaskStatus::Running => (
                     spinner,
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
-                TaskStatus::Completed => ("OK", Style::default().fg(Color::Green)),
+                TaskStatus::Completed => ("✓", Style::default().fg(Color::Green)),
                 TaskStatus::Failed(_) => (
-                    "XX",
+                    "✗",
                     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 ),
-                TaskStatus::Skipped(_) => ("--", Style::default().fg(Color::DarkGray)),
+                TaskStatus::Skipped(_) => ("–", Style::default().fg(Color::DarkGray)),
             };
 
             let indicator = if i == state.selected { ">" } else { " " };
             let indent = "  ".repeat(task.depth);
 
-            let line = Line::from(vec![
+            let mut spans = vec![
                 Span::styled(
                     format!("{indicator} "),
                     if i == state.selected {
@@ -57,16 +60,35 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
                 Span::raw(indent),
                 Span::styled(format!("[{symbol}] "), style),
                 Span::styled(
-                    &task.name,
+                    task.name.clone(),
                     if i == state.selected {
                         style.add_modifier(Modifier::BOLD)
                     } else {
                         style
                     },
                 ),
-            ]);
+            ];
 
-            ListItem::new(line)
+            if let Some(d) = task_elapsed(task.started_at, task.duration) {
+                spans.push(Span::styled(
+                    format!("  {}", format_duration(d)),
+                    Style::default().fg(Color::DarkGray),
+                ));
+            }
+
+            if matches!(task.status, TaskStatus::Running) {
+                if let Some(cmd) = task.current_command.as_deref() {
+                    let hint = truncate_hint(cmd, hint_budget.saturating_sub(task.name.len() + 8));
+                    if !hint.is_empty() {
+                        spans.push(Span::styled(
+                            format!("  › {hint}"),
+                            Style::default().fg(Color::DarkGray),
+                        ));
+                    }
+                }
+            }
+
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
@@ -74,6 +96,19 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
         .filtered_indices
         .iter()
         .position(|&i| i == state.selected);
+
+    let total_time = format_duration(run_elapsed(state.run_started, state.run_elapsed));
+    let total_title = Line::from(vec![
+        Span::styled(" total ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            total_time,
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+    ])
+    .right_aligned();
 
     let list = List::new(items).block(
         Block::default()
@@ -84,7 +119,8 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
-            )),
+            ))
+            .title_bottom(total_title),
     );
 
     let mut list_state = ListState::default();
@@ -109,5 +145,20 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
         ]);
         let search = Paragraph::new(search_line);
         f.render_widget(search, search_area);
+    }
+}
+
+fn truncate_hint(cmd: &str, max: usize) -> String {
+    if max < 4 {
+        return String::new();
+    }
+    let trimmed = cmd.trim();
+    if trimmed.chars().count() <= max {
+        trimmed.to_string()
+    } else {
+        let take = max.saturating_sub(1);
+        let mut out: String = trimmed.chars().take(take).collect();
+        out.push('…');
+        out
     }
 }

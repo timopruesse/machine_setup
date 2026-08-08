@@ -1,13 +1,17 @@
 {
   "temp_dir": "~/.machine_setup",
   "default_shell": "bash",
-  "parallel": false,
+  "parallel": true,
   "tasks": {
     "greet": {
       "commands": [
         {
           "run": {
-            "commands": "echo 'Hello from machine_setup v2!'"
+            "commands": [
+              "echo 'Hello from machine_setup v2!'",
+              "sleep 2",
+              "echo 'Greeting done.'"
+            ]
           }
         }
       ]
@@ -18,8 +22,36 @@
           "run": {
             "commands": [
               "echo 'Step 1: Checking environment...'",
+              "sleep 3",
               "echo 'Step 2: Configuring settings...'",
+              "sleep 3",
               "echo 'Step 3: All done!'"
+            ]
+          }
+        }
+      ]
+    },
+    "slow_work": {
+      "commands": [
+        {
+          "run": {
+            "commands": [
+              "echo 'Starting slow work (about 10s)...'",
+              "sleep 10",
+              "echo 'Slow work finished.'"
+            ]
+          }
+        }
+      ]
+    },
+    "medium_work": {
+      "commands": [
+        {
+          "run": {
+            "commands": [
+              "echo 'Medium task (about 7s)...'",
+              "sleep 7",
+              "echo 'Medium task finished.'"
             ]
           }
         }
@@ -33,7 +65,10 @@
               "MY_NAME": "machine_setup",
               "VERSION": "2.0"
             },
-            "commands": "echo \"Running $MY_NAME v$VERSION\""
+            "commands": [
+              "echo \"Running $MY_NAME v$VERSION\"",
+              "sleep 2"
+            ]
           }
         }
       ]
@@ -42,9 +77,21 @@
       "commands": [
         {
           "run": {
-            "install": "echo 'Installing components...'",
-            "update": "echo 'Updating components...'",
-            "uninstall": "echo 'Removing components...'"
+            "install": [
+              "echo 'Installing components...'",
+              "sleep 4",
+              "echo 'Install complete.'"
+            ],
+            "update": [
+              "echo 'Updating components...'",
+              "sleep 4",
+              "echo 'Update complete.'"
+            ],
+            "uninstall": [
+              "echo 'Removing components...'",
+              "sleep 2",
+              "echo 'Uninstall complete.'"
+            ]
           }
         }
       ]
@@ -54,7 +101,10 @@
       "commands": [
         {
           "run": {
-            "commands": "echo 'This runs only on Windows'"
+            "commands": [
+              "echo 'This runs only on Windows'",
+              "powershell -Command \"Start-Sleep -Seconds 3\""
+            ]
           }
         }
       ]
@@ -64,7 +114,10 @@
       "commands": [
         {
           "run": {
-            "commands": "echo 'This runs only on Linux'"
+            "commands": [
+              "echo 'This runs only on Linux'",
+              "sleep 3"
+            ]
           }
         }
       ]
@@ -74,7 +127,10 @@
       "commands": [
         {
           "run": {
-            "commands": "echo 'This runs only on macOS'"
+            "commands": [
+              "echo 'This runs only on macOS'",
+              "sleep 3"
+            ]
           }
         }
       ]
@@ -84,7 +140,10 @@
       "commands": [
         {
           "run": {
-            "commands": "echo 'This runs on all desktop platforms'"
+            "commands": [
+              "echo 'This runs on all desktop platforms'",
+              "sleep 2"
+            ]
           }
         }
       ]
@@ -94,17 +153,29 @@
       "commands": [
         {
           "run": {
-            "commands": "echo 'Command A (parallel)'"
+            "commands": [
+              "echo 'Command A starting (8s)'",
+              "sleep 8",
+              "echo 'Command A done'"
+            ]
           }
         },
         {
           "run": {
-            "commands": "echo 'Command B (parallel)'"
+            "commands": [
+              "echo 'Command B starting (10s)'",
+              "sleep 10",
+              "echo 'Command B done'"
+            ]
           }
         },
         {
           "run": {
-            "commands": "echo 'Command C (parallel)'"
+            "commands": [
+              "echo 'Command C starting (5s)'",
+              "sleep 5",
+              "echo 'Command C done'"
+            ]
           }
         }
       ]

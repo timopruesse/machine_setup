@@ -12,7 +12,7 @@ use crate::engine::event::TaskEvent;
 use super::message::{Effect, Input, Message};
 use super::reduce::reduce;
 use super::render;
-use super::state::{TaskStatus, UiState};
+use super::state::UiState;
 
 /// Async UI loop: engine events + keyboard + spinner ticks.
 /// Returns the final [`UiState`] for the post-run summary.
@@ -69,6 +69,7 @@ pub async fn run_loop(
                         events_open = false;
                         if !state.done {
                             state.done = true;
+                            state.freeze_run_elapsed();
                             dirty = true;
                         }
                     }
@@ -91,8 +92,8 @@ pub async fn run_loop(
                 }
             }
             _ = ticker.tick() => {
-                // Only animate when something is running (avoids idle redraw storms).
-                if state.tasks.iter().any(|t| matches!(t.status, TaskStatus::Running)) {
+                // Keep ticking until done so the run clock advances between tasks.
+                if !state.done {
                     let (next, _) = reduce(state, Message::Tick);
                     state = next;
                     dirty = true;
@@ -124,6 +125,7 @@ fn apply_engine_batch(
             Err(mpsc::error::TryRecvError::Empty) => break,
             Err(mpsc::error::TryRecvError::Disconnected) => {
                 state.done = true;
+                state.freeze_run_elapsed();
                 break;
             }
         }

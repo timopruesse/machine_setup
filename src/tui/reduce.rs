@@ -26,7 +26,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             depth,
         } => {
             let task = find_or_create_task(state, &task_name);
-            task.status = TaskStatus::Running;
+            task.mark_running();
             task.command_count = command_count;
             task.depth = depth;
             task.push_log(format!("Starting ({command_count} commands)..."));
@@ -38,6 +38,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
         }
         TaskEvent::TaskSkipped { task_name, reason } => {
             let task = find_or_create_task(state, &task_name);
+            task.freeze_duration();
             task.status = TaskStatus::Skipped(reason.clone());
             task.push_log(format!("Skipped: {reason}"));
             state.skipped += 1;
@@ -78,6 +79,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
         }
         TaskEvent::TaskCompleted { task_name } => {
             let task = find_or_create_task(state, &task_name);
+            task.freeze_duration();
             task.status = TaskStatus::Completed;
             task.push_log("Completed successfully.".to_string());
             state.succeeded += 1;
@@ -85,6 +87,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
         }
         TaskEvent::TaskFailed { task_name, error } => {
             let task = find_or_create_task(state, &task_name);
+            task.freeze_duration();
             task.status = TaskStatus::Failed(error.clone());
             task.push_log(format!("FAILED: {error}"));
             state.failed += 1;
@@ -97,12 +100,13 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             error,
         } => {
             let task = find_or_create_task(state, &task_name);
-            task.status = TaskStatus::Running;
+            task.mark_running();
             task.push_log(format!("  Retry {attempt}/{max_attempts}: {error}"));
             follow_selected_log(state);
         }
         TaskEvent::AllDone { .. } => {
             state.done = true;
+            state.freeze_run_elapsed();
             if let Some(idx) = state.tasks.iter().position(|t| t.status.is_failed()) {
                 // Clear any active filter so the jumped failure is visible in the list.
                 state.search_mode = false;
@@ -313,7 +317,95 @@ mod tests {
         assert_eq!(state.tasks[1].status, TaskStatus::Running);
         assert_eq!(state.tasks[1].depth, 1);
         assert_eq!(state.tasks[1].command_count, 2);
+        assert!(state.tasks[1].started_at.is_some());
+        assert!(state.tasks[1].duration.is_none());
         assert!(state.log_follow);
+    }
+
+    #[test]
+    fn task_completed_freezes_duration() {
+        let state = state_with(&["a"]);
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskStarted {
+                task_name: "a".into(),
+                command_count: 1,
+                depth: 0,
+            }),
+        );
+        assert!(state.tasks[0].started_at.is_some());
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskCompleted {
+                task_name: "a".into(),
+            }),
+        );
+        assert_eq!(state.tasks[0].status, TaskStatus::Completed);
+        assert!(state.tasks[0].duration.is_some());
+    }
+
+    #[test]
+    fn skip_without_start_leaves_duration_unset() {
+        let state = state_with(&["a"]);
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskSkipped {
+                task_name: "a".into(),
+                reason: "wrong os".into(),
+            }),
+        );
+        assert!(matches!(state.tasks[0].status, TaskStatus::Skipped(_)));
+        assert!(state.tasks[0].started_at.is_none());
+        assert!(state.tasks[0].duration.is_none());
+    }
+
+    #[test]
+    fn all_done_freezes_run_elapsed() {
+        let state = state_with(&["a"]);
+        assert!(state.run_elapsed.is_none());
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::AllDone {
+                succeeded: 0,
+                failed: 0,
+                skipped: 0,
+            }),
+        );
+        assert!(state.done);
+        assert!(state.run_elapsed.is_some());
+    }
+
+    #[test]
+    fn task_retry_restamps_start_and_clears_duration() {
+        let state = state_with(&["a"]);
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskStarted {
+                task_name: "a".into(),
+                command_count: 1,
+                depth: 0,
+            }),
+        );
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskFailed {
+                task_name: "a".into(),
+                error: "boom".into(),
+            }),
+        );
+        assert!(state.tasks[0].duration.is_some());
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::TaskRetry {
+                task_name: "a".into(),
+                attempt: 2,
+                max_attempts: 3,
+                error: "boom".into(),
+            }),
+        );
+        assert_eq!(state.tasks[0].status, TaskStatus::Running);
+        assert!(state.tasks[0].started_at.is_some());
+        assert!(state.tasks[0].duration.is_none());
     }
 
     #[test]

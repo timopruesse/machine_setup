@@ -1,4 +1,5 @@
 pub mod event_loop;
+pub mod format;
 pub mod message;
 pub mod plain;
 pub mod reduce;
@@ -86,8 +87,14 @@ pub(crate) fn render(f: &mut ratatui::Frame, state: &UiState) {
 }
 
 fn print_summary(state: &UiState) {
+    let elapsed = state
+        .run_elapsed
+        .map(crate::tui::format::format_duration)
+        .map(|s| format!(" in {s}"))
+        .unwrap_or_default();
+
     println!(
-        "\nmachine_setup {}: {} succeeded, {} failed, {} skipped\n",
+        "\nmachine_setup {}: {} succeeded, {} failed, {} skipped{elapsed}\n",
         state.mode, state.succeeded, state.failed, state.skipped
     );
 

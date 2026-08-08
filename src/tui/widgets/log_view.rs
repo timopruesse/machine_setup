@@ -4,6 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::Frame;
 
+use crate::tui::format::{format_duration, task_elapsed};
 use crate::tui::state::{TaskStatus, UiState};
 
 pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
@@ -19,23 +20,46 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
 
     let title = format!(" {} ", task.name);
 
-    let status_info = match &task.status {
-        TaskStatus::Pending => Span::styled("pending", Style::default().fg(Color::DarkGray)),
-        TaskStatus::Running => Span::styled(
+    let mut status_spans = match &task.status {
+        TaskStatus::Pending => vec![Span::styled(
+            "pending",
+            Style::default().fg(Color::DarkGray),
+        )],
+        TaskStatus::Running => vec![Span::styled(
             "running",
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
-        ),
-        TaskStatus::Completed => Span::styled("completed", Style::default().fg(Color::Green)),
+        )],
+        TaskStatus::Completed => vec![Span::styled("completed", Style::default().fg(Color::Green))],
         TaskStatus::Failed(e) => {
-            Span::styled(format!("failed: {e}"), Style::default().fg(Color::Red))
+            vec![Span::styled(
+                format!("failed: {e}"),
+                Style::default().fg(Color::Red),
+            )]
         }
-        TaskStatus::Skipped(r) => Span::styled(
+        TaskStatus::Skipped(r) => vec![Span::styled(
             format!("skipped: {r}"),
             Style::default().fg(Color::DarkGray),
-        ),
+        )],
     };
+
+    if let Some(d) = task_elapsed(task.started_at, task.duration) {
+        status_spans.push(Span::styled(
+            format!(" · {}", format_duration(d)),
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+
+    if matches!(task.status, TaskStatus::Running) {
+        if let Some(cmd) = task.current_command.as_deref() {
+            let hint = truncate_cmd(cmd, 40);
+            status_spans.push(Span::styled(
+                format!(" · {hint}"),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+    }
 
     let inner_height = area.height.saturating_sub(2) as usize;
     let total_lines = task.log_lines.len();
@@ -92,14 +116,27 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD),
                 ))
-                .title_bottom(Line::from(vec![
-                    Span::raw(" "),
-                    status_info,
-                    Span::raw(" "),
-                ])),
+                .title_bottom(Line::from({
+                    let mut bottom = vec![Span::raw(" ")];
+                    bottom.extend(status_spans);
+                    bottom.push(Span::raw(" "));
+                    bottom
+                })),
         )
         .wrap(Wrap { trim: false })
         .scroll((scroll as u16, 0));
 
     f.render_widget(paragraph, area);
+}
+
+fn truncate_cmd(cmd: &str, max: usize) -> String {
+    let trimmed = cmd.trim();
+    if trimmed.chars().count() <= max {
+        trimmed.to_string()
+    } else {
+        let take = max.saturating_sub(1);
+        let mut out: String = trimmed.chars().take(take).collect();
+        out.push('…');
+        out
+    }
 }

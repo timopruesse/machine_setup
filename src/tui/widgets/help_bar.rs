@@ -43,7 +43,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
     let mut spans = Vec::new();
     for (i, group) in keys.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled("  |  ", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(" · ", Style::default().fg(Color::DarkGray)));
         }
         spans.extend(group.clone());
     }

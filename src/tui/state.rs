@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use crate::engine::mode::Mode;
 
 /// Max log lines retained per task (oldest dropped).
@@ -36,6 +38,10 @@ pub struct TaskState {
     pub current_command: Option<String>,
     /// Nesting depth (0 = top-level, 1+ = sub-config)
     pub depth: usize,
+    /// When the task last entered Running.
+    pub started_at: Option<Instant>,
+    /// Frozen duration once the task reaches a terminal status.
+    pub duration: Option<Duration>,
 }
 
 impl TaskState {
@@ -47,6 +53,8 @@ impl TaskState {
             command_count: 0,
             current_command: None,
             depth: 0,
+            started_at: None,
+            duration: None,
         }
     }
 
@@ -56,6 +64,22 @@ impl TaskState {
         if self.log_lines.len() > LOG_CAP {
             let excess = self.log_lines.len() - LOG_CAP;
             self.log_lines.drain(0..excess);
+        }
+    }
+
+    /// Mark the task as running and stamp a fresh start time.
+    pub fn mark_running(&mut self) {
+        self.status = TaskStatus::Running;
+        self.started_at = Some(Instant::now());
+        self.duration = None;
+    }
+
+    /// Freeze elapsed time if the task had started.
+    pub fn freeze_duration(&mut self) {
+        if self.duration.is_none() {
+            if let Some(started) = self.started_at {
+                self.duration = Some(started.elapsed());
+            }
         }
     }
 }
@@ -79,6 +103,10 @@ pub struct UiState {
     /// Indices into `tasks` that match the current filter
     pub filtered_indices: Vec<usize>,
     pub tick: u64,
+    /// When the TUI run started.
+    pub run_started: Instant,
+    /// Frozen run duration once all tasks are done.
+    pub run_elapsed: Option<Duration>,
 }
 
 impl UiState {
@@ -100,6 +128,8 @@ impl UiState {
             search_query: String::new(),
             filtered_indices,
             tick: 0,
+            run_started: Instant::now(),
+            run_elapsed: None,
         }
     }
 
@@ -123,5 +153,12 @@ impl UiState {
     pub fn spinner_frame(&self) -> &'static str {
         const FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
         FRAMES[(self.tick % 4) as usize]
+    }
+
+    /// Freeze the run clock if not already frozen.
+    pub fn freeze_run_elapsed(&mut self) {
+        if self.run_elapsed.is_none() {
+            self.run_elapsed = Some(self.run_started.elapsed());
+        }
     }
 }
