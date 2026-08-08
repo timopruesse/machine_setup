@@ -6,15 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.4.6]
+
+### Added
+- Show run total and per-task elapsed/final durations in the interactive TUI
+- While two or more tasks are running, multiplex their output into a tagged parallel log stream with stable accent colors and a running-count cue
+
 ### Changed
 - Rewrite interactive TUI around a pure `UiState` / `Message` reducer with an async event loop (engine events, keys, spinner ticks)
+- Soft-follow task selection during parallel runs (avoid thrashing while the selected task is still running)
 
 ### Fixed
 - Log view no longer snaps to the bottom while manually scrolled (follow mode; `End` re-enables)
 - Esc clears an active task filter instead of always quitting (`q` / Ctrl+C still cancel and quit)
 - Help bar documents `j`/`k`, `Home`/`End`, filter clear, and follow hints
-- Jump selection to the first failed task when a run finishes with failures
-- Cap per-task log buffers to avoid unbounded memory growth
+- Jump selection to the first failed task when a run finishes with failures (and prefer burst failures when leaving parallel merge)
+- Cap per-task and parallel-merge log buffers to avoid unbounded memory growth
+- Keep keyboard input responsive after the engine channel closes when tasks finish
 
 ## [2.4.5]
 
