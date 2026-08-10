@@ -55,7 +55,7 @@ winresource = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
-criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+criterion = { version = "0.8", features = ["async_tokio", "html_reports"] }
 
 [[bench]]
 name = "command_bench"
