@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.6.0]
+
 ### Added
 - Shared catalog TUI for browsing tasks (`list`) with master–detail view and `/` filter
 - `-s` / `--select` uses the catalog multi-select TUI when available (status + detail)
