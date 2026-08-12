@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.6.1]
+
 ### Added
 - `doctor` uses the shared catalog TUI (summary banner + per-task validation detail) when a TTY is available
 
