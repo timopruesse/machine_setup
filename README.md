@@ -65,6 +65,7 @@ cargo install machine_setup
 | validate     | validate the config without executing    | `machine_setup validate`             |
 | init         | create a new empty Config document       | `machine_setup init`                 |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
+| add recipe   | append a Task from an Authoring recipe   | `machine_setup add recipe git-repo --url … --target ~` |
 | schema       | print the Config JSON Schema to stdout   | `machine_setup schema`               |
 | completions  | generate shell completions               | `machine_setup completions zsh`      |
 
@@ -129,9 +130,14 @@ Scaffold a new file and grow it with Task stubs:
 ```bash
 machine_setup init
 machine_setup add task tools
-# edit commands under tasks.tools, then:
+machine_setup add recipe dotfiles --url git@github.com:user/.dotfiles.git
+machine_setup add recipe brew-bundle --file ./Brewfile
+machine_setup add recipe git-repo --url https://github.com/user/repo.git --target ~/projects/repo
+# edit as needed, then:
 machine_setup validate
 ```
+
+Authoring recipes emit existing Command entry kinds only (`clone`, `symlink`, `run`) — not new kinds. Defaults: Task names `dotfiles` / `brew-bundle` / `git-repo` (override with `--name`); `dotfiles` clones into `.`, symlinks `./home` → `~` with `force` and ignores `.cursor`; `brew-bundle` is `os: [macos]` with install+update.
 
 Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing at the checked-in [schema/machine_setup.schema.json](schema/machine_setup.schema.json). Regenerate with `make schema` (CI fails if the artifact is stale). Semantic checks (`depends_on`, missing sources, …) stay in `machine_setup validate` — the schema is structural only.
 

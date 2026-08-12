@@ -5,7 +5,7 @@ use std::io::IsTerminal;
 use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
-use cli::{AddTarget, Cli, Command};
+use cli::{AddTarget, Cli, Command, RecipeCommand};
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
@@ -39,13 +39,20 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if let Command::Add {
-        target: AddTarget::Task { name },
-    } = &cli.command
-    {
+    if let Command::Add { target } = &cli.command {
         let path = resolve_existing_document(cli.config.as_deref(), &cwd)?;
-        config::document::add_task(&path, name)?;
-        println!("Added task `{name}` to {}", path.display());
+        match target {
+            AddTarget::Task { name } => {
+                config::document::add_task(&path, name)?;
+                println!("Added task `{name}` to {}", path.display());
+            }
+            AddTarget::Recipe { recipe } => {
+                let emitted = emit_recipe(recipe)?;
+                let name = emitted.name.clone();
+                config::document::append_emitted(&path, &emitted)?;
+                println!("Added recipe task `{name}` to {}", path.display());
+            }
+        }
         if config::document::validate_after_write(&path)? {
             std::process::exit(1);
         }
@@ -134,6 +141,38 @@ fn resolve_existing_document(
         return Ok(path);
     }
     Ok(config::locator::find(cwd)?)
+}
+
+fn emit_recipe(recipe: &RecipeCommand) -> anyhow::Result<config::recipes::EmittedTask> {
+    use config::recipes::{
+        emit_brew_bundle, emit_dotfiles, emit_git_repo, BrewBundleParams, DotfilesParams,
+        GitRepoParams,
+    };
+
+    Ok(match recipe {
+        RecipeCommand::Dotfiles {
+            url,
+            src,
+            target,
+            ignore,
+            name,
+        } => {
+            let ignore_refs: Vec<&str> = ignore.iter().map(String::as_str).collect();
+            emit_dotfiles(&DotfilesParams {
+                name,
+                url,
+                src,
+                target,
+                ignore: ignore_refs,
+            })?
+        }
+        RecipeCommand::GitRepo { url, target, name } => {
+            emit_git_repo(&GitRepoParams { name, url, target })?
+        }
+        RecipeCommand::BrewBundle { file, name } => {
+            emit_brew_bundle(&BrewBundleParams { name, file })?
+        }
+    })
 }
 
 async fn run_execution(

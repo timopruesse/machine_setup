@@ -79,6 +79,54 @@ pub enum AddTarget {
         /// Task name
         name: String,
     },
+    /// Append a Task from an Authoring recipe (existing Command entry kinds only)
+    Recipe {
+        #[command(subcommand)]
+        recipe: RecipeCommand,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum RecipeCommand {
+    /// Clone a dotfiles repo into `.` and symlink `src` → `target`
+    Dotfiles {
+        /// Git repository URL
+        #[arg(long)]
+        url: String,
+        /// Symlink source directory inside the clone
+        #[arg(long, default_value = "./home")]
+        src: String,
+        /// Symlink target (usually home)
+        #[arg(long, default_value = "~")]
+        target: String,
+        /// Extra ignore patterns (`.cursor` is always included)
+        #[arg(long)]
+        ignore: Vec<String>,
+        /// Task name
+        #[arg(long, default_value = "dotfiles")]
+        name: String,
+    },
+    /// Clone a single git repository
+    GitRepo {
+        /// Git repository URL
+        #[arg(long)]
+        url: String,
+        /// Clone destination
+        #[arg(long)]
+        target: String,
+        /// Task name
+        #[arg(long, default_value = "git-repo")]
+        name: String,
+    },
+    /// macOS `brew bundle` on install and update
+    BrewBundle {
+        /// Path to Brewfile
+        #[arg(long)]
+        file: String,
+        /// Task name
+        #[arg(long, default_value = "brew-bundle")]
+        name: String,
+    },
 }
 
 impl std::fmt::Display for Command {

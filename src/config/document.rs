@@ -58,33 +58,45 @@ pub fn init(path: &Path) -> Result<()> {
 /// Append a minimal Task stub. Requires an existing Config document. Refuses
 /// duplicate Task names.
 pub fn add_task(path: &Path, task_name: &str) -> Result<()> {
+    validate_task_name(task_name)?;
+    let stub = format!(
+        "\n  # Task `{task_name}`\n  # Optional: os: [linux, macos] | depends_on: [other] | parallel: true | retry: 1\n  # commands:\n  #   - run:\n  #       commands: \"echo hello\"\n  #   - symlink:\n  #       src: ./dotfiles/file\n  #       target: ~/file\n  #       force: true\n  {task_name}:\n    commands: []\n"
+    );
+    append_emitted(
+        path,
+        &super::recipes::EmittedTask {
+            name: task_name.to_string(),
+            yaml: stub,
+        },
+    )
+}
+
+/// Append an emitted Task YAML block (from stubs or Authoring recipes).
+pub fn append_emitted(path: &Path, emitted: &super::recipes::EmittedTask) -> Result<()> {
     if !path.is_file() {
         return Err(Error::ConfigNotFound(path.to_path_buf()));
     }
 
     let config = load_config(path.to_str().unwrap_or_default())?;
-    if config.tasks.contains_key(task_name) {
-        return Err(Error::TaskAlreadyExists(task_name.to_string()));
+    if config.tasks.contains_key(&emitted.name) {
+        return Err(Error::TaskAlreadyExists(emitted.name.clone()));
     }
 
-    validate_task_name(task_name)?;
-
-    let stub = format!(
-        "\n  # Task `{task_name}`\n  # Optional: os: [linux, macos] | depends_on: [other] | parallel: true | retry: 1\n  # commands:\n  #   - run:\n  #       commands: \"echo hello\"\n  #   - symlink:\n  #       src: ./dotfiles/file\n  #       target: ~/file\n  #       force: true\n  {task_name}:\n    commands: []\n"
-    );
+    validate_task_name(&emitted.name)?;
 
     let mut content = std::fs::read_to_string(path)?;
     if !content.ends_with('\n') {
         content.push('\n');
     }
 
-    // Ensure we append under `tasks:` — if the file ends with `tasks: {}`,
-    // replace empty map with a block mapping start.
     if let Some(rewritten) = open_empty_tasks_map(&content) {
         content = rewritten;
     }
 
-    content.push_str(&stub);
+    content.push_str(&emitted.yaml);
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
     std::fs::write(path, content)?;
     Ok(())
 }
@@ -117,7 +129,7 @@ pub fn validate_after_write(path: &Path) -> Result<bool> {
     Ok(has_errors)
 }
 
-fn validate_task_name(name: &str) -> Result<()> {
+pub fn validate_task_name(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(Error::Other("Task name must not be empty".into()));
     }

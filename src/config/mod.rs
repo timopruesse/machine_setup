@@ -3,6 +3,7 @@ pub mod graph;
 pub mod history;
 pub mod locator;
 pub mod os;
+pub mod recipes;
 pub mod schema;
 pub mod selection;
 pub mod status;
