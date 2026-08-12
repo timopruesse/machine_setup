@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod event_loop;
 pub mod format;
 pub mod message;

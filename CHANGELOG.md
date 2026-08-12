@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Shared catalog TUI for browsing tasks (`list`) with master–detail view and `/` filter
+- `-s` / `--select` uses the catalog multi-select TUI when available (status + detail)
+
+### Changed
+- `list` uses the TUI by default on a TTY; `--no-tui` / non-TTY falls back to a colored columnar plain view (`NO_COLOR` respected)
+
 ## [2.5.0]
 
 ### Added

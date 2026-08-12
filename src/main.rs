@@ -70,7 +70,18 @@ fn main() -> anyhow::Result<()> {
 
     // Handle list command
     if cli.command == Command::List {
-        print_task_list(&app_config);
+        use machine_setup::tui::catalog::{adapt, plain, run_browse};
+        use machine_setup::utils::path::expand_path;
+
+        let temp_dir = expand_path(&app_config.temp_dir, None);
+        let history = config::history::History::load(&temp_dir).unwrap_or_default();
+        let items = adapt::list_items(&app_config, &history);
+        let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
+        if use_tui {
+            run_browse(items)?;
+        } else {
+            plain::print_list(&items);
+        }
         return Ok(());
     }
 
@@ -108,7 +119,8 @@ fn main() -> anyhow::Result<()> {
     let seed: Vec<String> = if let Some(ref task_name) = cli.task {
         vec![task_name.clone()]
     } else if cli.select {
-        select_tasks(&app_config)?
+        let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
+        select_tasks(&app_config, use_tui)?
     } else {
         app_config.tasks.keys().cloned().collect()
     };
@@ -274,41 +286,6 @@ async fn run_engine(
     }
 }
 
-fn print_task_list(config: &config::types::AppConfig) {
-    use config::status::{format_ts, os_label, rows};
-    use machine_setup::utils::path::expand_path;
-
-    let temp_dir = expand_path(&config.temp_dir, None);
-    let history = config::history::History::load(&temp_dir).unwrap_or_default();
-
-    println!("Defined tasks:\n");
-    for row in rows(config, &history) {
-        let installed = if row.installed { "yes" } else { "no" };
-        let os_note = if row.os_applies {
-            String::new()
-        } else {
-            " [os: skipped on this host]".to_string()
-        };
-        let parallel = if row.task.parallel { " [parallel]" } else { "" };
-
-        let (installed_at, updated_at) = match row.history {
-            Some(h) => (format_ts(h.installed_at), format_ts(h.updated_at)),
-            None => ("-".into(), "-".into()),
-        };
-
-        println!(
-            "  {} (os: {}, installed: {installed}, installed_at: {installed_at}, updated_at: {updated_at}){parallel}{os_note}",
-            row.name,
-            os_label(&row.task.os),
-        );
-
-        for cmd in &row.task.commands {
-            println!("    - {cmd}");
-        }
-        println!();
-    }
-}
-
 fn run_doctor(
     config: &config::types::AppConfig,
     config_dir: &Path,
@@ -411,18 +388,33 @@ fn pre_authenticate_sudo() {
     }
 }
 
-fn select_tasks(config: &config::types::AppConfig) -> anyhow::Result<Vec<String>> {
-    let mut task_names: Vec<String> = config.tasks.keys().cloned().collect();
+fn select_tasks(config: &config::types::AppConfig, use_tui: bool) -> anyhow::Result<Vec<String>> {
+    if use_tui {
+        use machine_setup::tui::catalog::{adapt, run_select};
+        use machine_setup::utils::path::expand_path;
 
-    let selections = dialoguer::MultiSelect::new()
-        .with_prompt("Select tasks to run")
-        .items(&task_names)
-        .interact()?;
+        let temp_dir = expand_path(&config.temp_dir, None);
+        let history = config::history::History::load(&temp_dir).unwrap_or_default();
+        let items = adapt::select_items(config, &history);
+        match run_select(items)? {
+            Some(ids) => Ok(ids),
+            None => Ok(vec![]),
+        }
+    } else if std::io::stdin().is_terminal() {
+        let mut task_names: Vec<String> = config.tasks.keys().cloned().collect();
 
-    Ok(selections
-        .into_iter()
-        .map(|i| std::mem::take(&mut task_names[i]))
-        .collect())
+        let selections = dialoguer::MultiSelect::new()
+            .with_prompt("Select tasks to run")
+            .items(&task_names)
+            .interact()?;
+
+        Ok(selections
+            .into_iter()
+            .map(|i| std::mem::take(&mut task_names[i]))
+            .collect())
+    } else {
+        anyhow::bail!("cannot select tasks interactively (no TTY); omit -s or pass -t")
+    }
 }
 
 /// Apply mode-aware dependency expansion / uninstall prompts.
