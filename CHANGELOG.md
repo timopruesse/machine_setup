@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.5.0]
+
 ### Added
 - `machine_setup init` and `machine_setup add task <name>` for Config document scaffolding (append-only; validate after write)
 - Authoring recipes: `add recipe dotfiles|git-repo|brew-bundle` (emit existing Command entry kinds only)
