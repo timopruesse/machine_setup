@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `machine_setup schema` plus checked-in `schema/machine_setup.schema.json` (CI stale check; yaml-language-server modeline on `init`)
 - Config locator: when `-c` is omitted, search cwd then git repository root for `machine_setup.{yaml,yml,json}`
 - `list` shows install status and History timestamps alongside each Task
+- `doctor` reports Task status, validation issues, and orphan History entries (`--fix` prunes orphans)
 
 ### Changed
 - `-c` / `--config` no longer defaults to `./machine_setup`; omit it to use the Config locator

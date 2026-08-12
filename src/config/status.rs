@@ -1,10 +1,12 @@
-//! Task status — join Config document Tasks with History for `list`.
+//! Task status — join Config document Tasks with History for `list` / `doctor`.
 
 use chrono::{DateTime, Utc};
+use std::path::Path;
 
 use super::history::{History, TaskHistory};
 use super::os::OsFilter;
 use super::types::{AppConfig, TaskConfig};
+use super::validate::{self, ValidationIssue};
 
 /// One row of Task status for display.
 #[derive(Debug, Clone)]
@@ -14,6 +16,22 @@ pub struct TaskStatusRow<'a> {
     pub installed: bool,
     pub os_applies: bool,
     pub history: Option<&'a TaskHistory>,
+}
+
+/// Full doctor report: status rows, validate issues, orphan History keys.
+#[derive(Debug)]
+pub struct DoctorReport<'a> {
+    pub rows: Vec<TaskStatusRow<'a>>,
+    pub issues: Vec<ValidationIssue>,
+    pub orphans: Vec<String>,
+}
+
+impl DoctorReport<'_> {
+    pub fn has_errors(&self) -> bool {
+        self.issues
+            .iter()
+            .any(|i| matches!(i.severity, validate::Severity::Error))
+    }
 }
 
 /// Build status rows in Config document Task order.
@@ -32,6 +50,40 @@ pub fn rows<'a>(config: &'a AppConfig, history: &'a History) -> Vec<TaskStatusRo
             }
         })
         .collect()
+}
+
+/// History task names that are not defined in the Config document.
+pub fn orphan_history_names(config: &AppConfig, history: &History) -> Vec<String> {
+    let mut names: Vec<String> = history
+        .tasks
+        .keys()
+        .filter(|name| !config.tasks.contains_key(*name))
+        .cloned()
+        .collect();
+    names.sort();
+    names
+}
+
+/// Remove orphan History entries. Returns the names removed.
+pub fn prune_orphans(history: &mut History, config: &AppConfig) -> Vec<String> {
+    let orphans = orphan_history_names(config, history);
+    for name in &orphans {
+        history.tasks.remove(name);
+    }
+    orphans
+}
+
+/// Build a doctor report (does not mutate History).
+pub fn doctor<'a>(
+    config: &'a AppConfig,
+    history: &'a History,
+    config_dir: &Path,
+) -> DoctorReport<'a> {
+    DoctorReport {
+        rows: rows(config, history),
+        issues: validate::validate_config(config, config_dir),
+        orphans: orphan_history_names(config, history),
+    }
 }
 
 /// Format an optional timestamp for list output.
@@ -71,18 +123,23 @@ mod tests {
         }
     }
 
-    #[test]
-    fn rows_mark_installed_from_history() {
+    fn config_with(names: &[&str]) -> AppConfig {
         let mut tasks = IndexMap::new();
-        tasks.insert("a".into(), empty_task());
-        tasks.insert("b".into(), empty_task());
-        let config = AppConfig {
+        for name in names {
+            tasks.insert((*name).into(), empty_task());
+        }
+        AppConfig {
             tasks,
             temp_dir: "~/.machine_setup".into(),
             default_shell: Shell::Bash,
             parallel: false,
             num_threads: None,
-        };
+        }
+    }
+
+    #[test]
+    fn rows_mark_installed_from_history() {
+        let config = config_with(&["a", "b"]);
         let mut history = History::default();
         history.mark_installed("a");
 
@@ -90,5 +147,39 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert!(rows[0].installed);
         assert!(!rows[1].installed);
+    }
+
+    #[test]
+    fn orphan_history_names_lists_missing_tasks() {
+        let config = config_with(&["a"]);
+        let mut history = History::default();
+        history.mark_installed("a");
+        history.mark_installed("gone");
+        assert_eq!(orphan_history_names(&config, &history), vec!["gone"]);
+    }
+
+    #[test]
+    fn prune_orphans_removes_only_orphans() {
+        let config = config_with(&["a"]);
+        let mut history = History::default();
+        history.mark_installed("a");
+        history.mark_installed("gone");
+        let removed = prune_orphans(&mut history, &config);
+        assert_eq!(removed, vec!["gone"]);
+        assert!(history.tasks.contains_key("a"));
+        assert!(!history.tasks.contains_key("gone"));
+    }
+
+    #[test]
+    fn doctor_includes_empty_task_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_with(&["empty"]);
+        let history = History::default();
+        let report = doctor(&config, &history, dir.path());
+        assert!(report
+            .issues
+            .iter()
+            .any(|i| i.task_name == "empty" && i.message.contains("no commands")));
+        assert!(report.orphans.is_empty());
     }
 }

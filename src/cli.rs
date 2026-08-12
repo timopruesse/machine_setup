@@ -55,6 +55,12 @@ pub enum Command {
     List,
     /// Validate config file without executing
     Validate,
+    /// Report Task status, validation issues, and orphan History entries
+    Doctor {
+        /// Remove History entries for Tasks no longer in the Config document
+        #[arg(long)]
+        fix: bool,
+    },
     /// Create a new empty Config document (refuses if it already exists)
     Init,
     /// Interactive Config document setup (TTY required)
@@ -139,6 +145,7 @@ impl std::fmt::Display for Command {
             Command::Uninstall => write!(f, "uninstall"),
             Command::List => write!(f, "list"),
             Command::Validate => write!(f, "validate"),
+            Command::Doctor { .. } => write!(f, "doctor"),
             Command::Init => write!(f, "init"),
             Command::Wizard => write!(f, "wizard"),
             Command::Add { .. } => write!(f, "add"),

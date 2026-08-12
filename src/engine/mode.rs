@@ -25,6 +25,7 @@ impl Mode {
             Command::Uninstall => Some(Mode::Uninstall),
             Command::List
             | Command::Validate
+            | Command::Doctor { .. }
             | Command::Init
             | Command::Wizard
             | Command::Add { .. }
@@ -63,6 +64,7 @@ mod tests {
     fn test_from_command_non_execution_verbs() {
         assert_eq!(Mode::from_command(&Command::List), None);
         assert_eq!(Mode::from_command(&Command::Validate), None);
+        assert_eq!(Mode::from_command(&Command::Doctor { fix: false }), None);
         assert_eq!(Mode::from_command(&Command::Init), None);
         assert_eq!(Mode::from_command(&Command::Wizard), None);
         assert_eq!(

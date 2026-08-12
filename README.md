@@ -63,6 +63,7 @@ cargo install machine_setup
 | uninstall    | uninstall the defined tasks              | `machine_setup uninstall`            |
 | list         | list tasks with install status           | `machine_setup list`                 |
 | validate     | validate the config without executing    | `machine_setup validate`             |
+| doctor       | status + validate + History orphans      | `machine_setup doctor` / `doctor --fix` |
 | init         | create a new empty Config document       | `machine_setup init`                 |
 | wizard       | interactive Config document setup (TTY)  | `machine_setup wizard`               |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |

@@ -99,8 +99,9 @@ _Avoid_: state, cache, ledger.
 **Task status**:
 The join of a Task as defined in the Config document with History (and OS
 applicability): whether it is defined, installed, skipped for this OS, and
-related timestamps. Presented first via `list`; a fuller doctor report is a
-later adapter on the same module.
+related timestamps. Presented via `list` and `doctor`. Doctor also surfaces
+validate issues and History entries with no matching Task (orphans); `--fix`
+may prune orphans.
 _Avoid_: task state, install ledger view.
 
 ### Architecture seams
@@ -223,7 +224,7 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
   - **CLI command** (`cli::Command`): the clap subcommand the user types,
     including non-execution verbs. Maps to a **Mode** for execution verbs only.
   Use the qualified term; never a bare "command".
-  Non-execution verbs now include `list`, `validate`, `init`, `wizard`, `add`,
-  `schema`, and `completions`.
+  Non-execution verbs now include `list`, `validate`, `doctor`, `init`, `wizard`,
+  `add`, `schema`, and `completions`.
 - **"Engine" vs "Runner"** — the crate has an `engine` module, but the executing
   component is the **Runner**. Say "runner" for the thing that runs tasks.

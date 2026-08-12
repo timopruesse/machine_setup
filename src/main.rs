@@ -98,6 +98,12 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if let Command::Doctor { fix } = cli.command {
+        let config_dir = config::resolve_config_dir(&config_source, &cwd);
+        run_doctor(&app_config, &config_dir, fix)?;
+        return Ok(());
+    }
+
     // Determine which tasks to run (interactive selection must happen before TUI starts)
     let seed: Vec<String> = if let Some(ref task_name) = cli.task {
         vec![task_name.clone()]
@@ -301,6 +307,83 @@ fn print_task_list(config: &config::types::AppConfig) {
         }
         println!();
     }
+}
+
+fn run_doctor(
+    config: &config::types::AppConfig,
+    config_dir: &Path,
+    fix: bool,
+) -> anyhow::Result<()> {
+    use config::status::{doctor, format_ts, os_label, prune_orphans};
+    use machine_setup::utils::path::expand_path;
+
+    let temp_dir = expand_path(&config.temp_dir, None);
+    let mut history = config::history::History::load(&temp_dir).unwrap_or_default();
+    let report = doctor(config, &history, config_dir);
+
+    println!("Tasks:\n");
+    for row in &report.rows {
+        let installed = if row.installed { "yes" } else { "no" };
+        let os_note = if row.os_applies {
+            String::new()
+        } else {
+            " [os: skipped on this host]".to_string()
+        };
+        let (installed_at, updated_at) = match row.history {
+            Some(h) => (format_ts(h.installed_at), format_ts(h.updated_at)),
+            None => ("-".into(), "-".into()),
+        };
+        println!(
+            "  {} (os: {}, installed: {installed}, installed_at: {installed_at}, updated_at: {updated_at}){os_note}",
+            row.name,
+            os_label(&row.task.os),
+        );
+    }
+
+    println!("\nValidation:");
+    if report.issues.is_empty() {
+        println!("  Config is valid.");
+    } else {
+        for issue in &report.issues {
+            println!(
+                "  [{}] {}: {}",
+                issue.severity, issue.task_name, issue.message
+            );
+        }
+    }
+
+    println!("\nHistory orphans:");
+    if report.orphans.is_empty() {
+        println!("  none");
+    } else {
+        for name in &report.orphans {
+            println!("  {name} (in History, not in Config document)");
+        }
+    }
+
+    let has_errors = report.has_errors();
+
+    if fix {
+        let removed = prune_orphans(&mut history, config);
+        if removed.is_empty() {
+            println!("\n--fix: no orphan History entries to remove.");
+        } else {
+            history.save(&temp_dir)?;
+            println!(
+                "\n--fix: removed {} orphan History entr{}: {}",
+                removed.len(),
+                if removed.len() == 1 { "y" } else { "ies" },
+                removed.join(", ")
+            );
+        }
+    } else if !report.orphans.is_empty() {
+        println!("\nHint: re-run with `doctor --fix` to remove orphan History entries.");
+    }
+
+    if has_errors {
+        std::process::exit(1);
+    }
+    Ok(())
 }
 
 /// Run `sudo -v` to cache credentials before the TUI takes over stdin.
