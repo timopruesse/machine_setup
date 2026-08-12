@@ -8,19 +8,74 @@ use super::model::{CatalogItem, CatalogMode, CatalogStatus};
 use super::state::CatalogState;
 
 pub fn render(f: &mut Frame, state: &CatalogState) {
-    let outer = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(f.area());
+    let banner_height = state
+        .banner
+        .as_ref()
+        .map(|lines| (lines.len().clamp(1, 6) as u16).saturating_add(2))
+        .unwrap_or(0);
+
+    let outer = if banner_height > 0 {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(banner_height),
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ])
+            .split(f.area())
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(f.area())
+    };
+
+    let (main_area, help_area) = if banner_height > 0 {
+        render_banner(f, outer[0], state);
+        (outer[1], outer[2])
+    } else {
+        (outer[0], outer[1])
+    };
 
     let main = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-        .split(outer[0]);
+        .split(main_area);
 
     render_list(f, main[0], state);
     render_detail(f, main[1], state);
-    render_help(f, outer[1], state);
+    render_help(f, help_area, state);
+}
+
+fn render_banner(f: &mut Frame, area: Rect, state: &CatalogState) {
+    let Some(lines) = state.banner.as_ref() else {
+        return;
+    };
+    let text: Vec<Line> = lines
+        .iter()
+        .take(6)
+        .map(|line| {
+            Line::from(Span::styled(
+                line.clone(),
+                Style::default().fg(Color::White),
+            ))
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray))
+                .title(Span::styled(
+                    " Summary ",
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                )),
+        )
+        .wrap(Wrap { trim: false });
+    f.render_widget(paragraph, area);
 }
 
 fn render_list(f: &mut Frame, area: Rect, state: &CatalogState) {

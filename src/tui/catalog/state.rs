@@ -11,6 +11,8 @@ pub struct CatalogState {
     pub search_mode: bool,
     pub search_query: String,
     pub filtered_indices: Vec<usize>,
+    /// Optional summary lines (e.g. doctor validation / orphans).
+    pub banner: Option<Vec<String>>,
 }
 
 impl CatalogState {
@@ -24,7 +26,13 @@ impl CatalogState {
             search_mode: false,
             search_query: String::new(),
             filtered_indices,
+            banner: None,
         }
+    }
+
+    pub fn with_banner(mut self, banner: Option<Vec<String>>) -> Self {
+        self.banner = banner;
+        self
     }
 
     pub fn filter_active(&self) -> bool {

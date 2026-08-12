@@ -78,7 +78,7 @@ fn main() -> anyhow::Result<()> {
         let items = adapt::list_items(&app_config, &history);
         let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
         if use_tui {
-            run_browse(items)?;
+            run_browse(items, None)?;
         } else {
             plain::print_list(&items);
         }
@@ -111,7 +111,8 @@ fn main() -> anyhow::Result<()> {
 
     if let Command::Doctor { fix } = cli.command {
         let config_dir = config::resolve_config_dir(&config_source, &cwd);
-        run_doctor(&app_config, &config_dir, fix)?;
+        let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
+        run_doctor(&app_config, &config_dir, fix, use_tui)?;
         return Ok(());
     }
 
@@ -290,52 +291,28 @@ fn run_doctor(
     config: &config::types::AppConfig,
     config_dir: &Path,
     fix: bool,
+    use_tui: bool,
 ) -> anyhow::Result<()> {
-    use config::status::{doctor, format_ts, os_label, prune_orphans};
+    use config::status::{doctor, prune_orphans};
+    use machine_setup::tui::catalog::{adapt, plain, run_browse};
     use machine_setup::utils::path::expand_path;
 
     let temp_dir = expand_path(&config.temp_dir, None);
     let mut history = config::history::History::load(&temp_dir).unwrap_or_default();
     let report = doctor(config, &history, config_dir);
 
-    println!("Tasks:\n");
-    for row in &report.rows {
-        let installed = if row.installed { "yes" } else { "no" };
-        let os_note = if row.os_applies {
-            String::new()
-        } else {
-            " [os: skipped on this host]".to_string()
-        };
-        let (installed_at, updated_at) = match row.history {
-            Some(h) => (format_ts(h.installed_at), format_ts(h.updated_at)),
-            None => ("-".into(), "-".into()),
-        };
-        println!(
-            "  {} (os: {}, installed: {installed}, installed_at: {installed_at}, updated_at: {updated_at}){os_note}",
-            row.name,
-            os_label(&row.task.os),
-        );
-    }
+    let items = adapt::doctor_items(&report);
+    let banner = adapt::doctor_banner(&report, fix);
+    let issue_lines: Vec<String> = report
+        .issues
+        .iter()
+        .map(|i| format!("[{}] {}: {}", i.severity, i.task_name, i.message))
+        .collect();
 
-    println!("\nValidation:");
-    if report.issues.is_empty() {
-        println!("  Config is valid.");
+    if use_tui {
+        run_browse(items, Some(banner))?;
     } else {
-        for issue in &report.issues {
-            println!(
-                "  [{}] {}: {}",
-                issue.severity, issue.task_name, issue.message
-            );
-        }
-    }
-
-    println!("\nHistory orphans:");
-    if report.orphans.is_empty() {
-        println!("  none");
-    } else {
-        for name in &report.orphans {
-            println!("  {name} (in History, not in Config document)");
-        }
+        plain::print_doctor(&items, &issue_lines, &report.orphans);
     }
 
     let has_errors = report.has_errors();
@@ -353,7 +330,7 @@ fn run_doctor(
                 removed.join(", ")
             );
         }
-    } else if !report.orphans.is_empty() {
+    } else if !use_tui && !report.orphans.is_empty() {
         println!("\nHint: re-run with `doctor --fix` to remove orphan History entries.");
     }
 

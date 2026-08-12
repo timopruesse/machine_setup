@@ -169,6 +169,47 @@ fn style_muted(text: &str, color: bool) -> String {
     }
 }
 
+/// Pretty plain doctor report: task table + validation + orphans.
+pub fn print_doctor(items: &[CatalogItem], issue_lines: &[String], orphans: &[String]) {
+    print!(
+        "{}",
+        render_doctor(items, issue_lines, orphans, color_enabled())
+    );
+}
+
+pub fn render_doctor(
+    items: &[CatalogItem],
+    issue_lines: &[String],
+    orphans: &[String],
+    color: bool,
+) -> String {
+    let mut out = render_list(items, color);
+
+    out.push_str("Validation:\n");
+    if issue_lines.is_empty() {
+        out.push_str("  Config is valid.\n");
+    } else {
+        for line in issue_lines {
+            out.push_str("  ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+
+    out.push_str("\nHistory orphans:\n");
+    if orphans.is_empty() {
+        out.push_str("  none\n");
+    } else {
+        for name in orphans {
+            out.push_str("  ");
+            out.push_str(name);
+            out.push_str(" (in History, not in Config document)\n");
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,5 +405,19 @@ mod tests {
         assert!(!color_enabled_with(true, true));
         assert!(!color_enabled_with(false, false));
         assert!(!color_enabled_with(false, true));
+    }
+
+    #[test]
+    fn render_doctor_includes_validation_and_orphans() {
+        let items = vec![sample_item()];
+        let issues = vec!["[WARN] empty: no commands".into()];
+        let orphans = vec!["gone".into()];
+        let out = render_doctor(&items, &issues, &orphans, false);
+
+        assert!(out.contains("Validation:"));
+        assert!(out.contains("[WARN] empty: no commands"));
+        assert!(out.contains("History orphans:"));
+        assert!(out.contains("gone"));
+        assert!(out.contains("dotfiles"));
     }
 }

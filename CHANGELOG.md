@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- `doctor` uses the shared catalog TUI (summary banner + per-task validation detail) when a TTY is available
+
+### Changed
+- `doctor --no-tui` / non-TTY output uses the same colored columnar task view as `list`, plus Validation and History orphans sections
+
 ## [2.6.0]
 
 ### Added

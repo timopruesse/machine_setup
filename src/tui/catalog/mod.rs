@@ -20,16 +20,24 @@ pub use state::CatalogState;
 
 use event_loop::{run as run_event_loop, LoopOutcome};
 
-/// Browse the catalog in a master–detail TUI. Empty lists print a one-liner and return.
-pub fn run_browse(items: Vec<CatalogItem>) -> anyhow::Result<()> {
-    if items.is_empty() {
+/// Browse the catalog in a master–detail TUI.
+///
+/// Empty items with no banner print a one-liner and return. Empty items with a
+/// banner still open the TUI (e.g. doctor with only orphans / validation).
+pub fn run_browse(items: Vec<CatalogItem>, banner: Option<Vec<String>>) -> anyhow::Result<()> {
+    if items.is_empty() && banner.as_ref().is_none_or(|b| b.is_empty()) {
         println!("No tasks defined.");
         return Ok(());
     }
 
-    with_terminal(CatalogMode::Browse, items, |outcome| match outcome {
-        LoopOutcome::Quit | LoopOutcome::Abort | LoopOutcome::Confirm(_) => Ok(()),
-    })
+    with_terminal(
+        CatalogMode::Browse,
+        items,
+        banner,
+        |outcome| match outcome {
+            LoopOutcome::Quit | LoopOutcome::Abort | LoopOutcome::Confirm(_) => Ok(()),
+        },
+    )
 }
 
 /// Multi-select catalog TUI. Returns selected task ids, or `None` on abort / empty input.
@@ -38,13 +46,18 @@ pub fn run_select(items: Vec<CatalogItem>) -> anyhow::Result<Option<Vec<String>>
         return Ok(None);
     }
 
-    with_terminal(CatalogMode::Select, items, |outcome| match outcome {
+    with_terminal(CatalogMode::Select, items, None, |outcome| match outcome {
         LoopOutcome::Confirm(ids) => Ok(Some(ids)),
         LoopOutcome::Quit | LoopOutcome::Abort => Ok(None),
     })
 }
 
-fn with_terminal<F, T>(mode: CatalogMode, items: Vec<CatalogItem>, f: F) -> anyhow::Result<T>
+fn with_terminal<F, T>(
+    mode: CatalogMode,
+    items: Vec<CatalogItem>,
+    banner: Option<Vec<String>>,
+    f: F,
+) -> anyhow::Result<T>
 where
     F: FnOnce(LoopOutcome) -> anyhow::Result<T>,
 {
@@ -60,7 +73,7 @@ where
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
 
-    let state = CatalogState::new(items, mode);
+    let state = CatalogState::new(items, mode).with_banner(banner);
     let result = run_event_loop(&mut terminal, state);
 
     crate::tui::restore_terminal();
