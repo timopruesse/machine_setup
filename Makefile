@@ -8,6 +8,13 @@ lint:
 	cargo fmt --all -- --check
 	cargo clippy -- -D warnings
 
+schema:
+	cargo run --quiet -- schema > schema/machine_setup.schema.json
+
+schema-check: schema
+	@git diff --exit-code -- schema/machine_setup.schema.json || \
+		(echo "schema/machine_setup.schema.json is stale; run 'make schema' and commit" && exit 1)
+
 bench:
 	cargo bench --bench command_bench
 

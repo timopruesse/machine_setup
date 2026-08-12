@@ -9,6 +9,30 @@ aliases) in code, comments, and reviews.
 
 ### Configuration
 
+**Config document**:
+The user-authored YAML/JSON file that declares root settings and Tasks. Distinct
+from the loaded in-memory config and from History. Authoring mutates it only by
+creating a new file or appending a new Task — not by rewriting existing Tasks.
+_Avoid_: setup file, machine file, config source.
+
+**Config schema**:
+The machine-readable description of a valid Config document (JSON Schema),
+generated from the same types and Command kind catalog the loader uses. Used by
+editors and by a CLI dump; not a second hand-written source of truth.
+_Avoid_: config types, OpenAPI, JSON types.
+
+**Config locator**:
+The rule for choosing a Config document when no explicit path or URL is given:
+look in the working directory, then at the git repository root, using the usual
+filename and extension probe. Explicit `-c` paths and URLs bypass it.
+_Avoid_: config discovery, config search path, XDG config.
+
+**Authoring recipe**:
+A named emitter that appends one or more Tasks built only from existing Command
+entry kinds (`clone`, `symlink`, `run`, …). Not a new kind and not YAML sugar
+in the Config document. Initial recipes: `dotfiles`, `brew-bundle`, `git-repo`.
+_Avoid_: plugin, template pack, command kind.
+
 **Task**:
 A named unit of setup work, made of an ordered list of commands, with optional
 OS filter, conditions, dependencies, and retry.
@@ -65,6 +89,13 @@ _Avoid_: message, log, signal.
 The persisted record of which tasks are currently installed, used to skip
 already-installed tasks unless forced.
 _Avoid_: state, cache, ledger.
+
+**Task status**:
+The join of a Task as defined in the Config document with History (and OS
+applicability): whether it is defined, installed, skipped for this OS, and
+related timestamps. Presented first via `list`; a fuller doctor report is a
+later adapter on the same module.
+_Avoid_: task state, install ledger view.
 
 ### Architecture seams
 
@@ -153,6 +184,13 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
 - The **Command bench** exercises Tree materialization, File ops, the Runner,
   and **Command kind catalog** registration (registry microbench) across the
   same seams production uses (NullSink in smoke runs).
+- The **Config locator** chooses a **Config document** when `-c` is omitted.
+  **Config document** authoring (`init` / `add task`) appends only; the
+  **Config schema** is generated for editors and must stay in sync with the
+  **Command kind catalog** kind keys. **Task status** joins Tasks with History
+  for `list`. Splitting files for execution remains **Sub-config** (ADR-0007) —
+  not load-time include. **Authoring recipes** are deferred emitters on the
+  Config document module.
 
 ## Example dialogue
 
@@ -179,5 +217,7 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
   - **CLI command** (`cli::Command`): the clap subcommand the user types,
     including non-execution verbs. Maps to a **Mode** for execution verbs only.
   Use the qualified term; never a bare "command".
+  Non-execution verbs now include `list`, `validate`, `init`, `add`, `schema`,
+  and `completions`.
 - **"Engine" vs "Runner"** — the crate has an `engine` module, but the executing
   component is the **Runner**. Say "runner" for the thing that runs tasks.

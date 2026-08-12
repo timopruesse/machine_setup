@@ -5,6 +5,18 @@ pub enum Error {
     #[error("Config file not found: {0}")]
     ConfigNotFound(PathBuf),
 
+    #[error("Config file already exists: {0}")]
+    ConfigAlreadyExists(PathBuf),
+
+    #[error("Task already exists in Config document: {0}")]
+    TaskAlreadyExists(String),
+
+    #[error(
+        "No Config document found (searched working directory, then git root). \
+         Run `machine_setup init` or pass `-c <path>`."
+    )]
+    ConfigNotLocated,
+
     #[error("Unsupported config format: {0}")]
     UnsupportedFormat(String),
 

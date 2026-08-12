@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- `machine_setup init` and `machine_setup add task <name>` for Config document scaffolding (append-only; validate after write)
+- `machine_setup schema` plus checked-in `schema/machine_setup.schema.json` (CI stale check; yaml-language-server modeline on `init`)
+- Config locator: when `-c` is omitted, search cwd then git repository root for `machine_setup.{yaml,yml,json}`
+- `list` shows install status and History timestamps alongside each Task
+
+### Changed
+- `-c` / `--config` no longer defaults to `./machine_setup`; omit it to use the Config locator
+
 ## [2.4.7]
 
 ### Added

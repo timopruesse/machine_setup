@@ -16,6 +16,10 @@ use super::setup::SetupCommand;
 use super::symlink::SymlinkCommand;
 use super::CommandExecutor;
 
+/// YAML/JSON keys for Command entry kinds — single list for schema generation
+/// and authoring docs. Keep in sync with `CommandEntry` Deserialize.
+pub const KIND_KEYS: &[&str] = &["copy", "symlink", "clone", "run", "machine_setup"];
+
 /// Severity for kind-level validation notes (mapped by `config::validate`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KindSeverity {

@@ -10,9 +10,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 
-    /// Path or URL to config file (YAML/JSON auto-detected)
-    #[arg(short, long, global = true, default_value = "./machine_setup")]
-    pub config: String,
+    /// Path or URL to config file (YAML/JSON). When omitted, searches cwd then git root.
+    #[arg(short, long, global = true)]
+    pub config: Option<String>,
 
     /// Run only a specific task by name
     #[arg(short, long, global = true)]
@@ -51,15 +51,33 @@ pub enum Command {
     Update,
     /// Uninstall all or selected tasks
     Uninstall,
-    /// List all defined tasks
+    /// List defined tasks with install status from History
     List,
     /// Validate config file without executing
     Validate,
+    /// Create a new empty Config document (refuses if it already exists)
+    Init,
+    /// Append to the Config document
+    Add {
+        #[command(subcommand)]
+        target: AddTarget,
+    },
+    /// Print the Config schema (JSON Schema) to stdout
+    Schema,
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum AddTarget {
+    /// Append a minimal Task stub
+    Task {
+        /// Task name
+        name: String,
     },
 }
 
@@ -71,6 +89,9 @@ impl std::fmt::Display for Command {
             Command::Uninstall => write!(f, "uninstall"),
             Command::List => write!(f, "list"),
             Command::Validate => write!(f, "validate"),
+            Command::Init => write!(f, "init"),
+            Command::Add { .. } => write!(f, "add"),
+            Command::Schema => write!(f, "schema"),
             Command::Completions { .. } => write!(f, "completions"),
         }
     }

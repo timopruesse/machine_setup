@@ -1,0 +1,278 @@
+{
+  "$defs": {
+    "commandEntry": {
+      "description": "One Command entry (exactly one kind key)",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "copy": {
+              "additionalProperties": false,
+              "properties": {
+                "ignore": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "src": {
+                  "type": "string"
+                },
+                "sudo": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "target": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "src",
+                "target"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "copy"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "symlink": {
+              "additionalProperties": false,
+              "properties": {
+                "force": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "ignore": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "src": {
+                  "type": "string"
+                },
+                "sudo": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "target": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "src",
+                "target"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "symlink"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "clone": {
+              "additionalProperties": false,
+              "properties": {
+                "target": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url",
+                "target"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "clone"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "run": {
+              "additionalProperties": false,
+              "properties": {
+                "commands": {
+                  "$ref": "#/$defs/stringOrVec"
+                },
+                "env": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "install": {
+                  "$ref": "#/$defs/stringOrVec"
+                },
+                "shell": {
+                  "enum": [
+                    "bash",
+                    "zsh",
+                    "powershell"
+                  ],
+                  "type": "string"
+                },
+                "uninstall": {
+                  "$ref": "#/$defs/stringOrVec"
+                },
+                "update": {
+                  "$ref": "#/$defs/stringOrVec"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "run"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "machine_setup": {
+              "additionalProperties": false,
+              "properties": {
+                "config": {
+                  "type": "string"
+                },
+                "task": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "config"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "machine_setup"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "osFilter": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "stringOrVec": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "task": {
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "items": {
+            "$ref": "#/$defs/commandEntry"
+          },
+          "type": "array"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "only_if": {
+          "$ref": "#/$defs/stringOrVec"
+        },
+        "os": {
+          "$ref": "#/$defs/osFilter"
+        },
+        "parallel": {
+          "default": false,
+          "type": "boolean"
+        },
+        "retry": {
+          "default": 0,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skip_if": {
+          "$ref": "#/$defs/stringOrVec"
+        }
+      },
+      "required": [
+        "commands"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/timopruesse/machine_setup/main/schema/machine_setup.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "default_shell": {
+      "default": "bash",
+      "enum": [
+        "bash",
+        "zsh",
+        "powershell"
+      ],
+      "type": "string"
+    },
+    "num_threads": {
+      "description": "Concurrency gate size (default: physical CPUs - 1)",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "parallel": {
+      "default": false,
+      "description": "Run all Tasks in parallel",
+      "type": "boolean"
+    },
+    "tasks": {
+      "additionalProperties": {
+        "$ref": "#/$defs/task"
+      },
+      "description": "Named Tasks",
+      "type": "object"
+    },
+    "temp_dir": {
+      "description": "Directory for temp files and History (default: ~/.machine_setup)",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tasks"
+  ],
+  "title": "machine_setup Config document",
+  "type": "object"
+}

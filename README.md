@@ -61,17 +61,22 @@ cargo install machine_setup
 | install      | install the defined tasks                | `machine_setup install`              |
 | update       | update the defined tasks                 | `machine_setup update`               |
 | uninstall    | uninstall the defined tasks              | `machine_setup uninstall`            |
-| list         | list all of the defined tasks            | `machine_setup list`                 |
+| list         | list tasks with install status           | `machine_setup list`                 |
 | validate     | validate the config without executing    | `machine_setup validate`             |
+| init         | create a new empty Config document       | `machine_setup init`                 |
+| add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
+| schema       | print the Config JSON Schema to stdout   | `machine_setup schema`               |
 | completions  | generate shell completions               | `machine_setup completions zsh`      |
 
-By default, `machine_setup` looks for `./machine_setup`. If that path has no extension, it tries `.yaml`, then `.yml`, then `.json`. Supported formats are YAML and JSON.
+By default (no `-c`), `machine_setup` looks for `machine_setup.yaml` / `.yml` / `.json` in the current directory, then at the git repository root. Explicit `-c` still accepts a path or URL. Supported formats are YAML and JSON.
+
+`init` always creates `./machine_setup.yaml` in the cwd when `-c` is omitted (it does not write into the git root). `add task` requires an existing file (`init` first) and refuses duplicate Task names. After `init` / `add`, the Config document is validated automatically.
 
 ### Command line parameters
 
 | flag              | value                                             | example                                            |
 | ----------------- | ------------------------------------------------- | -------------------------------------------------- |
-| -c<br> --config   | path or URL to the config file                    | `machine_setup install -c ./config/my_setup.yaml`  |
+| -c<br> --config   | path or URL to the config file (omit to search cwd, then git root) | `machine_setup install -c ./config/my_setup.yaml`  |
 | -t<br> --task     | only run the specified task                       | `machine_setup install -t my_task2`                |
 | -s<br> --select   | select a task to run                              | `machine_setup install -s`                         |
 | --with-deps       | also run transitive `depends_on` tasks            | `machine_setup update -t leaf --with-deps`         |
@@ -119,6 +124,17 @@ The TUI is automatically disabled in non-interactive environments (piped output,
 Tasks can be defined under the `tasks` root key.
 Every task can contain an arbitrary number of commands.
 
+Scaffold a new file and grow it with Task stubs:
+
+```bash
+machine_setup init
+machine_setup add task tools
+# edit commands under tasks.tools, then:
+machine_setup validate
+```
+
+Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing at the checked-in [schema/machine_setup.schema.json](schema/machine_setup.schema.json). Regenerate with `make schema` (CI fails if the artifact is stale). Semantic checks (`depends_on`, missing sources, …) stay in `machine_setup validate` — the schema is structural only.
+
 | key           | description                                          | values                       | default                      |
 | ------------- | ---------------------------------------------------- | ---------------------------- | ---------------------------- |
 | tasks         | root key for all of the tasks                        |                              |                              |
@@ -134,6 +150,9 @@ Every task can contain an arbitrary number of commands.
 | os         | only run on the specified os                               | [possible values](https://doc.rust-lang.org/std/env/consts/constant.OS.html) | "linux" or ["linux", "macos"] |
 | parallel   | run all of the commands in parallel (1 thread per command) | `true` or `false`                                                            | `false`                       |
 | depends_on | run these tasks first (install always expands the chain)   | list of task names                                                           | `["base"]`                    |
+| only_if    | only run if all listed paths exist                         | string or list                                                               | `"~/.ssh"`                    |
+| skip_if    | skip if any listed path exists                             | string or list                                                               | `"/opt/skip"`                 |
+| retry      | retry count on failure (0 = no retry)                      | integer ≥ 0                                                                  | `2`                           |
 
 On `update` / `uninstall`, `-t` / `-s` run only the selected tasks unless you pass `--with-deps`. Interactive uninstall can offer remaining dependencies; uninstall also warns if other tasks still depend on something in the run set.
 

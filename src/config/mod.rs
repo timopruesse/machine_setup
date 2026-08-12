@@ -1,7 +1,11 @@
+pub mod document;
 pub mod graph;
 pub mod history;
+pub mod locator;
 pub mod os;
+pub mod schema;
 pub mod selection;
+pub mod status;
 pub mod types;
 pub mod validate;
 
@@ -23,6 +27,24 @@ pub fn resolve_config_dir(path_or_url: &str, fallback: &Path) -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| fallback.to_path_buf())
+}
+
+/// Resolve which Config document to load.
+///
+/// - `Some(path_or_url)` — explicit `-c` (local extension probe or URL).
+/// - `None` — Config locator (cwd, then git root).
+pub fn resolve_config_source(config_arg: Option<&str>, cwd: &Path) -> Result<String> {
+    match config_arg {
+        Some(raw) if is_url(raw) => Ok(raw.to_string()),
+        Some(raw) => {
+            let resolved = resolve_config_path(Path::new(raw))?;
+            Ok(resolved.to_string_lossy().into_owned())
+        }
+        None => {
+            let path = locator::find(cwd)?;
+            Ok(path.to_string_lossy().into_owned())
+        }
+    }
 }
 
 /// Load a config from a local path or URL, auto-detecting format from extension.
@@ -64,7 +86,11 @@ fn load_config_from_url(url: &str) -> Result<AppConfig> {
 }
 
 fn load_config_from_path(path: &Path) -> Result<AppConfig> {
-    let resolved = resolve_config_path(path)?;
+    let resolved = if path.exists() && path.is_file() {
+        path.to_path_buf()
+    } else {
+        resolve_config_path(path)?
+    };
     let content = std::fs::read_to_string(&resolved)?;
     let ext = resolved.extension().and_then(|e| e.to_str()).unwrap_or("");
 
@@ -88,8 +114,6 @@ fn parse_config(content: &str, ext: &str) -> Result<AppConfig> {
 /// Convert GitHub blob URLs to raw.githubusercontent.com URLs.
 /// Other URLs are returned as-is.
 fn to_raw_url(url: &str) -> String {
-    // https://github.com/user/repo/blob/branch/path/to/file.yaml
-    // → https://raw.githubusercontent.com/user/repo/branch/path/to/file.yaml
     if let Some(rest) = url
         .strip_prefix("https://github.com/")
         .or_else(|| url.strip_prefix("http://github.com/"))
@@ -106,7 +130,6 @@ fn to_raw_url(url: &str) -> String {
 
 /// Extract file extension from a URL path.
 fn url_extension(url: &str) -> String {
-    // Strip query string and fragment
     let path = url.split('?').next().unwrap_or(url);
     let path = path.split('#').next().unwrap_or(path);
 
@@ -118,7 +141,7 @@ fn url_extension(url: &str) -> String {
 }
 
 /// Resolve the config path, trying common extensions if none is present.
-fn resolve_config_path(path: &Path) -> Result<std::path::PathBuf> {
+pub fn resolve_config_path(path: &Path) -> Result<std::path::PathBuf> {
     if path.exists() && path.is_file() {
         return Ok(path.to_path_buf());
     }
@@ -239,5 +262,13 @@ tasks:
             url_extension("https://example.com/config.yml#section"),
             "yml"
         );
+    }
+
+    #[test]
+    fn resolve_config_source_none_uses_locator() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("machine_setup.yaml"), "tasks: {}\n").unwrap();
+        let src = resolve_config_source(None, dir.path()).unwrap();
+        assert!(src.ends_with("machine_setup.yaml"));
     }
 }

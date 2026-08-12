@@ -1,10 +1,11 @@
-use machine_setup::{cli, config, engine, error, tui};
+use machine_setup::{cli, config, engine, tui};
 
 use clap::{CommandFactory, Parser};
 use std::io::IsTerminal;
+use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
-use cli::{Cli, Command};
+use cli::{AddTarget, Cli, Command};
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
@@ -18,8 +19,42 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Load config (supports local paths and URLs)
-    let app_config = config::load_config(&cli.config)?;
+    // Schema dump (no Config document needed)
+    if cli.command == Command::Schema {
+        let schema = config::schema::generate_pretty()?;
+        println!("{schema}");
+        return Ok(());
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_default();
+
+    // Authoring verbs mutate the Config document
+    if cli.command == Command::Init {
+        let path = config::document::resolve_init_path(cli.config.as_deref(), &cwd);
+        config::document::init(&path)?;
+        println!("Created {}", path.display());
+        if config::document::validate_after_write(&path)? {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    if let Command::Add {
+        target: AddTarget::Task { name },
+    } = &cli.command
+    {
+        let path = resolve_existing_document(cli.config.as_deref(), &cwd)?;
+        config::document::add_task(&path, name)?;
+        println!("Added task `{name}` to {}", path.display());
+        if config::document::validate_after_write(&path)? {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    // Load config (supports local paths, URLs, and locator when `-c` omitted)
+    let config_source = config::resolve_config_source(cli.config.as_deref(), &cwd)?;
+    let app_config = config::load_config(&config_source)?;
 
     // Handle list command
     if cli.command == Command::List {
@@ -29,8 +64,7 @@ fn main() -> anyhow::Result<()> {
 
     // Handle validate command
     if cli.command == Command::Validate {
-        let cwd = std::env::current_dir().unwrap_or_default();
-        let config_dir = config::resolve_config_dir(&cli.config, &cwd);
+        let config_dir = config::resolve_config_dir(&config_source, &cwd);
 
         let issues = config::validate::validate_config(&app_config, &config_dir);
         if issues.is_empty() {
@@ -68,7 +102,7 @@ fn main() -> anyhow::Result<()> {
 
     // All non-execution verbs returned above.
     let mode = Mode::from_command(&cli.command)
-        .expect("list/validate/completions are handled before this point");
+        .expect("list/validate/init/add/schema/completions are handled before this point");
 
     let interactive = std::io::stdin().is_terminal() && !cli.no_tui;
     let task_names =
@@ -84,60 +118,65 @@ fn main() -> anyhow::Result<()> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    rt.block_on(run_execution(cli, app_config, task_names))
+    rt.block_on(run_execution(cli, app_config, config_source, task_names))
+}
+
+/// Path for add/list-style ops that need an existing local Config document.
+fn resolve_existing_document(
+    config_arg: Option<&str>,
+    cwd: &Path,
+) -> anyhow::Result<std::path::PathBuf> {
+    if let Some(raw) = config_arg {
+        if config::is_url(raw) {
+            anyhow::bail!("`add` requires a local Config document path, not a URL");
+        }
+        let path = config::resolve_config_path(Path::new(raw))?;
+        return Ok(path);
+    }
+    Ok(config::locator::find(cwd)?)
 }
 
 async fn run_execution(
     cli: Cli,
     app_config: config::types::AppConfig,
+    config_source: String,
     task_names: Vec<String>,
 ) -> anyhow::Result<()> {
-    // Resolve config directory for relative paths (URLs fall back to cwd)
     let cwd = std::env::current_dir().unwrap_or_default();
-    let config_dir = config::resolve_config_dir(&cli.config, &cwd);
+    let config_dir = config::resolve_config_dir(&config_source, &cwd);
 
-    // Create event channel and cancellation token
     let (events, event_rx) = engine::sink::ChannelSink::channel();
     let cancel = CancellationToken::new();
 
-    // Determine if we should use the TUI
     let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
 
-    // Pre-authenticate sudo before TUI takes over the terminal
     if use_tui && app_config.requires_sudo(&task_names) {
         pre_authenticate_sudo();
     }
 
-    // All non-execution verbs (list/validate/completions) returned above, so
-    // the remaining command always maps to an execution mode.
     let mode = Mode::from_command(&cli.command)
-        .expect("list/validate/completions are handled before this point");
+        .expect("list/validate/init/add/schema/completions are handled before this point");
 
-    // Set up runner (moves app_config)
     let runner = TaskRunner::new(app_config, mode, events).with_config_dir(config_dir);
     let force = cli.force;
     let task_names_clone = task_names.clone();
 
     if use_tui {
-        // Spawn engine in background
         let engine_cancel = cancel.clone();
         let engine_handle = tokio::spawn(async move {
             tokio::select! {
                 result = run_engine(runner, &task_names_clone, force) => result,
                 _ = engine_cancel.cancelled() => {
-                    Ok(()) // Cancelled by user
+                    Ok(())
                 }
             }
         });
 
-        // Run TUI in foreground (blocks until user quits)
         tui::run(event_rx, task_names, mode, cancel).await?;
 
-        // Abort engine if still running
         engine_handle.abort();
         let _ = engine_handle.await;
     } else {
-        // Plain mode: set up logging
         let log_level = if cli.debug {
             "debug"
         } else {
@@ -150,17 +189,14 @@ async fn run_execution(
             )
             .init();
 
-        // Handle Ctrl+C in plain mode
         let plain_cancel = cancel.clone();
         tokio::spawn(async move {
             let _ = tokio::signal::ctrl_c().await;
             plain_cancel.cancel();
         });
 
-        // Spawn plain consumer
         let consumer = tokio::spawn(tui::plain::run(event_rx));
 
-        // Run engine
         let result = tokio::select! {
             result = run_engine(runner, &task_names, force) => result,
             _ = cancel.cancelled() => {
@@ -169,7 +205,6 @@ async fn run_execution(
             }
         };
 
-        // Wait for consumer to drain
         drop(result);
         let _ = consumer.await;
     }
@@ -181,7 +216,7 @@ async fn run_engine(
     runner: TaskRunner,
     task_names: &[String],
     force: bool,
-) -> crate::error::Result<()> {
+) -> machine_setup::error::Result<()> {
     if task_names.len() == 1 {
         runner.run_single_task(&task_names[0], force).await
     } else {
@@ -190,21 +225,34 @@ async fn run_engine(
 }
 
 fn print_task_list(config: &config::types::AppConfig) {
-    println!("Defined tasks:\n");
-    for (name, task) in &config.tasks {
-        let os_info = match &task.os {
-            config::os::OsFilter::All => "all".to_string(),
-            config::os::OsFilter::Single(os) => os.to_string(),
-            config::os::OsFilter::Multiple(oses) => oses
-                .iter()
-                .map(|o| o.to_string())
-                .collect::<Vec<_>>()
-                .join(", "),
-        };
-        let parallel = if task.parallel { " [parallel]" } else { "" };
-        println!("  {name} (os: {os_info}){parallel}");
+    use config::status::{format_ts, os_label, rows};
+    use machine_setup::utils::path::expand_path;
 
-        for cmd in &task.commands {
+    let temp_dir = expand_path(&config.temp_dir, None);
+    let history = config::history::History::load(&temp_dir).unwrap_or_default();
+
+    println!("Defined tasks:\n");
+    for row in rows(config, &history) {
+        let installed = if row.installed { "yes" } else { "no" };
+        let os_note = if row.os_applies {
+            String::new()
+        } else {
+            " [os: skipped on this host]".to_string()
+        };
+        let parallel = if row.task.parallel { " [parallel]" } else { "" };
+
+        let (installed_at, updated_at) = match row.history {
+            Some(h) => (format_ts(h.installed_at), format_ts(h.updated_at)),
+            None => ("-".into(), "-".into()),
+        };
+
+        println!(
+            "  {} (os: {}, installed: {installed}, installed_at: {installed_at}, updated_at: {updated_at}){parallel}{os_note}",
+            row.name,
+            os_label(&row.task.os),
+        );
+
+        for cmd in &row.task.commands {
             println!("    - {cmd}");
         }
         println!();
@@ -212,20 +260,17 @@ fn print_task_list(config: &config::types::AppConfig) {
 }
 
 /// Run `sudo -v` to cache credentials before the TUI takes over stdin.
-/// This way sudo commands inside tasks won't hang waiting for a password prompt.
 fn pre_authenticate_sudo() {
     #[cfg(unix)]
     {
         use std::process::Command as StdCommand;
 
-        // Check if sudo is available
         if StdCommand::new("sudo")
             .arg("-n")
             .arg("true")
             .status()
             .is_ok_and(|s| s.success())
         {
-            // Already authenticated (passwordless or cached), no prompt needed
             return;
         }
 
@@ -247,9 +292,6 @@ fn select_tasks(config: &config::types::AppConfig) -> anyhow::Result<Vec<String>
         .items(&task_names)
         .interact()?;
 
-    // `std::mem::take` transfers ownership of each selected name out of the
-    // vec without cloning. `selections` is sorted and unique, so no slot is
-    // taken twice.
     Ok(selections
         .into_iter()
         .map(|i| std::mem::take(&mut task_names[i]))
@@ -257,7 +299,6 @@ fn select_tasks(config: &config::types::AppConfig) -> anyhow::Result<Vec<String>
 }
 
 /// Apply mode-aware dependency expansion / uninstall prompts.
-/// Returns `None` if the user declines the shared-dep confirmation.
 fn resolve_selected_tasks(
     config: &config::types::AppConfig,
     selected: Vec<String>,

@@ -13,8 +13,12 @@ make check        # cargo check
 make lint         # cargo fmt --check + cargo clippy --all-features -- -D warnings
 make test         # cargo test
 make build        # cargo build --release
+make schema       # regenerate schema/machine_setup.schema.json
 make run          # cargo run -- install -c ./example_config.yaml
 ```
+
+Authoring QoL: `init`, `add task`, `schema`; Config locator (cwd → git root); `list` shows History.
+See ADR-0007 and CONTEXT.md.
 
 Run a single test by name:
 ```bash

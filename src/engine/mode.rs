@@ -3,9 +3,10 @@ use crate::cli::Command;
 /// The execution modes the engine actually acts on.
 ///
 /// Distinct from the CLI [`Command`], which also carries non-execution verbs
-/// (`list`, `validate`, `completions`) that never reach the engine. Keeping
-/// `Mode` separate means every match over an execution mode is exhaustive in
-/// three real arms instead of carrying dead arms for verbs that can't occur.
+/// (`list`, `validate`, `init`, `add`, `schema`, `completions`) that never
+/// reach the engine. Keeping `Mode` separate means every match over an
+/// execution mode is exhaustive in three real arms instead of carrying dead
+/// arms for verbs that can't occur.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Install,
@@ -15,14 +16,19 @@ pub enum Mode {
 
 impl Mode {
     /// Map a CLI command to an execution mode. Returns `None` for verbs that
-    /// don't drive task execution (`list`, `validate`, `completions`); the
-    /// caller handles those before the engine is ever constructed.
+    /// don't drive task execution; the caller handles those before the engine
+    /// is ever constructed.
     pub fn from_command(command: &Command) -> Option<Self> {
         match command {
             Command::Install => Some(Mode::Install),
             Command::Update => Some(Mode::Update),
             Command::Uninstall => Some(Mode::Uninstall),
-            Command::List | Command::Validate | Command::Completions { .. } => None,
+            Command::List
+            | Command::Validate
+            | Command::Init
+            | Command::Add { .. }
+            | Command::Schema
+            | Command::Completions { .. } => None,
         }
     }
 }
@@ -40,6 +46,7 @@ impl std::fmt::Display for Mode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::AddTarget;
 
     #[test]
     fn test_from_command_execution_verbs() {
@@ -55,6 +62,14 @@ mod tests {
     fn test_from_command_non_execution_verbs() {
         assert_eq!(Mode::from_command(&Command::List), None);
         assert_eq!(Mode::from_command(&Command::Validate), None);
+        assert_eq!(Mode::from_command(&Command::Init), None);
+        assert_eq!(
+            Mode::from_command(&Command::Add {
+                target: AddTarget::Task { name: "x".into() }
+            }),
+            None
+        );
+        assert_eq!(Mode::from_command(&Command::Schema), None);
         assert_eq!(
             Mode::from_command(&Command::Completions {
                 shell: clap_complete::Shell::Bash
