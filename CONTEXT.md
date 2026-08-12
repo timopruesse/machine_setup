@@ -12,7 +12,8 @@ aliases) in code, comments, and reviews.
 **Config document**:
 The user-authored YAML/JSON file that declares root settings and Tasks. Distinct
 from the loaded in-memory config and from History. Authoring mutates it only by
-creating a new file or appending a new Task — not by rewriting existing Tasks.
+creating a new file or appending a new Task — not by rewriting existing Tasks
+(ADR-0008).
 _Avoid_: setup file, machine file, config source.
 
 **Config schema**:
@@ -195,8 +196,9 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
   **Config document** authoring (`init` / `add task`) appends only; the
   **Config schema** is generated for editors and must stay in sync with the
   **Command kind catalog** kind keys. **Task status** joins Tasks with History
-  for `list`. Splitting files for execution remains **Sub-config** (ADR-0007) —
-  not load-time include. **Authoring recipes** are deferred emitters on the
+  for `list` / `doctor`. Splitting files for execution remains **Sub-config**
+  (ADR-0007) — not load-time include. In-place Task rewrite is rejected
+  (ADR-0008). **Authoring recipes** and the **Config wizard** append via the
   Config document module.
 
 ## Example dialogue
