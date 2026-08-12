@@ -9,6 +9,7 @@ pub mod selection;
 pub mod status;
 pub mod types;
 pub mod validate;
+pub mod wizard;
 
 use std::path::{Path, PathBuf};
 

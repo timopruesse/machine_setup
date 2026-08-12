@@ -57,6 +57,8 @@ pub enum Command {
     Validate,
     /// Create a new empty Config document (refuses if it already exists)
     Init,
+    /// Interactive Config document setup (TTY required)
+    Wizard,
     /// Append to the Config document
     Add {
         #[command(subcommand)]
@@ -138,6 +140,7 @@ impl std::fmt::Display for Command {
             Command::List => write!(f, "list"),
             Command::Validate => write!(f, "validate"),
             Command::Init => write!(f, "init"),
+            Command::Wizard => write!(f, "wizard"),
             Command::Add { .. } => write!(f, "add"),
             Command::Schema => write!(f, "schema"),
             Command::Completions { .. } => write!(f, "completions"),

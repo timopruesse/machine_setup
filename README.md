@@ -64,6 +64,7 @@ cargo install machine_setup
 | list         | list tasks with install status           | `machine_setup list`                 |
 | validate     | validate the config without executing    | `machine_setup validate`             |
 | init         | create a new empty Config document       | `machine_setup init`                 |
+| wizard       | interactive Config document setup (TTY)  | `machine_setup wizard`               |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
 | add recipe   | append a Task from an Authoring recipe   | `machine_setup add recipe git-repo --url … --target ~` |
 | schema       | print the Config JSON Schema to stdout   | `machine_setup schema`               |
@@ -133,6 +134,8 @@ machine_setup add task tools
 machine_setup add recipe dotfiles --url git@github.com:user/.dotfiles.git
 machine_setup add recipe brew-bundle --file ./Brewfile
 machine_setup add recipe git-repo --url https://github.com/user/repo.git --target ~/projects/repo
+# or interactively:
+machine_setup wizard
 # edit as needed, then:
 machine_setup validate
 ```

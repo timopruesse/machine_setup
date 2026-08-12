@@ -33,6 +33,12 @@ entry kinds (`clone`, `symlink`, `run`, …). Not a new kind and not YAML sugar
 in the Config document. Initial recipes: `dotfiles`, `brew-bundle`, `git-repo`.
 _Avoid_: plugin, template pack, command kind.
 
+**Config wizard**:
+The interactive (TTY) adapter for creating a Config document if needed and
+appending blank Tasks or Authoring recipes through prompts. Non-interactive
+authoring stays on `init` / `add`.
+_Avoid_: setup TUI, interactive init.
+
 **Task**:
 A named unit of setup work, made of an ordered list of commands, with optional
 OS filter, conditions, dependencies, and retry.
@@ -217,7 +223,7 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
   - **CLI command** (`cli::Command`): the clap subcommand the user types,
     including non-execution verbs. Maps to a **Mode** for execution verbs only.
   Use the qualified term; never a bare "command".
-  Non-execution verbs now include `list`, `validate`, `init`, `add`, `schema`,
-  and `completions`.
+  Non-execution verbs now include `list`, `validate`, `init`, `wizard`, `add`,
+  `schema`, and `completions`.
 - **"Engine" vs "Runner"** — the crate has an `engine` module, but the executing
   component is the **Runner**. Say "runner" for the thing that runs tasks.

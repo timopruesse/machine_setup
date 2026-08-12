@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - `machine_setup init` and `machine_setup add task <name>` for Config document scaffolding (append-only; validate after write)
 - Authoring recipes: `add recipe dotfiles|git-repo|brew-bundle` (emit existing Command entry kinds only)
+- `machine_setup wizard` — interactive Config document setup (TTY; reuses init/add/recipes)
 - `machine_setup schema` plus checked-in `schema/machine_setup.schema.json` (CI stale check; yaml-language-server modeline on `init`)
 - Config locator: when `-c` is omitted, search cwd then git repository root for `machine_setup.{yaml,yml,json}`
 - `list` shows install status and History timestamps alongside each Task

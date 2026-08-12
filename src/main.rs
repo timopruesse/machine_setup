@@ -39,6 +39,11 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if cli.command == Command::Wizard {
+        config::wizard::run(cli.config.as_deref(), &cwd)?;
+        return Ok(());
+    }
+
     if let Command::Add { target } = &cli.command {
         let path = resolve_existing_document(cli.config.as_deref(), &cwd)?;
         match target {
@@ -109,7 +114,7 @@ fn main() -> anyhow::Result<()> {
 
     // All non-execution verbs returned above.
     let mode = Mode::from_command(&cli.command)
-        .expect("list/validate/init/add/schema/completions are handled before this point");
+        .expect("non-execution verbs are handled before this point");
 
     let interactive = std::io::stdin().is_terminal() && !cli.no_tui;
     let task_names =
@@ -194,7 +199,7 @@ async fn run_execution(
     }
 
     let mode = Mode::from_command(&cli.command)
-        .expect("list/validate/init/add/schema/completions are handled before this point");
+        .expect("non-execution verbs are handled before this point");
 
     let runner = TaskRunner::new(app_config, mode, events).with_config_dir(config_dir);
     let force = cli.force;

@@ -26,6 +26,7 @@ impl Mode {
             Command::List
             | Command::Validate
             | Command::Init
+            | Command::Wizard
             | Command::Add { .. }
             | Command::Schema
             | Command::Completions { .. } => None,
@@ -63,6 +64,7 @@ mod tests {
         assert_eq!(Mode::from_command(&Command::List), None);
         assert_eq!(Mode::from_command(&Command::Validate), None);
         assert_eq!(Mode::from_command(&Command::Init), None);
+        assert_eq!(Mode::from_command(&Command::Wizard), None);
         assert_eq!(
             Mode::from_command(&Command::Add {
                 target: AddTarget::Task { name: "x".into() }
