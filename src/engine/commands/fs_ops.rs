@@ -23,6 +23,9 @@ pub trait FileOps: Send + Sync {
     fn mkdir_p(&self, path: &Path) -> Result<()>;
 
     /// Copy a single regular file from `src` to `dest`.
+    ///
+    /// Callers must ensure `dest`'s parent directory already exists (the
+    /// Tree-op driver / Tree materialization `ensure_dir` path does this).
     fn copy_file(&self, src: &Path, dest: &Path) -> Result<()>;
 
     /// Create a symlink at `dest` pointing to `src`.
@@ -64,12 +67,6 @@ impl FileOps for DirectFs {
     }
 
     fn copy_file(&self, src: &Path, dest: &Path) -> Result<()> {
-        // Tree materialization already ensures parents; only create when missing.
-        if let Some(parent) = dest.parent() {
-            if !parent.is_dir() {
-                std::fs::create_dir_all(parent)?;
-            }
-        }
         std::fs::copy(src, dest)?;
         Ok(())
     }
@@ -282,8 +279,9 @@ mod tests {
         ops.mkdir_p(&nested).unwrap();
         assert!(nested.is_dir());
 
-        // copy_file creates intermediate parents on its own.
+        // Callers ensure parents (Tree-op driver); DirectFs does not mkdir.
         let dest = dir.path().join("out/copied.txt");
+        ops.mkdir_p(dest.parent().unwrap()).unwrap();
         ops.copy_file(&src, &dest).unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"hello");
     }

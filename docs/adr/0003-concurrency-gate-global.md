@@ -12,3 +12,11 @@ Task can starve siblings; per-Task sub-quotas are a future fix. The gate also
 owns a shared Rayon pool of the same size for in-tree DirectFs file apply
 (ADR-0004) so sibling commands do not each spawn a private worker set. The
 pool is created lazily on first tree-apply use, not when the gate is built.
+
+## Deferred: separate tree-apply admission
+
+Leaf permits and the shared Rayon pool stay one width today. A second admission
+knob (or exclusive tree-apply slot) so multiple `pool.install` callers cannot
+oversubscribe the same workers is **deferred** until Command bench
+(`parallel_two_copy_tasks_1k` or a successor) shows contention or unfairness
+worth the complexity. Do not split the knobs preemptively.

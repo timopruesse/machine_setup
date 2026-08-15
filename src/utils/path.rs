@@ -85,17 +85,26 @@ fn expand_env_vars(input: &str) -> String {
 /// precomputed destination path (`target` joined with the entry's
 /// `src`-relative suffix).
 ///
+/// Ignored **directories** are not descended into; ignored **files** are
+/// skipped. The walk root (`src`) is never pruned by ignore.
+///
 /// `strip_prefix` is guaranteed to succeed because every WalkDir entry is
 /// rooted at `src`.
 pub fn walk_relative<F>(src: &Path, target: &Path, ignore_list: &[String], mut f: F) -> Result<()>
 where
     F: FnMut(&DirEntry, &Path) -> Result<()>,
 {
-    for entry in WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
-        let relative = entry.path().strip_prefix(src).unwrap_or(entry.path());
-        if should_ignore(relative, ignore_list) {
-            continue;
+    let walker = WalkDir::new(src).into_iter().filter_entry(|entry| {
+        // Never prune the walk root — ignore applies only to descendants.
+        if entry.depth() == 0 {
+            return true;
         }
+        let relative = entry.path().strip_prefix(src).unwrap_or(entry.path());
+        !should_ignore(relative, ignore_list)
+    });
+
+    for entry in walker.filter_map(|e| e.ok()) {
+        let relative = entry.path().strip_prefix(src).unwrap_or(entry.path());
         let dest = target.join(relative);
         f(&entry, &dest)?;
     }
@@ -182,5 +191,43 @@ mod tests {
             Path::new("/path/to/config.yaml"),
             &["README.md".to_string()]
         ));
+    }
+
+    #[test]
+    fn walk_relative_prunes_ignored_directory_children() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(src.join("keep")).unwrap();
+        std::fs::create_dir_all(src.join("skip_me/nested")).unwrap();
+        std::fs::write(src.join("keep/a.txt"), b"a").unwrap();
+        std::fs::write(src.join("skip_me/secret.txt"), b"s").unwrap();
+        std::fs::write(src.join("skip_me/nested/deep.txt"), b"d").unwrap();
+        std::fs::write(src.join("root.txt"), b"r").unwrap();
+
+        let target = dir.path().join("dst");
+        let mut seen = Vec::new();
+        walk_relative(&src, &target, &["skip_me".to_string()], |entry, _dest| {
+            let rel = entry
+                .path()
+                .strip_prefix(&src)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
+            seen.push(rel);
+            Ok(())
+        })
+        .unwrap();
+
+        seen.sort();
+        assert!(
+            !seen
+                .iter()
+                .any(|p| p.contains("skip_me") || p.contains("secret") || p.contains("deep")),
+            "ignored subtree must not be visited: {seen:?}"
+        );
+        assert!(seen
+            .iter()
+            .any(|p| p == "root.txt" || p.ends_with("root.txt")));
+        assert!(seen.iter().any(|p| p.contains("a.txt")));
     }
 }

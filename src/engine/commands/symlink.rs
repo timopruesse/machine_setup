@@ -113,11 +113,6 @@ fn symlink_one(
         }
     }
 
-    if let Some(parent) = dest.parent() {
-        // Parent was ensured by install_tree; only unwrap leftover dir symlinks.
-        tree::ensure_real_dir(ops, parent, |_| {})?;
-    }
-
     if would_self_symlink(src, dest) {
         return Err(Error::PathError(format!(
             "Refusing to create self-symlink: {} -> {}",

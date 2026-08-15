@@ -146,8 +146,10 @@ _Avoid_: fs helper, file utils.
 **Tree materialization**:
 The shared traversal behind `copy` and `symlink`: destination resolution (the
 file-vs-directory target rule) plus the install/uninstall walk, parameterized by
-a per-file operation. Directory installs mkdir sequentially, then apply files on
-the Concurrency gate's shared Rayon pool (ADR-0004).
+a per-file operation. Ignore skips matching files and does not descend into
+matching directories (the walk root is never ignored). Directory installs mkdir
+sequentially, then apply files on the Concurrency gate's shared Rayon pool
+(ADR-0004).
 _Avoid_: file walker, copier.
 
 **Tree-op driver**:

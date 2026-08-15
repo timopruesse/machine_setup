@@ -136,18 +136,29 @@ impl TreeOpKind for CopyKind {
     }
 }
 
+/// True when `dest` exists and is at least as new as `src` (mtime skip).
+///
+/// Uses `metadata` only — no separate `exists()` — so the already-synced
+/// hot path pays fewer syscalls. Shared with Command bench.
+pub fn should_skip_copy(src: &Path, dest: &Path) -> bool {
+    let Ok(dest_meta) = std::fs::metadata(dest) else {
+        return false;
+    };
+    let Ok(src_meta) = std::fs::metadata(src) else {
+        return false;
+    };
+    match (src_meta.modified(), dest_meta.modified()) {
+        (Ok(src_mod), Ok(dest_mod)) => dest_mod >= src_mod,
+        _ => false,
+    }
+}
+
 /// Copy a single file, skipping when the destination is already at least as
 /// new as the source.
 fn copy_one(ops: &dyn FileOps, src: &Path, dest: &Path, progress: &FileProgress<'_>) -> Result<()> {
-    if dest.exists() {
-        if let (Ok(src_meta), Ok(dest_meta)) = (std::fs::metadata(src), std::fs::metadata(dest)) {
-            if let (Ok(src_mod), Ok(dest_mod)) = (src_meta.modified(), dest_meta.modified()) {
-                if dest_mod >= src_mod {
-                    progress.note_skip(|| format!("Skipping (target newer): {}", dest.display()));
-                    return Ok(());
-                }
-            }
-        }
+    if should_skip_copy(src, dest) {
+        progress.note_skip(|| format!("Skipping (target newer): {}", dest.display()));
+        return Ok(());
     }
 
     progress.note_apply(|| format!("Copying: {} -> {}", src.display(), dest.display()));
@@ -192,6 +203,37 @@ mod tests {
         copy_one(&ops, &src, &dest, &progress).unwrap();
         // Skipped: no copy_file recorded.
         assert!(ops.calls().is_empty());
+    }
+
+    #[test]
+    fn should_skip_copy_missing_dest() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s.txt");
+        std::fs::write(&src, b"data").unwrap();
+        let dest = dir.path().join("missing.txt");
+        assert!(!should_skip_copy(&src, &dest));
+    }
+
+    #[test]
+    fn should_skip_copy_when_dest_newer() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s.txt");
+        let dest = dir.path().join("d.txt");
+        std::fs::write(&src, b"old").unwrap();
+        std::fs::write(&dest, b"new").unwrap();
+        assert!(should_skip_copy(&src, &dest));
+    }
+
+    #[test]
+    fn should_skip_copy_when_dest_older() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s.txt");
+        let dest = dir.path().join("d.txt");
+        std::fs::write(&dest, b"old").unwrap();
+        // Ensure src is strictly newer.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&src, b"new").unwrap();
+        assert!(!should_skip_copy(&src, &dest));
     }
 
     #[test]

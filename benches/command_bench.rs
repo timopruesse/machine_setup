@@ -18,6 +18,7 @@ use tempfile::TempDir;
 
 use machine_setup::config;
 use machine_setup::config::types::CommandEntry;
+use machine_setup::engine::commands::copy::should_skip_copy;
 use machine_setup::engine::commands::create_executor;
 use machine_setup::engine::commands::fs_ops::{self, DirectFs, FileOps};
 use machine_setup::engine::commands::tree::{
@@ -177,14 +178,8 @@ fn bench_mtime_skip(c: &mut Criterion) {
                 Some(bench_pool()),
                 |dir| ops.mkdir_p(dir),
                 |src, dest| {
-                    if dest.exists() {
-                        if let (Ok(sm), Ok(dm)) = (fs::metadata(src), fs::metadata(dest)) {
-                            if let (Ok(smod), Ok(dmod)) = (sm.modified(), dm.modified()) {
-                                if dmod >= smod {
-                                    return Ok(());
-                                }
-                            }
-                        }
+                    if should_skip_copy(src, dest) {
+                        return Ok(());
                     }
                     ops.copy_file(src, dest)
                 },
