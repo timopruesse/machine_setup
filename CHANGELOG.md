@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.7.1]
+
+### Fixed
+- Non-interactive `schedule run` demotes/clears `sudo` so launchd/systemd timers do not hang waiting for a password prompt; validate warns when scheduled tasks still declare sudo
+
+### Performance
+- Tree walks prune ignored directories instead of visiting their contents
+- Shared mtime-skip for copy (fewer syscalls on already-synced trees); drop redundant DirectFs parent mkdir and per-file symlink `ensure_real_dir`
+
 ## [2.7.0]
 
 ### Added

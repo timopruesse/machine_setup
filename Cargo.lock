@@ -1087,7 +1087,7 @@ dependencies = [
 
 [[package]]
 name = "machine_setup"
-version = "2.7.0"
+version = "2.7.1"
 dependencies = [
  "anyhow",
  "async-trait",
