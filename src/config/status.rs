@@ -120,6 +120,7 @@ mod tests {
             skip_if: Default::default(),
             depends_on: Default::default(),
             retry: 0,
+            auto_update: None,
         }
     }
 

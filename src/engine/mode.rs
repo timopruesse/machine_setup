@@ -29,6 +29,7 @@ impl Mode {
             | Command::Init
             | Command::Wizard
             | Command::Add { .. }
+            | Command::Schedule { .. }
             | Command::Schema
             | Command::Completions { .. } => None,
         }

@@ -2,10 +2,10 @@ use machine_setup::{cli, config, engine, tui};
 
 use clap::{CommandFactory, Parser};
 use std::io::IsTerminal;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
-use cli::{AddTarget, Cli, Command, RecipeCommand};
+use cli::{AddTarget, Cli, Command, RecipeCommand, ScheduleAction};
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
@@ -113,6 +113,17 @@ fn main() -> anyhow::Result<()> {
         let config_dir = config::resolve_config_dir(&config_source, &cwd);
         let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
         run_doctor(&app_config, &config_dir, fix, use_tui)?;
+        return Ok(());
+    }
+
+    if let Command::Schedule { action } = &cli.command {
+        run_schedule(
+            &app_config,
+            &config_source,
+            &cwd,
+            action.clone(),
+            cli.no_tui,
+        )?;
         return Ok(());
     }
 
@@ -285,6 +296,113 @@ async fn run_engine(
     } else {
         runner.run_tasks(task_names, force).await
     }
+}
+
+fn run_schedule(
+    app_config: &config::types::AppConfig,
+    config_source: &str,
+    cwd: &Path,
+    action: ScheduleAction,
+    _no_tui: bool,
+) -> anyhow::Result<()> {
+    use machine_setup::schedule::{apply, notices, run, status};
+    use machine_setup::utils::path::expand_path;
+
+    let temp_dir = expand_path(&app_config.temp_dir, None);
+    let config_path = Path::new(config_source)
+        .canonicalize()
+        .unwrap_or_else(|_| Path::new(config_source).to_path_buf());
+    let binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("machine_setup"));
+
+    match action {
+        ScheduleAction::Apply { no_install_hook } => {
+            let report = apply::apply(
+                app_config,
+                &config_path,
+                &temp_dir,
+                &binary,
+                !no_install_hook,
+            )?;
+            println!(
+                "Applied {} schedule unit(s): {}",
+                report.keys.len(),
+                if report.keys.is_empty() {
+                    "(none)".into()
+                } else {
+                    report
+                        .keys
+                        .iter()
+                        .zip(report.labels.iter())
+                        .map(|(k, l)| format!("{k} → {l}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            );
+            if let Some(hook) = report.hook_script {
+                println!("Hook script: {}", hook.display());
+            }
+            if report.stubs_updated.is_empty() {
+                if !no_install_hook {
+                    println!(
+                        "No ~/.zshrc or ~/.bashrc found to update; source the hook script manually if desired."
+                    );
+                }
+            } else {
+                for p in report.stubs_updated {
+                    println!("Updated shell stub in {}", p.display());
+                }
+            }
+        }
+        ScheduleAction::Remove { keep_hook } => {
+            let report = apply::remove(&temp_dir, keep_hook)?;
+            println!(
+                "Removed {} unit(s): {}",
+                report.removed_labels.len(),
+                if report.removed_labels.is_empty() {
+                    "(none)".into()
+                } else {
+                    report.removed_labels.join(", ")
+                }
+            );
+            for p in report.stubs_cleared {
+                println!("Cleared shell stub in {}", p.display());
+            }
+        }
+        ScheduleAction::Run { key } => {
+            let config_dir = config::resolve_config_dir(config_source, cwd);
+            let key = run::parse_key_arg(&key)?;
+            let rt = tokio::runtime::Runtime::new()?;
+            let report = rt.block_on(run::run_key(
+                app_config.clone(),
+                config_dir,
+                &key,
+                &temp_dir,
+            ))?;
+            if report.skipped_not_installed {
+                println!(
+                    "No installed tasks for schedule {} — nothing to update.",
+                    report.key
+                );
+            } else {
+                if !report.updated.is_empty() {
+                    println!("Updated: {}", report.updated.join(", "));
+                }
+                if !report.failed.is_empty() {
+                    println!("Failed: {}", report.failed.join(", "));
+                    std::process::exit(1);
+                }
+            }
+        }
+        ScheduleAction::Status => {
+            print!("{}", status::render_status(app_config, &temp_dir)?);
+        }
+        ScheduleAction::Notify => {
+            if let Some(msg) = notices::notify(&temp_dir)? {
+                println!("{msg}");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn run_doctor(

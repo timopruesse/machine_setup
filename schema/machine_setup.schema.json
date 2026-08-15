@@ -1,5 +1,20 @@
 {
   "$defs": {
+    "autoUpdate": {
+      "additionalProperties": false,
+      "description": "Daily OS-timer auto-update (at XOR cron; daily only in v1)",
+      "properties": {
+        "at": {
+          "description": "Daily local time HH:MM",
+          "type": "string"
+        },
+        "cron": {
+          "description": "5-field cron; v1 accepts daily M H * * * only",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "commandEntry": {
       "description": "One Command entry (exactly one kind key)",
       "oneOf": [
@@ -198,6 +213,9 @@
     "task": {
       "additionalProperties": false,
       "properties": {
+        "auto_update": {
+          "$ref": "#/$defs/autoUpdate"
+        },
         "commands": {
           "items": {
             "$ref": "#/$defs/commandEntry"

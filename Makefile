@@ -1,3 +1,4 @@
+.PHONY: check test lint schema schema-check bench build run create_release
 check:
 	cargo check
 

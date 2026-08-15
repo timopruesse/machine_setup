@@ -97,6 +97,16 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
                 });
             }
         }
+
+        if let Some(auto) = &task.auto_update {
+            if let Err(msg) = crate::schedule::ScheduleKey::parse_auto_update(auto) {
+                issues.push(ValidationIssue {
+                    task_name: name.clone(),
+                    message: msg,
+                    severity: Severity::Error,
+                });
+            }
+        }
     }
 
     issues
@@ -133,6 +143,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                auto_update: None,
             },
         );
         let config = make_config(tasks);
@@ -164,6 +175,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                auto_update: None,
             },
         );
         let config = make_config(tasks);
@@ -189,6 +201,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                auto_update: None,
             },
         );
         let config = make_config(tasks);
@@ -217,6 +230,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                auto_update: None,
             },
         );
         let config = make_config(tasks);
@@ -248,10 +262,46 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                auto_update: None,
             },
         );
         let config = make_config(tasks);
         let issues = validate_config(&config, dir.path());
         assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn test_validate_auto_update_non_daily_cron() {
+        let mut tasks = IndexMap::new();
+        tasks.insert(
+            "bun".to_string(),
+            TaskConfig {
+                commands: vec![CommandEntry::Run(RunArgs {
+                    commands: StringOrVec::default(),
+                    install: StringOrVec::default(),
+                    update: StringOrVec::default(),
+                    uninstall: StringOrVec::default(),
+                    shell: None,
+                    env: HashMap::new(),
+                })],
+                os: Default::default(),
+                parallel: false,
+                only_if: Default::default(),
+                skip_if: Default::default(),
+                depends_on: Default::default(),
+                retry: 0,
+                auto_update: Some(AutoUpdateConfig {
+                    at: None,
+                    cron: Some("0 7 * * 1".into()),
+                }),
+            },
+        );
+        let config = make_config(tasks);
+        let issues = validate_config(&config, Path::new("."));
+        assert!(issues.iter().any(|i| {
+            i.task_name == "bun"
+                && i.message.contains("daily")
+                && matches!(i.severity, Severity::Error)
+        }));
     }
 }

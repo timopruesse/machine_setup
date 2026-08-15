@@ -52,6 +52,18 @@ impl std::fmt::Display for Shell {
     }
 }
 
+/// Optional daily auto-update schedule for a Task.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoUpdateConfig {
+    /// Daily local clock time, e.g. `"07:30"`. Mutually exclusive with `cron`.
+    #[serde(default)]
+    pub at: Option<String>,
+
+    /// 5-field cron. v1 accepts daily forms only (`M H * * *`). Mutually exclusive with `at`.
+    #[serde(default)]
+    pub cron: Option<String>,
+}
+
 /// A single task definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskConfig {
@@ -80,6 +92,10 @@ pub struct TaskConfig {
     /// Number of retry attempts on failure (0 = no retry)
     #[serde(default)]
     pub retry: u32,
+
+    /// Daily OS-timer auto-update (see `schedule apply`)
+    #[serde(default)]
+    pub auto_update: Option<AutoUpdateConfig>,
 }
 
 /// A command entry in the config. Each entry is a single-key map.

@@ -70,6 +70,11 @@ pub enum Command {
         #[command(subcommand)]
         target: AddTarget,
     },
+    /// Manage OS-timer auto-update schedules
+    Schedule {
+        #[command(subcommand)]
+        action: ScheduleAction,
+    },
     /// Print the Config schema (JSON Schema) to stdout
     Schema,
     /// Generate shell completions
@@ -78,6 +83,32 @@ pub enum Command {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum ScheduleAction {
+    /// Install/refresh OS timer units from the Config document
+    Apply {
+        /// Do not modify shell rc files (hook script under temp_dir is still written)
+        #[arg(long)]
+        no_install_hook: bool,
+    },
+    /// Remove managed OS timer units
+    Remove {
+        /// Leave shell hook stubs and hook script in place
+        #[arg(long)]
+        keep_hook: bool,
+    },
+    /// Run updates for all installed tasks with this schedule key (timer entrypoint)
+    Run {
+        /// Schedule key (`0730`) or clock time (`07:30`)
+        #[arg(long)]
+        key: String,
+    },
+    /// Show configured schedules and managed units
+    Status,
+    /// Print and clear one unseen schedule notice (shell hook target)
+    Notify,
 }
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
@@ -149,6 +180,7 @@ impl std::fmt::Display for Command {
             Command::Init => write!(f, "init"),
             Command::Wizard => write!(f, "wizard"),
             Command::Add { .. } => write!(f, "add"),
+            Command::Schedule { .. } => write!(f, "schedule"),
             Command::Schema => write!(f, "schema"),
             Command::Completions { .. } => write!(f, "completions"),
         }

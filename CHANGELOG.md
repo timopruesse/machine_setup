@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Per-task `auto_update` (`at: "HH:MM"` or daily `cron`) with `machine_setup schedule apply|remove|run|status|notify` — launchd (macOS) / systemd user timers (Linux), bundled by schedule key, shell hook notices
+
 ## [2.6.1]
 
 ### Added

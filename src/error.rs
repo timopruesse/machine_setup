@@ -44,6 +44,9 @@ pub enum Error {
     #[error("History error: {0}")]
     HistoryError(String),
 
+    #[error("Schedule error: {0}")]
+    ScheduleError(String),
+
     #[error("Cyclic dependency detected: {0}")]
     CyclicDependency(String),
 

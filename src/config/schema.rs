@@ -73,7 +73,23 @@ pub fn generate() -> Value {
                         "type": "array",
                         "items": { "type": "string" }
                     },
-                    "retry": { "type": "integer", "minimum": 0, "default": 0 }
+                    "retry": { "type": "integer", "minimum": 0, "default": 0 },
+                    "auto_update": { "$ref": "#/$defs/autoUpdate" }
+                }
+            },
+            "autoUpdate": {
+                "type": "object",
+                "description": "Daily OS-timer auto-update (at XOR cron; daily only in v1)",
+                "additionalProperties": false,
+                "properties": {
+                    "at": {
+                        "type": "string",
+                        "description": "Daily local time HH:MM"
+                    },
+                    "cron": {
+                        "type": "string",
+                        "description": "5-field cron; v1 accepts daily M H * * * only"
+                    }
                 }
             },
             "commandEntry": command_entry

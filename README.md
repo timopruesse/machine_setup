@@ -69,6 +69,7 @@ cargo install machine_setup
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
 | add recipe   | append a Task from an Authoring recipe   | `machine_setup add recipe git-repo --url … --target ~` |
 | schema       | print the Config JSON Schema to stdout   | `machine_setup schema`               |
+| schedule     | apply/remove OS timers for auto_update   | `machine_setup schedule apply`       |
 | completions  | generate shell completions               | `machine_setup completions zsh`      |
 
 By default (no `-c`), `machine_setup` looks for `machine_setup.yaml` / `.yml` / `.json` in the current directory, then at the git repository root. Explicit `-c` still accepts a path or URL. Supported formats are YAML and JSON.
@@ -190,6 +191,36 @@ tasks:
           url: "git@github.com:timopruesse/machine_setup.git"
           target: "~/machine_setup"
 ```
+
+### Auto-update schedules
+
+Opt a Task into a daily OS timer with `auto_update`. Tasks that share the same
+daily time are bundled into one launchd agent (macOS) or systemd user timer
+(Linux). Timers are idle until due — no always-on daemon.
+
+```yaml
+tasks:
+  bun:
+    auto_update:
+      at: "07:30" # or cron: "30 7 * * *" (daily only in v1)
+    commands:
+      - run:
+          install: curl -fsSL https://bun.sh/install | bash
+          update: bun upgrade --canary
+```
+
+```bash
+machine_setup install -t bun          # install the task once
+machine_setup schedule apply          # install/refresh OS units + shell hook
+machine_setup schedule status
+machine_setup schedule remove         # tear down units (and hook stubs)
+```
+
+`schedule apply` writes a hook script under `temp_dir` and, when `~/.zshrc` /
+`~/.bashrc` exist, inserts a marked `source` stub so new shells can show a short
+notice after a background update. Use `--no-install-hook` to skip rc edits.
+Only **installed** tasks are updated when a timer fires. Re-run `schedule apply`
+after changing schedule keys or moving the config/binary.
 
 ### Extend a configuration
 

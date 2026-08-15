@@ -111,6 +111,13 @@ fn row_to_item(row: &status::TaskStatusRow<'_>, issues: &[&ValidationIssue]) -> 
             lines: vec![
                 format!("OS: {os}"),
                 format!("Installed: {}", if row.installed { "yes" } else { "no" }),
+                match &row.task.auto_update {
+                    Some(au) => match crate::schedule::ScheduleKey::parse_auto_update(au) {
+                        Ok(key) => format!("auto_update: daily {key}"),
+                        Err(e) => format!("auto_update: invalid ({e})"),
+                    },
+                    None => "auto_update: —".into(),
+                },
             ],
         },
         DetailSection {
@@ -174,6 +181,7 @@ mod tests {
             skip_if: Default::default(),
             depends_on: Default::default(),
             retry: 0,
+            auto_update: None,
         }
     }
 

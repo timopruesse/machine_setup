@@ -71,6 +71,7 @@ mod tests {
             skip_if: Default::default(),
             depends_on: deps.iter().map(|s| s.to_string()).collect(),
             retry: 0,
+            auto_update: None,
         }
     }
 
