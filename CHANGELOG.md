@@ -6,9 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.7.0]
+
 ### Added
 - Post-command self update-check notice when a newer GitHub release exists (cached ~24h), with install-method-specific update command; disable via `check_for_updates: false` or `MACHINE_SETUP_NO_UPDATE_CHECK=1`
 - Per-task `auto_update` (`at: "HH:MM"` or daily `cron`) with `machine_setup schedule apply|remove|run|status|notify` — launchd (macOS) / systemd user timers (Linux), bundled by schedule key, shell hook notices
+
+### Performance
+- Stale self update-checks refresh in a detached background process so CLI exit is not blocked on the network
+- `schedule notify` skips Config locate/load (hook embeds `--temp-dir`) for a faster shell-hook path
 
 ## [2.6.1]
 
