@@ -38,6 +38,12 @@ impl UpdateNoticeCtx {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Detached update-check worker — no clap, no notice, exit when cache is written.
+    if std::env::var_os(update_check::ENV_INTERNAL_REFRESH).is_some() {
+        update_check::run_internal_refresh_worker();
+        return Ok(());
+    }
+
     let cli = Cli::parse();
     let mut notice = UpdateNoticeCtx::default_ctx();
 
@@ -52,6 +58,18 @@ fn main() -> anyhow::Result<()> {
     if cli.command == Command::Schema {
         let schema = config::schema::generate_pretty()?;
         println!("{schema}");
+        return Ok(());
+    }
+
+    // Shell-hook target: avoid Config locate/load (hot path on every new shell).
+    if let Command::Schedule {
+        action: ScheduleAction::Notify { ref temp_dir },
+    } = &cli.command
+    {
+        let dir = resolve_notify_temp_dir(temp_dir.as_deref(), cli.config.as_deref())?;
+        if let Some(msg) = machine_setup::schedule::notices::notify(&dir)? {
+            println!("{msg}");
+        }
         return Ok(());
     }
 
@@ -348,7 +366,7 @@ fn run_schedule(
     action: ScheduleAction,
     _no_tui: bool,
 ) -> anyhow::Result<()> {
-    use machine_setup::schedule::{apply, notices, run, status};
+    use machine_setup::schedule::{apply, run, status};
     use machine_setup::utils::path::expand_path;
 
     let temp_dir = expand_path(&app_config.temp_dir, None);
@@ -439,13 +457,31 @@ fn run_schedule(
         ScheduleAction::Status => {
             print!("{}", status::render_status(app_config, &temp_dir)?);
         }
-        ScheduleAction::Notify => {
-            if let Some(msg) = notices::notify(&temp_dir)? {
-                println!("{msg}");
-            }
+        ScheduleAction::Notify { .. } => {
+            unreachable!("schedule notify is handled before config load");
         }
     }
     Ok(())
+}
+
+/// Temp dir for `schedule notify`: `--temp-dir`, else Config `-c` `temp_dir`, else default.
+fn resolve_notify_temp_dir(
+    explicit: Option<&Path>,
+    config_arg: Option<&str>,
+) -> anyhow::Result<PathBuf> {
+    use machine_setup::utils::path::expand_path;
+
+    if let Some(p) = explicit {
+        let raw = p.to_string_lossy();
+        return Ok(expand_path(raw.as_ref(), None));
+    }
+    if let Some(raw) = config_arg {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let source = config::resolve_config_source(Some(raw), &cwd)?;
+        let app_config = config::load_config(&source)?;
+        return Ok(expand_path(&app_config.temp_dir, None));
+    }
+    Ok(expand_path("~/.machine_setup", None))
 }
 
 fn run_doctor(

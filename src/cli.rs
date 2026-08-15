@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -108,7 +109,11 @@ pub enum ScheduleAction {
     /// Show configured schedules and managed units
     Status,
     /// Print and clear one unseen schedule notice (shell hook target)
-    Notify,
+    Notify {
+        /// Temp dir with schedule_notices.json (hook embeds this; default ~/.machine_setup)
+        #[arg(long = "temp-dir", value_name = "DIR")]
+        temp_dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]

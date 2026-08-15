@@ -30,8 +30,7 @@ impl UpdateCheckCache {
 
     pub fn save(&self, temp_dir: &Path) -> Result<()> {
         std::fs::create_dir_all(temp_dir)?;
-        let content =
-            serde_json::to_string_pretty(self).map_err(|e| Error::Other(e.to_string()))?;
+        let content = serde_json::to_string(self).map_err(|e| Error::Other(e.to_string()))?;
         std::fs::write(Self::path(temp_dir), content)?;
         Ok(())
     }

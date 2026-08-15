@@ -226,8 +226,9 @@ after changing schedule keys or moving the config/binary.
 
 After most commands, `machine_setup` may print a short stderr notice when a newer
 release is on GitHub (checked at most about once per day; cached under
-`temp_dir`). The notice includes an update command guessed from how the binary
-was installed (Homebrew, cargo, or the curl/PowerShell installer).
+`temp_dir`). Stale checks refresh in a detached background process so the CLI
+does not wait on the network. The notice includes an update command guessed from
+how the binary was installed (Homebrew, cargo, or the curl/PowerShell installer).
 
 Disable with either:
 
