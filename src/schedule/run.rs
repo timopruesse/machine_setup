@@ -60,6 +60,12 @@ pub async fn run_key(
         ),
     )?;
 
+    let (config, demote_warnings) =
+        crate::schedule::demote_sudo::demote_config_for_schedule(&config, &to_run);
+    for line in &demote_warnings {
+        append_log(temp_dir, &format!("  warn: {line}\n"))?;
+    }
+
     let events: SharedSink = NullSink::shared();
     let runner = TaskRunner::new(config, Mode::Update, events).with_config_dir(config_dir);
 

@@ -222,6 +222,11 @@ notice after a background update. Use `--no-install-hook` to skip rc edits.
 Only **installed** tasks are updated when a timer fires. Re-run `schedule apply`
 after changing schedule keys or moving the config/binary.
 
+Timers have no TTY, so `schedule run` demotes privilege: copy/symlink `sudo: true`
+is cleared and leading `sudo` prefixes are stripped from `run` strings, with a
+warning in `schedule.log`. Prefer non-sudo update commands for scheduled tasks;
+`validate` / `doctor` emit a warning when `auto_update` meets sudo.
+
 ### Self update-check
 
 After most commands, `machine_setup` may print a short stderr notice when a newer

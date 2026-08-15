@@ -336,6 +336,10 @@ impl StringOrVec {
     pub fn as_slice(&self) -> &[String] {
         &self.0
     }
+
+    pub fn as_mut_slice(&mut self) -> &mut [String] {
+        &mut self.0
+    }
 }
 
 impl<'de> Deserialize<'de> for StringOrVec {

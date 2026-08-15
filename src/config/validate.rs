@@ -105,6 +105,12 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
                     message: msg,
                     severity: Severity::Error,
                 });
+            } else if task.commands.iter().any(catalog::entry_requires_sudo) {
+                issues.push(ValidationIssue {
+                    task_name: name.clone(),
+                    message: "auto_update task requires sudo; schedule run will demote privileges and may fail without a password".to_string(),
+                    severity: Severity::Warning,
+                });
             }
         }
     }
@@ -302,6 +308,44 @@ mod tests {
         assert!(issues.iter().any(|i| {
             i.task_name == "bun"
                 && i.message.contains("daily")
+                && matches!(i.severity, Severity::Error)
+        }));
+    }
+
+    #[test]
+    fn test_validate_auto_update_sudo_is_warning() {
+        let mut tasks = IndexMap::new();
+        tasks.insert(
+            "priv".to_string(),
+            TaskConfig {
+                commands: vec![CommandEntry::Copy(CopyArgs {
+                    src: "/nonexistent/source".to_string(),
+                    target: "/tmp/target".to_string(),
+                    ignore: vec![],
+                    sudo: true,
+                })],
+                os: Default::default(),
+                parallel: false,
+                only_if: Default::default(),
+                skip_if: Default::default(),
+                depends_on: Default::default(),
+                retry: 0,
+                auto_update: Some(AutoUpdateConfig {
+                    at: Some("07:30".into()),
+                    cron: None,
+                }),
+            },
+        );
+        let config = make_config(tasks);
+        let issues = validate_config(&config, Path::new("."));
+        assert!(issues.iter().any(|i| {
+            i.task_name == "priv"
+                && i.message.contains("demote")
+                && matches!(i.severity, Severity::Warning)
+        }));
+        assert!(!issues.iter().any(|i| {
+            i.task_name == "priv"
+                && i.message.contains("demote")
                 && matches!(i.severity, Severity::Error)
         }));
     }

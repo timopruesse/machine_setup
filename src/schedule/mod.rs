@@ -4,6 +4,7 @@
 //! “scheduler” (reserved elsewhere in CONTEXT.md for Task graph / concurrency).
 
 pub mod apply;
+pub mod demote_sudo;
 pub mod group;
 pub mod hook;
 pub mod key;

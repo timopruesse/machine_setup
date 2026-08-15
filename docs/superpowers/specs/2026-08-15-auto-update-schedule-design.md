@@ -195,6 +195,7 @@ needed later (v1 can rely on `updated_at` + notices).
 | Config path or binary moved | Re-run `schedule apply` |
 | Partial task failure | History only for successes; notice includes failures |
 | Laptop timezone change | Daily local time follows OS local calendar; document re-apply if units look wrong |
+| Scheduled task requires sudo | Validate **Warning** (not Error). `schedule run` demotes: clears copy/symlink `sudo`, strips leading `sudo`/`sudo -n`/… from run strings, logs a warning, then continues without privileges. Interactive install/update unchanged. |
 
 ## Testing
 
