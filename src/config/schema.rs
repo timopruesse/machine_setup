@@ -41,6 +41,11 @@ pub fn generate() -> Value {
                 "type": "integer",
                 "minimum": 1,
                 "description": "Concurrency gate size (default: physical CPUs - 1)"
+            },
+            "check_for_updates": {
+                "type": "boolean",
+                "default": true,
+                "description": "When false, skip the post-command self update-check notice"
             }
         },
         "$defs": {

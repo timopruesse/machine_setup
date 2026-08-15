@@ -222,6 +222,27 @@ notice after a background update. Use `--no-install-hook` to skip rc edits.
 Only **installed** tasks are updated when a timer fires. Re-run `schedule apply`
 after changing schedule keys or moving the config/binary.
 
+### Self update-check
+
+After most commands, `machine_setup` may print a short stderr notice when a newer
+release is on GitHub (checked at most about once per day; cached under
+`temp_dir`). The notice includes an update command guessed from how the binary
+was installed (Homebrew, cargo, or the curl/PowerShell installer).
+
+Disable with either:
+
+```yaml
+check_for_updates: false
+```
+
+or:
+
+```bash
+export MACHINE_SETUP_NO_UPDATE_CHECK=1
+```
+
+Skipped for `completions`, `schema`, and `schedule notify`.
+
 ### Extend a configuration
 
 Extensibility is not explicitly built in.

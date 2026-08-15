@@ -22,6 +22,10 @@ pub struct AppConfig {
 
     /// Number of threads for parallel execution (default: num_cpus - 1)
     pub num_threads: Option<usize>,
+
+    /// When false, skip the post-command self update-check notice (default true).
+    #[serde(default = "default_true")]
+    pub check_for_updates: bool,
 }
 
 fn default_temp_dir() -> String {
@@ -30,6 +34,10 @@ fn default_temp_dir() -> String {
 
 fn default_shell() -> Shell {
     Shell::Bash
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

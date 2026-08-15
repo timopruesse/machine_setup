@@ -257,6 +257,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "check_for_updates": {
+      "default": true,
+      "description": "When false, skip the post-command self update-check notice",
+      "type": "boolean"
+    },
     "default_shell": {
       "default": "bash",
       "enum": [

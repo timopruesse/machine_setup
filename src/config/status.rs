@@ -135,6 +135,7 @@ mod tests {
             default_shell: Shell::Bash,
             parallel: false,
             num_threads: None,
+            check_for_updates: true,
         }
     }
 

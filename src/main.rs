@@ -1,4 +1,4 @@
-use machine_setup::{cli, config, engine, tui};
+use machine_setup::{cli, config, engine, tui, update_check};
 
 use clap::{CommandFactory, Parser};
 use std::io::IsTerminal;
@@ -9,17 +9,46 @@ use cli::{AddTarget, Cli, Command, RecipeCommand, ScheduleAction};
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
+/// Tracks temp_dir + config flag for the post-command self update-check.
+struct UpdateNoticeCtx {
+    temp_dir: PathBuf,
+    check_for_updates: bool,
+}
+
+impl UpdateNoticeCtx {
+    fn default_ctx() -> Self {
+        use machine_setup::utils::path::expand_path;
+        Self {
+            temp_dir: expand_path("~/.machine_setup", None),
+            check_for_updates: true,
+        }
+    }
+
+    fn from_config(app_config: &config::types::AppConfig) -> Self {
+        use machine_setup::utils::path::expand_path;
+        Self {
+            temp_dir: expand_path(&app_config.temp_dir, None),
+            check_for_updates: app_config.check_for_updates,
+        }
+    }
+
+    fn emit(&self, command: &Command) {
+        update_check::maybe_print_update_notice(command, &self.temp_dir, self.check_for_updates);
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let mut notice = UpdateNoticeCtx::default_ctx();
 
-    // Handle completions (no config needed)
+    // Handle completions (no config needed) — skipped by update_check
     if let Command::Completions { shell } = &cli.command {
         let mut cmd = Cli::command();
         clap_complete::generate(*shell, &mut cmd, "machine_setup", &mut std::io::stdout());
         return Ok(());
     }
 
-    // Schema dump (no Config document needed)
+    // Schema dump — skipped by update_check
     if cli.command == Command::Schema {
         let schema = config::schema::generate_pretty()?;
         println!("{schema}");
@@ -34,13 +63,16 @@ fn main() -> anyhow::Result<()> {
         config::document::init(&path)?;
         println!("Created {}", path.display());
         if config::document::validate_after_write(&path)? {
+            notice.emit(&cli.command);
             std::process::exit(1);
         }
+        notice.emit(&cli.command);
         return Ok(());
     }
 
     if cli.command == Command::Wizard {
         config::wizard::run(cli.config.as_deref(), &cwd)?;
+        notice.emit(&cli.command);
         return Ok(());
     }
 
@@ -59,22 +91,23 @@ fn main() -> anyhow::Result<()> {
             }
         }
         if config::document::validate_after_write(&path)? {
+            notice.emit(&cli.command);
             std::process::exit(1);
         }
+        notice.emit(&cli.command);
         return Ok(());
     }
 
     // Load config (supports local paths, URLs, and locator when `-c` omitted)
     let config_source = config::resolve_config_source(cli.config.as_deref(), &cwd)?;
     let app_config = config::load_config(&config_source)?;
+    notice = UpdateNoticeCtx::from_config(&app_config);
 
     // Handle list command
     if cli.command == Command::List {
         use machine_setup::tui::catalog::{adapt, plain, run_browse};
-        use machine_setup::utils::path::expand_path;
 
-        let temp_dir = expand_path(&app_config.temp_dir, None);
-        let history = config::history::History::load(&temp_dir).unwrap_or_default();
+        let history = config::history::History::load(&notice.temp_dir).unwrap_or_default();
         let items = adapt::list_items(&app_config, &history);
         let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
         if use_tui {
@@ -82,6 +115,7 @@ fn main() -> anyhow::Result<()> {
         } else {
             plain::print_list(&items);
         }
+        notice.emit(&cli.command);
         return Ok(());
     }
 
@@ -103,9 +137,11 @@ fn main() -> anyhow::Result<()> {
                 );
             }
             if has_errors {
+                notice.emit(&cli.command);
                 std::process::exit(1);
             }
         }
+        notice.emit(&cli.command);
         return Ok(());
     }
 
@@ -113,6 +149,7 @@ fn main() -> anyhow::Result<()> {
         let config_dir = config::resolve_config_dir(&config_source, &cwd);
         let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
         run_doctor(&app_config, &config_dir, fix, use_tui)?;
+        notice.emit(&cli.command);
         return Ok(());
     }
 
@@ -124,6 +161,7 @@ fn main() -> anyhow::Result<()> {
             action.clone(),
             cli.no_tui,
         )?;
+        notice.emit(&cli.command);
         return Ok(());
     }
 
@@ -139,6 +177,7 @@ fn main() -> anyhow::Result<()> {
 
     if seed.is_empty() {
         println!("No tasks selected.");
+        notice.emit(&cli.command);
         return Ok(());
     }
 
@@ -152,15 +191,19 @@ fn main() -> anyhow::Result<()> {
             Some(names) => names,
             None => {
                 println!("Aborted.");
+                notice.emit(&cli.command);
                 return Ok(());
             }
         };
 
     // Execution verbs only: boot a multi-thread runtime here, not for sync verbs above.
+    let command = cli.command.clone();
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    rt.block_on(run_execution(cli, app_config, config_source, task_names))
+    let result = rt.block_on(run_execution(cli, app_config, config_source, task_names));
+    notice.emit(&command);
+    result
 }
 
 /// Path for add/list-style ops that need an existing local Config document.
@@ -389,7 +432,7 @@ fn run_schedule(
                 }
                 if !report.failed.is_empty() {
                     println!("Failed: {}", report.failed.join(", "));
-                    std::process::exit(1);
+                    anyhow::bail!("schedule run had failing tasks");
                 }
             }
         }
@@ -453,7 +496,7 @@ fn run_doctor(
     }
 
     if has_errors {
-        std::process::exit(1);
+        anyhow::bail!("doctor found validation errors");
     }
     Ok(())
 }
