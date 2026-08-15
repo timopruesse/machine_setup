@@ -4,6 +4,53 @@ use ratatui::style::Color;
 
 use crate::tui::state::TASK_PALETTE_LEN;
 
+/// Strip ANSI escape sequences from command output before TUI display.
+///
+/// Ratatui places text into cells by visible width; ESC (`\x1b`) is dropped as
+/// zero-width, which leaves CSI leftovers like `[33m` visible in the log panel.
+pub fn strip_ansi(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            if c == '\t' || !c.is_control() {
+                out.push(c);
+            }
+            continue;
+        }
+        match chars.peek().copied() {
+            Some('[') => {
+                // CSI: ESC [ ... final byte in 0x40..=0x7E
+                chars.next();
+                for nc in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&nc) {
+                        break;
+                    }
+                }
+            }
+            Some(']') => {
+                // OSC: ESC ] ... BEL or ST (ESC \)
+                chars.next();
+                while let Some(nc) = chars.next() {
+                    if nc == '\u{07}' {
+                        break;
+                    }
+                    if nc == '\u{1b}' && chars.peek() == Some(&'\\') {
+                        chars.next();
+                        break;
+                    }
+                }
+            }
+            Some(_) => {
+                // Other 2-byte escapes (e.g. ESC c)
+                chars.next();
+            }
+            None => {}
+        }
+    }
+    out
+}
+
 /// Accent color for a task's list row / merge prefix.
 pub fn task_palette_color(color_idx: usize) -> Color {
     const COLORS: [Color; TASK_PALETTE_LEN] = [
@@ -61,6 +108,19 @@ pub fn run_elapsed(run_started: std::time::Instant, run_elapsed: Option<Duration
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strip_ansi_removes_sgr_leaving_plain_text() {
+        // Colored brew/plugin lines look like this when ESC is swallowed by ratatui:
+        // `[1m[33mzsh-users/zsh-autosuggestions:[39m[0m`
+        let raw = "\u{1b}[1m\u{1b}[33mzsh-users/zsh-autosuggestions:\u{1b}[39m\u{1b}[0m";
+        assert_eq!(strip_ansi(raw), "zsh-users/zsh-autosuggestions:");
+    }
+
+    #[test]
+    fn strip_ansi_preserves_plain_text() {
+        assert_eq!(strip_ansi("  [done] install"), "  [done] install");
+    }
 
     #[test]
     fn format_under_ten_seconds_one_decimal() {

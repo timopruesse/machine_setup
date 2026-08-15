@@ -81,6 +81,7 @@ impl TaskState {
 
     /// Append a log line, enforcing [`LOG_CAP`].
     pub fn push_log(&mut self, line: String) {
+        let line = crate::tui::format::strip_ansi(&line);
         self.log_lines.push(line);
         if self.log_lines.len() > LOG_CAP {
             let excess = self.log_lines.len() - LOG_CAP;
@@ -217,6 +218,11 @@ impl UiState {
 
     /// Append a merge line, enforcing [`MERGE_CAP`].
     pub fn push_merge(&mut self, line: MergeLine) {
+        let line = MergeLine {
+            task_name: line.task_name,
+            color_idx: line.color_idx,
+            text: crate::tui::format::strip_ansi(&line.text),
+        };
         self.merge_lines.push(line);
         if self.merge_lines.len() > MERGE_CAP {
             let excess = self.merge_lines.len() - MERGE_CAP;

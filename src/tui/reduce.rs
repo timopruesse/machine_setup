@@ -46,6 +46,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.freeze_duration();
+            let reason = crate::tui::format::strip_ansi(&reason);
             task.status = TaskStatus::Skipped(reason.clone());
             let line = format!("Skipped: {reason}");
             task.push_log(line.clone());
@@ -64,6 +65,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
         } => {
             let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
+            let command_desc = crate::tui::format::strip_ansi(&command_desc);
             task.current_command = Some(command_desc.clone());
             let line = format!("> {command_desc}");
             task.push_log(line.clone());
@@ -143,6 +145,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             let running_before = state.running_count();
             let task = find_or_create_task(state, &task_name);
             task.freeze_duration();
+            let error = crate::tui::format::strip_ansi(&error);
             task.status = TaskStatus::Failed(error.clone());
             let line = format!("FAILED: {error}");
             task.push_log(line.clone());
@@ -616,6 +619,25 @@ mod tests {
         let (state, effect) = reduce(state, Message::Input(Input::ClearFilterOrQuit));
         assert_eq!(effect, Effect::Quit);
         assert!(!state.filter_active());
+    }
+
+    #[test]
+    fn command_output_ansi_stripped_in_log() {
+        let state = state_with(&["a"]);
+        let colored = "\u{1b}[1m\u{1b}[33mzsh-users/zsh-autosuggestions:\u{1b}[39m\u{1b}[0m";
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::CommandOutput {
+                task_name: "a".into(),
+                line: colored.into(),
+            }),
+        );
+        assert_eq!(
+            state.tasks[0].log_lines.last().map(String::as_str),
+            Some("  zsh-users/zsh-autosuggestions:")
+        );
+        let stored = state.tasks[0].log_lines.last().unwrap();
+        assert!(!stored.contains("[1m") && !stored.contains("[33m"));
     }
 
     #[test]
