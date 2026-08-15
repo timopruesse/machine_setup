@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.7.2]
+
+### Fixed
+- Strip ANSI escape sequences from TUI log/merge lines so colored command output no longer shows leftover CSI text (e.g. `[33m`)
+
 ## [2.7.1]
 
 ### Fixed
