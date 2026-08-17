@@ -75,14 +75,14 @@ _Avoid_: handler, command (see Flagged ambiguities).
 
 **Command kind catalog**:
 The single owner of Command-entry-kind behavior — parse helpers used after
-deserialize, validate, `create_executor`, `requires_sudo`, and display wiring
-co-located with Command executors. The `CommandEntry` enum stays public for
-exhaustiveness; Deserialize may match keys only to construct the enum.
-Modules outside the catalog must not `match` on variants for behavior. New
-kinds register here once. A new kind is justified only when the op needs
-**Tree materialization**, **File ops**, **Sub-config** nesting, or Mode
-semantics `run` cannot express — not for YAML sugar over shell recipes
-(ADR-0006).
+deserialize, validate, `create_executor`, `requires_sudo`, **Exclusive lane**
+inference from `run` script text, and display wiring co-located with Command
+executors. The `CommandEntry` enum stays public for exhaustiveness;
+Deserialize may match keys only to construct the enum. Modules outside the
+catalog must not `match` on variants for behavior. New kinds register here
+once. A new kind is justified only when the op needs **Tree materialization**,
+**File ops**, **Sub-config** nesting, or Mode semantics `run` cannot express
+— not for YAML sugar over shell recipes (ADR-0006).
 _Avoid_: command registry, plugin map, dispatcher (unless a second adapter
 justifies a real plugin seam — see ADR-0006).
 
@@ -132,8 +132,19 @@ The Runner's global cap on in-flight leaf Command executor work, driven by
 gate. Sync File ops work runs via `spawn_blocking` so it does not block Tokio
 workers. Owns a shared Rayon FS apply pool (same size as the permit limit),
 created lazily on first tree-apply use. Does **not** order Tasks by
-dependency — that remains the **Task graph**.
+dependency — that remains the **Task graph**. Also owns **Exclusive lanes**
+for intra-run serialization of Command entries that share an exclusive OS
+resource (e.g. apt); it does not wait on locks held outside this process.
 _Avoid_: scheduler (do not call the FS pool the "scheduler").
+
+**Exclusive lane**:
+A named slot on the **Concurrency gate**; at most one Command entry in the
+run holds a given lane at a time. Nested Sub-config Runners share the
+parent's lanes with the parent's gate. A `run` Command entry joins a lane
+by inference from its script text — authors do not declare lanes. Lanes are
+per package-manager family (apt, brew, dnf, pacman, apk, winget, choco),
+matching the real OS exclusive resource, not one global package-manager slot.
+_Avoid_: mutex, lock, apt lock, resource lock, scheduler, exclusive group.
 
 **Details pane**:
 The run TUI module that resolves and renders Task output — single-task log,
@@ -191,12 +202,25 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
   dependencies on other tasks.
 - The **Task graph** orders **Tasks**; the **Runner** executes them in that
   order under one **Mode**, admitting work through the **Concurrency gate**.
-  Nested **Sub-config** Runners share the parent's **Concurrency gate**.
+  Nested **Sub-config** Runners share the parent's **Concurrency gate** and
+  **Exclusive lanes**. A `run` Command entry joins a lane by inference from
+  its script text (one family per matching package manager). A Command entry
+  joins at most one lane — the first match in a stable family order. Command
+  entries that share a lane serialize on it while still occupying a gate permit.
+  The **Runner** acquires the lane first, then the permit, so waiters do not
+  occupy a slot.   Dual-family scripts belong in two Command entries. Waiting
+  on a lane is visible as a lifecycle **Task event** (admission, not executor
+  chatter), emitted after `CommandStarted` and only when the lane is already
+  held — not a silent hang and not an event on the uncontended path
+  (ADR-0010).
 - The **Runner** turns each **Command entry** into a **Command executor** via the
   **Command kind catalog** and calls `execute`, which acts according to the
   current **Mode**.
-- Validation and `requires_sudo` for **Command entries** go through the
-  **Command kind catalog** — not ad-hoc matches in foreign modules.
+- Validation, `requires_sudo`, and **Exclusive lane** inference for
+  **Command entries** go through the **Command kind catalog** — not ad-hoc
+  matches in foreign modules. The **Concurrency gate** waits on the inferred
+  lane; the **Runner** admits (lane first, then permit) before `execute`. The
+  `run` Command executor does not know about lanes.
 - The `copy` and `symlink` **Command executors** use the **Tree-op driver**, which
   drives **Tree materialization** through a **File ops** adapter (executors may
   still choose a bulk SudoFs path when eligible).
@@ -229,6 +253,13 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
 > **Maintainer:** "That's `resolve_single_file_dest` inside tree
 > materialization — one pure function, shared by copy and symlink, install and
 > uninstall."
+>
+> **Dev:** "Two parallel Tasks both `apt install` — who waits?"
+> **Maintainer:** "The **Command kind catalog** infers family `apt` from the
+> script. The **Runner** takes that **Exclusive lane** on the **Concurrency
+> gate** before a permit. The second Command entry emits a wait Task event
+> only because the lane is already held. The `run` executor never sees the
+> lane. Unattended-upgrades is out of scope."
 
 ## Flagged ambiguities
 

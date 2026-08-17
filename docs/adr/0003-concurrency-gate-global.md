@@ -1,5 +1,9 @@
 # One Concurrency gate for Command entries (shared with nested Sub-configs)
 
+Amended by ADR-0010: the gate also owns **Exclusive lanes** (intra-run
+package-manager families). That is exclusivity, not a second width knob;
+tree-apply admission stays deferred below.
+
 `num_threads` caps in-flight leaf Command executor work under one semaphore
 (default: physical CPUs − 1). Permits are acquired per Command entry — not per
 Task — so sequential and `parallel: true` Tasks share the same rule. The

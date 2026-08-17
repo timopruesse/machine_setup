@@ -26,6 +26,15 @@ pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
             } => {
                 println!("   [{task_name}] ({command_index}/{command_total}) > {command_desc}");
             }
+            TaskEvent::CommandWaiting {
+                task_name,
+                command_index,
+                command_total,
+                lane,
+                ..
+            } => {
+                println!("   [{task_name}] ({command_index}/{command_total})   waiting for {lane}");
+            }
             TaskEvent::CommandOutput {
                 task_name,
                 line,

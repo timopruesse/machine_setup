@@ -66,6 +66,15 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             task.push_log(OutputKind::CommandStart, command_desc);
             (name, SoftSelect::None, false)
         }
+        TaskEvent::CommandWaiting {
+            task_name: name,
+            lane,
+            ..
+        } => {
+            let task = find_or_create_task(state, &name);
+            task.push_log(OutputKind::Info, format!("Waiting for {lane}"));
+            (name, SoftSelect::None, false)
+        }
         TaskEvent::CommandOutput {
             task_name: name,
             line,
@@ -331,6 +340,33 @@ mod tests {
         assert!(state.tasks[1].started_at.is_some());
         assert!(state.tasks[1].duration.is_none());
         assert!(state.log_follow);
+    }
+
+    #[test]
+    fn command_waiting_appends_info_line() {
+        let state = state_with(&["a"]);
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::CommandStarted {
+                task_name: "a".into(),
+                command_desc: "apt".into(),
+                command_index: 1,
+                command_total: 1,
+            }),
+        );
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::CommandWaiting {
+                task_name: "a".into(),
+                command_desc: "apt".into(),
+                command_index: 1,
+                command_total: 1,
+                lane: crate::engine::concurrency::ExclusiveLane::Apt,
+            }),
+        );
+        let last = state.tasks[0].log_lines.last().expect("log");
+        assert_eq!(last.kind, OutputKind::Info);
+        assert!(last.text.contains("Waiting for apt"));
     }
 
     #[test]

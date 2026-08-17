@@ -4,10 +4,53 @@
 //! Also owns the shared Rayon pool used for in-tree file apply (ADR-0004);
 //! the pool is created lazily on first [`ConcurrencyGate::pool`] call.
 
+use std::fmt;
 use std::sync::{Arc, OnceLock};
 
 use rayon::ThreadPool;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+
+/// Package-manager family for an **Exclusive lane** (ADR-0010).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExclusiveLane {
+    Apt,
+    Brew,
+    Dnf,
+    Pacman,
+    Apk,
+    Winget,
+    Choco,
+}
+
+impl ExclusiveLane {
+    const COUNT: usize = 7;
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Apt => "apt",
+            Self::Brew => "brew",
+            Self::Dnf => "dnf",
+            Self::Pacman => "pacman",
+            Self::Apk => "apk",
+            Self::Winget => "winget",
+            Self::Choco => "choco",
+        }
+    }
+
+    fn index(self) -> usize {
+        self as usize
+    }
+}
+
+impl fmt::Display for ExclusiveLane {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+fn lane_semaphores() -> [Arc<Semaphore>; ExclusiveLane::COUNT] {
+    std::array::from_fn(|_| Arc::new(Semaphore::new(1)))
+}
 
 /// Shared limit on concurrent Task and Command executor work.
 #[derive(Clone)]
@@ -17,6 +60,8 @@ pub struct ConcurrencyGate {
     pub limit: usize,
     /// Shared FS apply pool — sized by `limit`, created on first use.
     pool: Arc<OnceLock<ThreadPool>>,
+    /// One permit per Exclusive lane family (intra-run serialization).
+    lanes: [Arc<Semaphore>; ExclusiveLane::COUNT],
 }
 
 impl ConcurrencyGate {
@@ -29,6 +74,7 @@ impl ConcurrencyGate {
             sem: Arc::new(Semaphore::new(limit)),
             limit,
             pool: Arc::new(OnceLock::new()),
+            lanes: lane_semaphores(),
         }
     }
 
@@ -46,6 +92,20 @@ impl ConcurrencyGate {
             .acquire_owned()
             .await
             .expect("ConcurrencyGate semaphore is never closed")
+    }
+
+    /// Try to take an Exclusive lane without waiting.
+    pub fn try_acquire_lane(&self, lane: ExclusiveLane) -> Option<OwnedSemaphorePermit> {
+        self.lanes[lane.index()].clone().try_acquire_owned().ok()
+    }
+
+    /// Wait until the Exclusive lane is free.
+    pub async fn acquire_lane(&self, lane: ExclusiveLane) -> OwnedSemaphorePermit {
+        self.lanes[lane.index()]
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("Exclusive lane semaphore is never closed")
     }
 }
 
@@ -107,5 +167,36 @@ mod tests {
         assert!(!handle.is_finished());
         drop(p1);
         assert!(handle.await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn second_apt_lane_blocks_until_first_drops() {
+        let gate = Arc::new(ConcurrencyGate::from_num_threads(Some(2)));
+        let held = gate.try_acquire_lane(ExclusiveLane::Apt).unwrap();
+        let gate2 = Arc::clone(&gate);
+        let handle = tokio::spawn(async move { gate2.acquire_lane(ExclusiveLane::Apt).await });
+        tokio::task::yield_now().await;
+        assert!(!handle.is_finished());
+        drop(held);
+        let _ = handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn brew_lane_does_not_block_apt() {
+        let gate = ConcurrencyGate::from_num_threads(Some(2));
+        let _apt = gate.try_acquire_lane(ExclusiveLane::Apt).unwrap();
+        assert!(gate.try_acquire_lane(ExclusiveLane::Brew).is_some());
+    }
+
+    #[tokio::test]
+    async fn lane_waiter_does_not_consume_work_permit() {
+        let gate = Arc::new(ConcurrencyGate::from_num_threads(Some(1)));
+        let _lane = gate.try_acquire_lane(ExclusiveLane::Apt).unwrap();
+        let gate2 = Arc::clone(&gate);
+        let waiter = tokio::spawn(async move { gate2.acquire_lane(ExclusiveLane::Apt).await });
+        tokio::task::yield_now().await;
+        assert!(!waiter.is_finished());
+        let _permit = gate.acquire().await;
+        waiter.abort();
     }
 }

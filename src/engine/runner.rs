@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use crate::config::graph::TaskGraph;
 use crate::config::history::History;
-use crate::config::types::{AppConfig, TaskConfig};
+use crate::config::types::{AppConfig, CommandEntry, TaskConfig};
 use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
 
-use super::commands::{create_executor, CommandExecutor};
+use super::commands::{create_executor, exclusive_lane, CommandExecutor};
 use super::concurrency::ConcurrencyGate;
 use super::context::CommandContext;
 use super::event::TaskEvent;
@@ -288,15 +288,14 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
         depth: ctx.depth,
     });
 
-    let executors: Vec<Box<dyn CommandExecutor>> =
-        task.commands.iter().cloned().map(create_executor).collect();
-    let command_total = executors.len();
+    let command_total = task.commands.len();
 
     if task.parallel {
         let mut handles = Vec::new();
 
-        for (i, executor) in executors.into_iter().enumerate() {
+        for (i, entry) in task.commands.iter().cloned().enumerate() {
             let command_index = i + 1;
+            let executor = create_executor(entry.clone());
             let desc = executor.description();
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: name.to_string(),
@@ -306,7 +305,15 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
             });
             let ctx = ctx.clone();
             handles.push(tokio::spawn(async move {
-                let result = execute_with_gate(executor.as_ref(), &ctx).await;
+                let result = execute_with_gate(
+                    &entry,
+                    executor.as_ref(),
+                    &ctx,
+                    &desc,
+                    command_index,
+                    command_total,
+                )
+                .await;
                 (desc, command_index, result)
             }));
         }
@@ -336,8 +343,9 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
             }
         }
     } else {
-        for (i, executor) in executors.iter().enumerate() {
+        for (i, entry) in task.commands.iter().enumerate() {
             let command_index = i + 1;
+            let executor = create_executor(entry.clone());
             let desc = executor.description();
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: name.to_string(),
@@ -346,7 +354,16 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
                 command_total,
             });
 
-            match execute_with_gate(executor.as_ref(), ctx).await {
+            match execute_with_gate(
+                entry,
+                executor.as_ref(),
+                ctx,
+                &desc,
+                command_index,
+                command_total,
+            )
+            .await
+            {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
                         task_name: name.to_string(),
@@ -376,11 +393,35 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
     Ok(())
 }
 
-/// Acquire a ConcurrencyGate permit for leaf Command entries only.
-async fn execute_with_gate(executor: &dyn CommandExecutor, ctx: &CommandContext) -> Result<()> {
+/// Admit a Command entry: Exclusive lane (if any) first, then work permit.
+async fn execute_with_gate(
+    entry: &CommandEntry,
+    executor: &dyn CommandExecutor,
+    ctx: &CommandContext,
+    command_desc: &str,
+    command_index: usize,
+    command_total: usize,
+) -> Result<()> {
+    let _lane_permit = if let Some(lane) = exclusive_lane(entry, ctx.mode) {
+        match ctx.gate.try_acquire_lane(lane) {
+            Some(permit) => Some(permit),
+            None => {
+                ctx.emit(TaskEvent::CommandWaiting {
+                    task_name: ctx.task_name.clone(),
+                    command_desc: command_desc.to_string(),
+                    command_index,
+                    command_total,
+                    lane,
+                });
+                Some(ctx.gate.acquire_lane(lane).await)
+            }
+        }
+    } else {
+        None
+    };
+
     if executor.occupies_concurrency_slot() {
-        let permit = ctx.gate.acquire().await;
-        let _permit = permit;
+        let _permit = ctx.gate.acquire().await;
         executor.execute(ctx).await
     } else {
         executor.execute(ctx).await

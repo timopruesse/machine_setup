@@ -15,7 +15,7 @@ use crate::error::Result;
 
 use super::context::CommandContext;
 
-pub use catalog::create_executor;
+pub use catalog::{create_executor, exclusive_lane};
 
 /// Trait for executable commands.
 ///

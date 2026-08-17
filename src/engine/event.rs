@@ -1,3 +1,5 @@
+use crate::engine::concurrency::ExclusiveLane;
+
 /// Events emitted by the engine during task execution.
 /// These decouple the execution logic from the presentation layer (TUI/plain log).
 #[derive(Debug, Clone)]
@@ -27,6 +29,15 @@ pub enum TaskEvent {
         /// 1-based index within the task's command list.
         command_index: usize,
         command_total: usize,
+    },
+
+    /// A command is waiting on an Exclusive lane already held in this run.
+    CommandWaiting {
+        task_name: String,
+        command_desc: String,
+        command_index: usize,
+        command_total: usize,
+        lane: ExclusiveLane,
     },
 
     /// A command within a task completed successfully.

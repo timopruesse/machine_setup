@@ -1642,3 +1642,106 @@ tasks:
         "x = 1"
     );
 }
+
+#[tokio::test]
+async fn parallel_apt_command_entries_serialize_on_lane() {
+    let marker_dir = tempdir().unwrap();
+    let marker = marker_dir.path().join("order.log");
+    let marker_path = marker.to_string_lossy().replace('\\', "/");
+    let events = run_config(
+        &format!(
+            r#"
+parallel: true
+num_threads: 2
+tasks:
+  apt_a:
+    commands:
+      - run:
+          commands: |
+            echo apt-get >/dev/null
+            echo start >> "{marker_path}"
+            sleep 0.2
+            echo end >> "{marker_path}"
+  apt_b:
+    commands:
+      - run:
+          commands: |
+            echo apt-get >/dev/null
+            echo start >> "{marker_path}"
+            sleep 0.2
+            echo end >> "{marker_path}"
+"#
+        ),
+        Mode::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "apt_a"));
+    assert!(task_completed(&events, "apt_b"));
+    let waiting = events
+        .iter()
+        .filter(|e| matches!(e, TaskEvent::CommandWaiting { .. }))
+        .count();
+    assert_eq!(
+        waiting, 1,
+        "exactly one Command entry waits on the apt lane"
+    );
+    let order = fs::read_to_string(&marker).unwrap();
+    let starts = order.matches("start").count();
+    let ends = order.matches("end").count();
+    assert_eq!(starts, 2);
+    assert_eq!(ends, 2);
+    assert!(
+        order.contains("start\nend\nstart\nend\n"),
+        "apt Command entries must serialize, got:\n{order}"
+    );
+}
+
+#[tokio::test]
+async fn uncontended_apt_does_not_emit_command_waiting() {
+    let events = run_config(
+        r#"
+tasks:
+  only:
+    commands:
+      - run:
+          commands: "echo apt-get"
+"#,
+        Mode::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "only"));
+    assert!(!has_event(&events, |e| matches!(
+        e,
+        TaskEvent::CommandWaiting { .. }
+    )));
+}
+
+#[tokio::test]
+async fn apt_and_brew_do_not_share_a_lane() {
+    let events = run_config(
+        r#"
+parallel: true
+num_threads: 2
+tasks:
+  apt_task:
+    commands:
+      - run:
+          commands: "echo apt-get && sleep 0.1"
+  brew_task:
+    commands:
+      - run:
+          commands: "echo brew && sleep 0.1"
+"#,
+        Mode::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "apt_task"));
+    assert!(task_completed(&events, "brew_task"));
+    assert!(
+        !has_event(&events, |e| matches!(e, TaskEvent::CommandWaiting { .. })),
+        "distinct families must not wait on each other"
+    );
+}

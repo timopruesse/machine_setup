@@ -7,6 +7,8 @@
 use std::path::Path;
 
 use crate::config::types::{AppConfig, CommandEntry};
+use crate::engine::concurrency::ExclusiveLane;
+use crate::engine::mode::Mode;
 use crate::utils::shell::validate_env_key;
 
 use super::clone::CloneCommand;
@@ -132,4 +134,113 @@ pub fn validate_entry(entry: &CommandEntry, config_dir: &Path) -> Vec<KindIssue>
         CommandEntry::Clone(_) => {}
     }
     issues
+}
+
+/// Infer an Exclusive lane from a `run` Command entry's script for this Mode.
+///
+/// Authors do not declare lanes. First matching family in table order wins.
+pub fn exclusive_lane(entry: &CommandEntry, mode: Mode) -> Option<ExclusiveLane> {
+    let CommandEntry::Run(args) = entry else {
+        return None;
+    };
+    let scripts = args.commands_for_mode(mode);
+    FAMILIES
+        .iter()
+        .find(|(_, tokens)| {
+            scripts
+                .iter()
+                .any(|script| tokens.iter().any(|token| script_has_token(script, token)))
+        })
+        .map(|(lane, _)| *lane)
+}
+
+/// Stable family order — first match is the lane (ADR-0010).
+const FAMILIES: &[(ExclusiveLane, &[&str])] = &[
+    (ExclusiveLane::Apt, &["apt", "apt-get", "aptitude", "dpkg"]),
+    (ExclusiveLane::Brew, &["brew"]),
+    (ExclusiveLane::Dnf, &["dnf", "yum"]),
+    (ExclusiveLane::Pacman, &["pacman", "yay", "paru"]),
+    (ExclusiveLane::Apk, &["apk"]),
+    (ExclusiveLane::Winget, &["winget"]),
+    (ExclusiveLane::Choco, &["choco", "chocolatey"]),
+];
+
+fn script_has_token(script: &str, token: &str) -> bool {
+    script
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+        .any(|word| word == token)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::types::CommandEntry;
+
+    fn parse_entry(yaml: &str) -> CommandEntry {
+        serde_yaml::from_str(yaml).expect("command entry yaml")
+    }
+
+    #[test]
+    fn apt_get_joins_apt_lane() {
+        let entry = parse_entry("run:\n  commands: sudo apt-get install git");
+        assert_eq!(
+            exclusive_lane(&entry, Mode::Install),
+            Some(ExclusiveLane::Apt)
+        );
+    }
+
+    #[test]
+    fn echo_does_not_join_a_lane() {
+        let entry = parse_entry("run:\n  commands: echo hello");
+        assert_eq!(exclusive_lane(&entry, Mode::Install), None);
+    }
+
+    #[test]
+    fn brew_joins_brew_lane() {
+        let entry = parse_entry("run:\n  commands: brew install git");
+        assert_eq!(
+            exclusive_lane(&entry, Mode::Install),
+            Some(ExclusiveLane::Brew)
+        );
+    }
+
+    #[test]
+    fn first_family_wins_on_dual_pm_script() {
+        let entry = parse_entry("run:\n  commands: apt install foo && brew install bar");
+        assert_eq!(
+            exclusive_lane(&entry, Mode::Install),
+            Some(ExclusiveLane::Apt)
+        );
+    }
+
+    #[test]
+    fn aptitude_joins_apt_lane() {
+        let entry = parse_entry("run:\n  commands: sudo aptitude install git");
+        assert_eq!(
+            exclusive_lane(&entry, Mode::Install),
+            Some(ExclusiveLane::Apt)
+        );
+    }
+
+    #[test]
+    fn adaptive_is_not_apt() {
+        let entry = parse_entry("run:\n  commands: echo adaptive");
+        assert_eq!(exclusive_lane(&entry, Mode::Install), None);
+    }
+
+    #[test]
+    fn copy_entry_has_no_lane() {
+        let entry = parse_entry("copy:\n  src: /tmp/a\n  target: /tmp/b");
+        assert_eq!(exclusive_lane(&entry, Mode::Install), None);
+    }
+
+    #[test]
+    fn unused_install_apt_does_not_join_on_update() {
+        let entry = parse_entry("run:\n  install: sudo apt-get install git");
+        assert_eq!(exclusive_lane(&entry, Mode::Update), None);
+        assert_eq!(
+            exclusive_lane(&entry, Mode::Install),
+            Some(ExclusiveLane::Apt)
+        );
+    }
 }
