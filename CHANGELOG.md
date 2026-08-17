@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.8.0]
+
+### Added
+- Runner grid details pane during parallel runs: up to four task bands with overflow count, `j`/`k` band selection, and `Enter` to expand/collapse a full log
+- Per-command progress on task events (`command_index` / `command_total`)
+- Structured `OutputKind` on engine log lines so the TUI and plain mode can style and filter output
+- `quiet: true` on `run` commands to suppress subprocess stdout and emit a completion summary instead
+
+### Changed
+- Replace the flat parallel merge stream with per-runner bands in the details pane
+- Shorter copy/symlink/clone progress messages with `~/…` path shortening
+- Quieter `git clone` / `git pull`; subprocess streaming collapses blank lines and truncates long lines
+
 ## [2.7.2]
 
 ### Fixed
