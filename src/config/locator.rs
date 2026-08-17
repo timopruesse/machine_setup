@@ -67,7 +67,19 @@ fn probe_dir(dir: &Path) -> Option<PathBuf> {
 
 /// Walk up from `start` looking for a `.git` entry; return that directory.
 fn find_git_root(start: &Path) -> Option<PathBuf> {
-    // Prefer `git rev-parse` when available (handles worktrees).
+    // Walk first so the common repo/worktree path does not spawn git.
+    // `.git` may be a directory or a worktree file.
+    let mut dir = start.to_path_buf();
+    loop {
+        if dir.join(".git").exists() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+
+    // Fallback for GIT_DIR / layouts with no `.git` on the walk.
     if let Ok(output) = StdCommand::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .current_dir(start)
@@ -81,15 +93,7 @@ fn find_git_root(start: &Path) -> Option<PathBuf> {
         }
     }
 
-    let mut dir = start.to_path_buf();
-    loop {
-        if dir.join(".git").exists() {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
+    None
 }
 
 #[cfg(test)]
@@ -118,6 +122,20 @@ mod tests {
         let root = tempdir().unwrap();
         let root_path = root.path();
         fs::create_dir(root_path.join(".git")).unwrap();
+        fs::write(root_path.join("machine_setup.yaml"), "tasks: {}\n").unwrap();
+
+        let sub = root_path.join("nested");
+        fs::create_dir(&sub).unwrap();
+
+        let found = find(&sub).unwrap();
+        assert_eq!(found, root_path.join("machine_setup.yaml"));
+    }
+
+    #[test]
+    fn find_falls_back_when_git_is_a_file() {
+        let root = tempdir().unwrap();
+        let root_path = root.path();
+        fs::write(root_path.join(".git"), "gitdir: /somewhere\n").unwrap();
         fs::write(root_path.join("machine_setup.yaml"), "tasks: {}\n").unwrap();
 
         let sub = root_path.join("nested");

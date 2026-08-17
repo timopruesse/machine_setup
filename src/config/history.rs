@@ -36,7 +36,7 @@ impl History {
             std::fs::create_dir_all(parent)?;
         }
         let content =
-            serde_json::to_string_pretty(&self).map_err(|e| Error::HistoryError(e.to_string()))?;
+            serde_json::to_string(&self).map_err(|e| Error::HistoryError(e.to_string()))?;
         std::fs::write(&path, content)?;
         Ok(())
     }
@@ -102,6 +102,40 @@ mod tests {
         let dir = tempdir().unwrap();
         let history = History::load(dir.path()).unwrap();
         assert!(history.tasks.is_empty());
+    }
+
+    #[test]
+    fn save_writes_compact_json() {
+        let dir = tempdir().unwrap();
+        let mut history = History::default();
+        history.mark_installed("task_a");
+        history.save(dir.path()).unwrap();
+
+        let raw = std::fs::read_to_string(dir.path().join("history.json")).unwrap();
+        assert!(
+            !raw.contains("\n  "),
+            "history.json should be compact, got {raw:?}"
+        );
+    }
+
+    #[test]
+    fn load_accepts_pretty_printed_json() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("history.json"),
+            r#"{
+  "task_a": {
+    "installed_at": "2020-01-01T00:00:00Z",
+    "updated_at": null,
+    "uninstalled_at": null
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let loaded = History::load(dir.path()).unwrap();
+        assert!(loaded.is_installed("task_a"));
     }
 
     #[test]
