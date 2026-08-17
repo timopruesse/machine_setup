@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.8.1]
+
 ### Performance
 - Config locator walks `.git` before spawning `git rev-parse`, so the common repo/worktree path skips a process
 - History writes compact `history.json`; pretty-printed files still load
