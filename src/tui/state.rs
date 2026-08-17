@@ -5,10 +5,7 @@ use crate::engine::mode::Mode;
 /// Max log lines retained per task (oldest dropped).
 pub const LOG_CAP: usize = 2000;
 
-/// Max lines retained in the parallel merge buffer (oldest dropped).
-pub const MERGE_CAP: usize = 2000;
-
-/// Number of distinct accent colors for running / merge tags.
+/// Number of distinct accent colors for running task bands.
 pub const TASK_PALETTE_LEN: usize = 8;
 
 /// Status of a task in the TUI.
@@ -38,14 +35,6 @@ impl TaskStatus {
     }
 }
 
-/// One line in the ephemeral parallel merge stream.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MergeLine {
-    pub task_name: String,
-    pub color_idx: usize,
-    pub text: String,
-}
-
 /// State for a single task in the TUI.
 #[derive(Debug, Clone)]
 pub struct TaskState {
@@ -54,6 +43,8 @@ pub struct TaskState {
     pub log_lines: Vec<String>,
     pub command_count: usize,
     pub current_command: Option<String>,
+    pub command_index: Option<usize>,
+    pub command_total: Option<usize>,
     /// Nesting depth (0 = top-level, 1+ = sub-config)
     pub depth: usize,
     /// When the task last entered Running.
@@ -72,6 +63,8 @@ impl TaskState {
             log_lines: Vec::new(),
             command_count: 0,
             current_command: None,
+            command_index: None,
+            command_total: None,
             depth: 0,
             started_at: None,
             duration: None,
@@ -129,10 +122,10 @@ pub struct UiState {
     pub run_started: Instant,
     /// Frozen run duration once all tasks are done.
     pub run_elapsed: Option<Duration>,
-    /// Live multiplex while ≥2 tasks are running.
-    pub merge_lines: Vec<MergeLine>,
-    /// Task indices that failed during the current merge burst (order preserved).
-    pub merge_failed: Vec<usize>,
+    /// Task indices that failed during the current parallel burst (order preserved).
+    pub burst_failed: Vec<usize>,
+    /// Full log drill-down while ≥2 tasks are running (`Enter` toggles).
+    pub details_expanded: bool,
     /// Next palette slot to hand out.
     pub next_color: usize,
 }
@@ -158,8 +151,8 @@ impl UiState {
             tick: 0,
             run_started: Instant::now(),
             run_elapsed: None,
-            merge_lines: Vec::new(),
-            merge_failed: Vec::new(),
+            burst_failed: Vec::new(),
+            details_expanded: false,
             next_color: 0,
         }
     }
@@ -180,8 +173,19 @@ impl UiState {
         self.tasks.iter().filter(|t| t.status.is_running()).count()
     }
 
-    pub fn in_merge_mode(&self) -> bool {
+    /// True when ≥2 tasks are running (Runner grid mode).
+    pub fn in_burst_mode(&self) -> bool {
         self.running_count() >= 2
+    }
+
+    /// Indices of running tasks in definition order.
+    pub fn running_task_indices(&self) -> Vec<usize> {
+        self.tasks
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.status.is_running())
+            .map(|(i, _)| i)
+            .collect()
     }
 
     /// True when a filter query is retained (search mode or non-empty query).
@@ -214,19 +218,5 @@ impl UiState {
             task.color_idx = Some(idx);
         }
         idx
-    }
-
-    /// Append a merge line, enforcing [`MERGE_CAP`].
-    pub fn push_merge(&mut self, line: MergeLine) {
-        let line = MergeLine {
-            task_name: line.task_name,
-            color_idx: line.color_idx,
-            text: crate::tui::format::strip_ansi(&line.text),
-        };
-        self.merge_lines.push(line);
-        if self.merge_lines.len() > MERGE_CAP {
-            let excess = self.merge_lines.len() - MERGE_CAP;
-            self.merge_lines.drain(0..excess);
-        }
     }
 }

@@ -27,17 +27,27 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
             key_hint("/", "search"),
         ]
     } else {
-        vec![
-            key_hint("q", "quit"),
-            if state.in_merge_mode() {
-                key_hint("j/k", "list")
+        let mut keys = vec![key_hint("q", "quit")];
+        if state.in_burst_mode() {
+            keys.push(if state.details_expanded {
+                key_hint("Enter", "collapse")
             } else {
+                key_hint("Enter", "expand")
+            });
+            keys.push(if state.details_expanded {
                 key_hint("j/k", "navigate")
-            },
+            } else {
+                key_hint("j/k", "band")
+            });
+        } else {
+            keys.push(key_hint("j/k", "navigate"));
+        }
+        keys.extend([
             key_hint("PgUp/PgDn", "scroll"),
             key_hint("Home/End", "log"),
             key_hint("/", "search"),
-        ]
+        ]);
+        keys
     };
 
     if !state.log_follow && !state.search_mode {

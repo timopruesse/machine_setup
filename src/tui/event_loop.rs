@@ -165,6 +165,9 @@ fn map_key(state: &UiState, key: KeyEvent) -> Option<Input> {
     }
 
     match key.code {
+        KeyCode::Enter if state.in_burst_mode() && !state.search_mode => {
+            Some(Input::ToggleDetailsExpand)
+        }
         KeyCode::Char('q') => Some(Input::CancelAndQuit),
         KeyCode::Esc => Some(Input::ClearFilterOrQuit),
         KeyCode::Char('/') => Some(Input::EnterSearch),

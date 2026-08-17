@@ -1,7 +1,7 @@
 # TUI parallel awareness + merged log
 
 Date: 2026-08-08  
-Status: approved  
+Status: **superseded** by [ADR-0009](../adr/0009-runner-grid-details-pane.md)  
 Repo: `timopruesse/machine_setup`  
 Approach: **1** — ephemeral merge ring in the pure reducer
 

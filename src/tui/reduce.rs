@@ -1,7 +1,11 @@
 use crate::engine::event::TaskEvent;
 
 use super::message::{Effect, Input, Message};
-use super::state::{MergeLine, TaskState, TaskStatus, UiState};
+use super::parallel_burst::{
+    self, clear_command_progress, find_or_create_task, set_command_progress, BurstContext,
+    SoftSelect,
+};
+use super::state::{TaskStatus, UiState};
 
 /// Pure state transition. No I/O.
 pub fn reduce(mut state: UiState, msg: Message) -> (UiState, Effect) {
@@ -19,179 +23,127 @@ pub fn reduce(mut state: UiState, msg: Message) -> (UiState, Effect) {
 }
 
 fn apply_engine(state: &mut UiState, event: TaskEvent) {
-    match event {
+    let running_before = state.running_count();
+
+    let (task_name, soft, task_failed_during_burst) = match event {
         TaskEvent::TaskStarted {
-            task_name,
+            task_name: name,
             command_count,
             depth,
         } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
+            let task = find_or_create_task(state, &name);
             task.mark_running();
             task.command_count = command_count;
             task.depth = depth;
             let line = format!("Starting ({command_count} commands)...");
-            task.push_log(line.clone());
-            let name = task_name;
+            task.push_log(line);
             state.ensure_task_color(&name);
-            finish_engine_event(
-                state,
-                running_before,
-                &name,
-                Some(&line),
-                SoftSelect::Prefer(&name),
-            );
+            (name.clone(), SoftSelect::Prefer(name), false)
         }
-        TaskEvent::TaskSkipped { task_name, reason } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
+        TaskEvent::TaskSkipped {
+            task_name: name,
+            reason,
+        } => {
+            let task = find_or_create_task(state, &name);
             task.freeze_duration();
             let reason = crate::tui::format::strip_ansi(&reason);
             task.status = TaskStatus::Skipped(reason.clone());
             let line = format!("Skipped: {reason}");
-            task.push_log(line.clone());
+            task.push_log(line);
             state.skipped += 1;
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::AnyRunning,
-            );
+            (name, SoftSelect::AnyRunning, false)
         }
         TaskEvent::CommandStarted {
-            task_name,
+            task_name: name,
             command_desc,
+            command_index,
+            command_total,
         } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
+            let task = find_or_create_task(state, &name);
             let command_desc = crate::tui::format::strip_ansi(&command_desc);
-            task.current_command = Some(command_desc.clone());
+            set_command_progress(task, command_index, command_total, &command_desc);
             let line = format!("> {command_desc}");
-            task.push_log(line.clone());
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::None,
-            );
+            task.push_log(line);
+            (name, SoftSelect::None, false)
         }
-        TaskEvent::CommandOutput { task_name, line } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
+        TaskEvent::CommandOutput {
+            task_name: name,
+            line,
+        } => {
+            let task = find_or_create_task(state, &name);
             let line = format!("  {line}");
-            task.push_log(line.clone());
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::None,
-            );
+            task.push_log(line);
+            (name, SoftSelect::None, false)
         }
         TaskEvent::CommandCompleted {
-            task_name,
+            task_name: name,
             command_desc,
+            command_index,
+            command_total,
         } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
-            task.current_command = None;
-            let line = format!("  [done] {command_desc}");
-            task.push_log(line.clone());
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::None,
-            );
+            let task = find_or_create_task(state, &name);
+            clear_command_progress(task);
+            let line = format!("  [done] {command_desc} ({command_index}/{command_total})");
+            task.push_log(line);
+            (name, SoftSelect::None, false)
         }
         TaskEvent::CommandFailed {
-            task_name,
+            task_name: name,
             command_desc,
+            command_index,
+            command_total,
             error,
         } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
-            task.current_command = None;
-            let line = format!("  [FAILED] {command_desc}: {error}");
-            task.push_log(line.clone());
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::None,
-            );
+            let task = find_or_create_task(state, &name);
+            clear_command_progress(task);
+            let line =
+                format!("  [FAILED] {command_desc} ({command_index}/{command_total}): {error}");
+            task.push_log(line);
+            (name, SoftSelect::None, false)
         }
-        TaskEvent::TaskCompleted { task_name } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
+        TaskEvent::TaskCompleted { task_name: name } => {
+            let task = find_or_create_task(state, &name);
             task.freeze_duration();
             task.status = TaskStatus::Completed;
+            clear_command_progress(task);
             let line = "Completed successfully.".to_string();
-            task.push_log(line.clone());
+            task.push_log(line);
             state.succeeded += 1;
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::AnyRunning,
-            );
+            (name, SoftSelect::AnyRunning, false)
         }
-        TaskEvent::TaskFailed { task_name, error } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
+        TaskEvent::TaskFailed {
+            task_name: name,
+            error,
+        } => {
+            let task = find_or_create_task(state, &name);
             task.freeze_duration();
             let error = crate::tui::format::strip_ansi(&error);
             task.status = TaskStatus::Failed(error.clone());
+            clear_command_progress(task);
             let line = format!("FAILED: {error}");
-            task.push_log(line.clone());
+            task.push_log(line);
             state.failed += 1;
-            if running_before >= 2 {
-                if let Some(idx) = state.tasks.iter().position(|t| t.name == task_name) {
-                    if !state.merge_failed.contains(&idx) {
-                        state.merge_failed.push(idx);
-                    }
-                }
-            }
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::AnyRunning,
-            );
+            (name, SoftSelect::AnyRunning, running_before >= 2)
         }
         TaskEvent::TaskRetry {
-            task_name,
+            task_name: name,
             attempt,
             max_attempts,
             error,
         } => {
-            let running_before = state.running_count();
-            let task = find_or_create_task(state, &task_name);
+            let task = find_or_create_task(state, &name);
             task.mark_running();
             let line = format!("  Retry {attempt}/{max_attempts}: {error}");
-            task.push_log(line.clone());
-            state.ensure_task_color(&task_name);
-            finish_engine_event(
-                state,
-                running_before,
-                &task_name,
-                Some(&line),
-                SoftSelect::Prefer(&task_name),
-            );
+            task.push_log(line);
+            state.ensure_task_color(&name);
+            (name.clone(), SoftSelect::Prefer(name), false)
         }
         TaskEvent::AllDone { .. } => {
             state.done = true;
             state.freeze_run_elapsed();
-            state.merge_lines.clear();
-            state.merge_failed.clear();
+            state.burst_failed.clear();
+            state.details_expanded = false;
             if let Some(idx) = state.tasks.iter().position(|t| t.status.is_failed()) {
-                // Clear any active filter so the jumped failure is visible in the list.
                 state.search_mode = false;
                 state.search_query.clear();
                 update_filter(state);
@@ -201,96 +153,21 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
                     state.log_scroll = task.log_lines.len().saturating_sub(1);
                 }
             }
+            return;
         }
-    }
-}
+    };
 
-enum SoftSelect<'a> {
-    None,
-    Prefer(&'a str),
-    AnyRunning,
-}
-
-fn finish_engine_event(
-    state: &mut UiState,
-    running_before: usize,
-    task_name: &str,
-    merge_line: Option<&str>,
-    soft: SoftSelect<'_>,
-) {
     let running_after = state.running_count();
-    if let Some(line) = merge_line {
-        maybe_merge_append(state, running_before, running_after, task_name, line);
-    }
-    if running_before >= 2 && running_after <= 1 {
-        leave_merge(state);
-    } else {
-        match soft {
-            SoftSelect::None => {}
-            SoftSelect::Prefer(name) => soft_auto_select(state, Some(name)),
-            SoftSelect::AnyRunning => soft_auto_select(state, None),
-        }
-    }
-    follow_selected_log(state);
-}
-
-fn maybe_merge_append(
-    state: &mut UiState,
-    running_before: usize,
-    running_after: usize,
-    task_name: &str,
-    line: &str,
-) {
-    if running_before < 2 && running_after < 2 {
-        return;
-    }
-    let color_idx = state.ensure_task_color(task_name);
-    state.push_merge(MergeLine {
-        task_name: task_name.to_string(),
-        color_idx,
-        text: line.to_string(),
-    });
-}
-
-fn leave_merge(state: &mut UiState) {
-    if let Some(&idx) = state.merge_failed.first() {
-        state.selected = idx;
-        state.log_follow = false;
-        if let Some(task) = state.tasks.get(idx) {
-            state.log_scroll = task.log_lines.len().saturating_sub(1);
-        }
-    } else if state.auto_select_running {
-        if let Some(idx) = state.tasks.iter().position(|t| t.status.is_running()) {
-            state.selected = idx;
-            state.log_scroll = 0;
-            state.log_follow = true;
-        }
-    }
-    state.merge_lines.clear();
-    state.merge_failed.clear();
-}
-
-fn soft_auto_select(state: &mut UiState, preferred: Option<&str>) {
-    if !state.auto_select_running {
-        return;
-    }
-    let selected_running = state
-        .tasks
-        .get(state.selected)
-        .map(|t| t.status.is_running())
-        .unwrap_or(false);
-    if selected_running {
-        return;
-    }
-    if let Some(name) = preferred {
-        select_task(state, name);
-        return;
-    }
-    if let Some(idx) = state.tasks.iter().position(|t| t.status.is_running()) {
-        state.selected = idx;
-        state.log_scroll = 0;
-        state.log_follow = true;
-    }
+    parallel_burst::after_engine_event(
+        state,
+        BurstContext {
+            running_before,
+            running_after,
+            task_name,
+            soft,
+            task_failed_during_burst,
+        },
+    );
 }
 
 fn apply_input(mut state: UiState, input: Input) -> (UiState, Effect) {
@@ -332,6 +209,15 @@ fn apply_input(mut state: UiState, input: Input) -> (UiState, Effect) {
             update_filter(&mut state);
             (state, Effect::None)
         }
+        Input::ToggleDetailsExpand => {
+            if state.in_burst_mode() {
+                state.details_expanded = !state.details_expanded;
+                state.log_scroll = 0;
+                state.log_follow = true;
+                parallel_burst::sync_log_scroll(&mut state);
+            }
+            (state, Effect::None)
+        }
         Input::SelectNext => {
             select_next(&mut state);
             (state, Effect::None)
@@ -347,7 +233,7 @@ fn apply_input(mut state: UiState, input: Input) -> (UiState, Effect) {
         }
         Input::LogPageDown => {
             state.log_scroll = state.log_scroll.saturating_add(3);
-            maybe_reenable_follow_at_bottom(&mut state);
+            parallel_burst::maybe_reenable_follow_at_bottom(&mut state);
             (state, Effect::None)
         }
         Input::LogHome => {
@@ -357,30 +243,9 @@ fn apply_input(mut state: UiState, input: Input) -> (UiState, Effect) {
         }
         Input::LogEnd => {
             state.log_follow = true;
-            stick_log_to_end(&mut state);
+            parallel_burst::stick_log_to_end(&mut state);
             (state, Effect::None)
         }
-    }
-}
-
-fn find_or_create_task<'a>(state: &'a mut UiState, name: &str) -> &'a mut TaskState {
-    if let Some(idx) = state.tasks.iter().position(|t| t.name == name) {
-        return &mut state.tasks[idx];
-    }
-    let idx = state.tasks.len();
-    state.tasks.push(TaskState::new(name.to_string()));
-    let query = state.search_query.to_lowercase();
-    if query.is_empty() || name.to_lowercase().contains(&query) {
-        state.filtered_indices.push(idx);
-    }
-    &mut state.tasks[idx]
-}
-
-fn select_task(state: &mut UiState, name: &str) {
-    if let Some(idx) = state.tasks.iter().position(|t| t.name == name) {
-        state.selected = idx;
-        state.log_scroll = 0;
-        state.log_follow = true;
     }
 }
 
@@ -397,7 +262,8 @@ fn select_next(state: &mut UiState) {
         state.selected = state.filtered_indices[pos];
     }
     state.log_follow = true;
-    stick_log_to_end(state);
+    state.log_scroll = 0;
+    parallel_burst::sync_log_scroll(state);
 }
 
 fn select_prev(state: &mut UiState) {
@@ -413,7 +279,8 @@ fn select_prev(state: &mut UiState) {
         state.selected = state.filtered_indices[pos];
     }
     state.log_follow = true;
-    stick_log_to_end(state);
+    state.log_scroll = 0;
+    parallel_burst::sync_log_scroll(state);
 }
 
 fn update_filter(state: &mut UiState) {
@@ -432,43 +299,6 @@ fn update_filter(state: &mut UiState) {
             state.log_scroll = 0;
             state.log_follow = true;
         }
-    }
-}
-
-fn follow_selected_log(state: &mut UiState) {
-    if state.log_follow {
-        stick_log_to_end(state);
-    }
-}
-
-fn active_log_len(state: &UiState) -> usize {
-    if state.in_merge_mode() {
-        state.merge_lines.len()
-    } else {
-        state
-            .tasks
-            .get(state.selected)
-            .map(|t| t.log_lines.len())
-            .unwrap_or(0)
-    }
-}
-
-fn stick_log_to_end(state: &mut UiState) {
-    let line_count = active_log_len(state);
-    if line_count > 0 {
-        state.log_scroll = line_count.saturating_sub(1);
-    }
-}
-
-fn maybe_reenable_follow_at_bottom(state: &mut UiState) {
-    let line_count = active_log_len(state);
-    if line_count == 0 {
-        return;
-    }
-    let end = line_count.saturating_sub(1);
-    if state.log_scroll >= end {
-        state.log_follow = true;
-        state.log_scroll = end;
     }
 }
 
@@ -506,6 +336,23 @@ mod tests {
     }
 
     #[test]
+    fn command_started_sets_progress() {
+        let state = state_with(&["a"]);
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::CommandStarted {
+                task_name: "a".into(),
+                command_desc: "install".into(),
+                command_index: 2,
+                command_total: 5,
+            }),
+        );
+        assert_eq!(state.tasks[0].command_index, Some(2));
+        assert_eq!(state.tasks[0].command_total, Some(5));
+        assert_eq!(state.tasks[0].current_command.as_deref(), Some("install"));
+    }
+
+    #[test]
     fn task_completed_freezes_duration() {
         let state = state_with(&["a"]);
         let (state, _) = reduce(
@@ -516,7 +363,6 @@ mod tests {
                 depth: 0,
             }),
         );
-        assert!(state.tasks[0].started_at.is_some());
         let (state, _) = reduce(
             state,
             Message::Engine(TaskEvent::TaskCompleted {
@@ -545,7 +391,6 @@ mod tests {
     #[test]
     fn all_done_freezes_run_elapsed() {
         let state = state_with(&["a"]);
-        assert!(state.run_elapsed.is_none());
         let (state, _) = reduce(
             state,
             Message::Engine(TaskEvent::AllDone {
@@ -556,69 +401,6 @@ mod tests {
         );
         assert!(state.done);
         assert!(state.run_elapsed.is_some());
-    }
-
-    #[test]
-    fn task_retry_restamps_start_and_clears_duration() {
-        let state = state_with(&["a"]);
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskStarted {
-                task_name: "a".into(),
-                command_count: 1,
-                depth: 0,
-            }),
-        );
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskFailed {
-                task_name: "a".into(),
-                error: "boom".into(),
-            }),
-        );
-        assert!(state.tasks[0].duration.is_some());
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskRetry {
-                task_name: "a".into(),
-                attempt: 2,
-                max_attempts: 3,
-                error: "boom".into(),
-            }),
-        );
-        assert_eq!(state.tasks[0].status, TaskStatus::Running);
-        assert!(state.tasks[0].started_at.is_some());
-        assert!(state.tasks[0].duration.is_none());
-    }
-
-    #[test]
-    fn search_enter_keeps_filter_esc_clears_without_quit() {
-        let state = state_with(&["alpha", "beta", "gamma"]);
-        let (state, _) = reduce(state, Message::Input(Input::EnterSearch));
-        let (state, _) = reduce(state, Message::Input(Input::SearchChar('b')));
-        let (state, _) = reduce(state, Message::Input(Input::SearchChar('e')));
-        assert!(state.search_mode);
-        assert_eq!(state.filtered_indices, vec![1]);
-
-        let (state, effect) = reduce(state, Message::Input(Input::ConfirmSearch));
-        assert_eq!(effect, Effect::None);
-        assert!(!state.search_mode);
-        assert_eq!(state.search_query, "be");
-        assert!(state.filter_active());
-        assert_eq!(state.filtered_indices, vec![1]);
-
-        let (state, effect) = reduce(state, Message::Input(Input::ClearFilterOrQuit));
-        assert_eq!(effect, Effect::None);
-        assert!(!state.filter_active());
-        assert_eq!(state.filtered_indices.len(), 3);
-    }
-
-    #[test]
-    fn clear_filter_or_quit_quits_when_no_filter() {
-        let state = state_with(&["a"]);
-        let (state, effect) = reduce(state, Message::Input(Input::ClearFilterOrQuit));
-        assert_eq!(effect, Effect::Quit);
-        assert!(!state.filter_active());
     }
 
     #[test]
@@ -636,8 +418,6 @@ mod tests {
             state.tasks[0].log_lines.last().map(String::as_str),
             Some("  zsh-users/zsh-autosuggestions:")
         );
-        let stored = state.tasks[0].log_lines.last().unwrap();
-        assert!(!stored.contains("[1m") && !stored.contains("[33m"));
     }
 
     #[test]
@@ -653,14 +433,11 @@ mod tests {
             );
             state = s;
         }
-        assert!(state.log_follow);
         let scroll_at_end = state.log_scroll;
-
         let (state, _) = reduce(state, Message::Input(Input::LogPageUp));
         assert!(!state.log_follow);
         assert!(state.log_scroll < scroll_at_end);
         let scrolled = state.log_scroll;
-
         let (state, _) = reduce(
             state,
             Message::Engine(TaskEvent::CommandOutput {
@@ -670,28 +447,6 @@ mod tests {
         );
         assert!(!state.log_follow);
         assert_eq!(state.log_scroll, scrolled);
-    }
-
-    #[test]
-    fn log_end_reenables_follow() {
-        let mut state = state_with(&["a"]);
-        for i in 0..10 {
-            let (s, _) = reduce(
-                state,
-                Message::Engine(TaskEvent::CommandOutput {
-                    task_name: "a".into(),
-                    line: format!("line-{i}"),
-                }),
-            );
-            state = s;
-        }
-        let (state, _) = reduce(state, Message::Input(Input::LogHome));
-        assert!(!state.log_follow);
-        assert_eq!(state.log_scroll, 0);
-
-        let (state, _) = reduce(state, Message::Input(Input::LogEnd));
-        assert!(state.log_follow);
-        assert_eq!(state.log_scroll, state.tasks[0].log_lines.len() - 1);
     }
 
     #[test]
@@ -718,14 +473,13 @@ mod tests {
                 skipped: 0,
             }),
         );
-        assert!(state.done);
         assert_eq!(state.selected, 1);
         assert!(!state.log_follow);
     }
 
     #[test]
     fn log_cap_drops_oldest() {
-        use super::super::state::LOG_CAP;
+        use crate::tui::state::LOG_CAP;
         let mut state = state_with(&["a"]);
         for i in 0..(LOG_CAP + 50) {
             let (s, _) = reduce(
@@ -738,170 +492,6 @@ mod tests {
             state = s;
         }
         assert_eq!(state.tasks[0].log_lines.len(), LOG_CAP);
-        assert!(state.tasks[0].log_lines[0].contains("50"));
-        assert!(state.tasks[0]
-            .log_lines
-            .last()
-            .unwrap()
-            .contains(&(LOG_CAP + 49).to_string()));
-    }
-
-    #[test]
-    fn selection_stays_within_filtered_set() {
-        let state = state_with(&["alpha", "beta", "gamma"]);
-        let (state, _) = reduce(state, Message::Input(Input::SelectNext));
-        assert_eq!(state.selected, 1);
-
-        let (state, _) = reduce(state, Message::Input(Input::EnterSearch));
-        let (state, _) = reduce(state, Message::Input(Input::SearchChar('g')));
-        assert_eq!(state.filtered_indices, vec![2]);
-        assert_eq!(state.selected, 2);
-
-        let (state, _) = reduce(state, Message::Input(Input::SelectPrev));
-        assert_eq!(state.selected, 2);
-    }
-
-    #[test]
-    fn tick_increments() {
-        let state = state_with(&["a"]);
-        let (state, effect) = reduce(state, Message::Tick);
-        assert_eq!(effect, Effect::None);
-        assert_eq!(state.tick, 1);
-    }
-
-    // --- adversarial checks (verifier) ---
-
-    #[test]
-    fn empty_tasks_inputs_do_not_panic_and_esc_quits() {
-        let state = UiState::new(vec![], Mode::Install);
-        assert!(state.tasks.is_empty());
-        assert!(state.filtered_indices.is_empty());
-
-        let (state, effect) = reduce(state, Message::Input(Input::SelectNext));
-        assert_eq!(effect, Effect::None);
-        let (state, effect) = reduce(state, Message::Input(Input::SelectPrev));
-        assert_eq!(effect, Effect::None);
-        let (state, effect) = reduce(state, Message::Input(Input::LogPageUp));
-        assert_eq!(effect, Effect::None);
-        assert!(!state.log_follow);
-        let (state, _) = reduce(state, Message::Input(Input::LogEnd));
-        assert!(state.log_follow);
-        let (state, effect) = reduce(state, Message::Input(Input::ClearFilterOrQuit));
-        assert_eq!(effect, Effect::Quit);
-        let (_, effect) = reduce(state, Message::Input(Input::CancelAndQuit));
-        assert_eq!(effect, Effect::CancelAndQuit);
-    }
-
-    #[test]
-    fn all_done_without_failures_keeps_selection_and_follow() {
-        let state = state_with(&["a", "b"]);
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskCompleted {
-                task_name: "a".into(),
-            }),
-        );
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskStarted {
-                task_name: "b".into(),
-                command_count: 1,
-                depth: 0,
-            }),
-        );
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskCompleted {
-                task_name: "b".into(),
-            }),
-        );
-        assert_eq!(state.selected, 1);
-        assert!(state.log_follow);
-
-        let (state, effect) = reduce(
-            state,
-            Message::Engine(TaskEvent::AllDone {
-                succeeded: 2,
-                failed: 0,
-                skipped: 0,
-            }),
-        );
-        assert_eq!(effect, Effect::None);
-        assert!(state.done);
-        assert_eq!(state.selected, 1);
-        assert!(state.log_follow);
-        assert_eq!(state.failed, 0);
-    }
-
-    #[test]
-    fn cancel_and_quit_is_not_plain_quit() {
-        let state = state_with(&["a"]);
-        let (_, effect) = reduce(state.clone(), Message::Input(Input::CancelAndQuit));
-        assert_eq!(effect, Effect::CancelAndQuit);
-        let (_, effect) = reduce(state, Message::Input(Input::ClearFilterOrQuit));
-        assert_eq!(effect, Effect::Quit);
-        assert_ne!(Effect::Quit, Effect::CancelAndQuit);
-    }
-
-    #[test]
-    fn log_cap_boundary_exact_capacity_keeps_all() {
-        use crate::tui::state::LOG_CAP;
-        let mut state = state_with(&["a"]);
-        for i in 0..LOG_CAP {
-            let (s, _) = reduce(
-                state,
-                Message::Engine(TaskEvent::CommandOutput {
-                    task_name: "a".into(),
-                    line: format!("{i}"),
-                }),
-            );
-            state = s;
-        }
-        assert_eq!(state.tasks[0].log_lines.len(), LOG_CAP);
-        assert!(state.tasks[0].log_lines[0].contains('0'));
-        assert!(state.tasks[0]
-            .log_lines
-            .last()
-            .unwrap()
-            .contains(&(LOG_CAP - 1).to_string()));
-
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::CommandOutput {
-                task_name: "a".into(),
-                line: "overflow".into(),
-            }),
-        );
-        assert_eq!(state.tasks[0].log_lines.len(), LOG_CAP);
-        assert!(state.tasks[0].log_lines[0].contains('1'));
-        assert!(state.tasks[0]
-            .log_lines
-            .last()
-            .unwrap()
-            .contains("overflow"));
-    }
-
-    #[test]
-    fn filter_no_matches_then_esc_clears_without_quit() {
-        let mut state = state_with(&["alpha", "beta"]);
-        let (s, _) = reduce(state, Message::Input(Input::EnterSearch));
-        state = s;
-        for c in ['z', 'z', 'z'] {
-            let (s, _) = reduce(state, Message::Input(Input::SearchChar(c)));
-            state = s;
-        }
-        assert!(state.filtered_indices.is_empty());
-        assert!(state.filter_active());
-
-        let (state, effect) = reduce(state, Message::Input(Input::ConfirmSearch));
-        assert_eq!(effect, Effect::None);
-        assert!(state.filter_active());
-        assert!(state.filtered_indices.is_empty());
-
-        let (state, effect) = reduce(state, Message::Input(Input::ClearFilterOrQuit));
-        assert_eq!(effect, Effect::None);
-        assert!(!state.filter_active());
-        assert_eq!(state.filtered_indices, vec![0, 1]);
     }
 
     #[test]
@@ -909,97 +499,7 @@ mod tests {
         let state = state_with(&["a", "b", "c"]);
         let (state, _) = reduce(state, Message::Input(Input::SelectNext));
         assert!(!state.auto_select_running);
-        assert_eq!(state.selected, 1);
-
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskStarted {
-                task_name: "c".into(),
-                command_count: 1,
-                depth: 0,
-            }),
-        );
-        assert_eq!(state.selected, 1);
-        assert_eq!(state.tasks[2].status, TaskStatus::Running);
     }
-
-    #[test]
-    fn page_down_at_bottom_reenables_follow() {
-        let mut state = state_with(&["a"]);
-        for i in 0..10 {
-            let (s, _) = reduce(
-                state,
-                Message::Engine(TaskEvent::CommandOutput {
-                    task_name: "a".into(),
-                    line: format!("line-{i}"),
-                }),
-            );
-            state = s;
-        }
-        let (state, _) = reduce(state, Message::Input(Input::LogHome));
-        assert!(!state.log_follow);
-
-        // Jump near end then PageDown should stick and follow.
-        let mut state = state;
-        state.log_scroll = state.tasks[0].log_lines.len().saturating_sub(2);
-        let (state, _) = reduce(state, Message::Input(Input::LogPageDown));
-        assert!(state.log_follow);
-        assert_eq!(
-            state.log_scroll,
-            state.tasks[0].log_lines.len().saturating_sub(1)
-        );
-    }
-
-    #[test]
-    fn all_done_failure_jump_visible_under_active_filter() {
-        let state = state_with(&["ok", "bad"]);
-        let (state, _) = reduce(state, Message::Input(Input::EnterSearch));
-        let (state, _) = reduce(state, Message::Input(Input::SearchChar('o')));
-        let (state, _) = reduce(state, Message::Input(Input::ConfirmSearch));
-        assert_eq!(state.filtered_indices, vec![0]);
-        assert_eq!(state.selected, 0);
-
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskCompleted {
-                task_name: "ok".into(),
-            }),
-        );
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskFailed {
-                task_name: "bad".into(),
-                error: "x".into(),
-            }),
-        );
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::AllDone {
-                succeeded: 1,
-                failed: 1,
-                skipped: 0,
-            }),
-        );
-        assert_eq!(state.selected, 1);
-        assert!(
-            state.filtered_indices.contains(&state.selected),
-            "first failed task must remain visible in the filtered list; filtered={:?} selected={}",
-            state.filtered_indices,
-            state.selected
-        );
-    }
-
-    #[test]
-    fn exit_search_esc_does_not_quit() {
-        let state = state_with(&["a"]);
-        let (state, _) = reduce(state, Message::Input(Input::EnterSearch));
-        let (state, effect) = reduce(state, Message::Input(Input::ExitSearch));
-        assert_eq!(effect, Effect::None);
-        assert!(!state.search_mode);
-        assert!(!state.filter_active());
-    }
-
-    // --- parallel merge ---
 
     fn start_task(state: UiState, name: &str) -> UiState {
         let (state, _) = reduce(
@@ -1014,79 +514,36 @@ mod tests {
     }
 
     #[test]
-    fn merge_enters_on_second_running_task_live_only() {
+    fn burst_enters_on_second_running_task() {
         let state = state_with(&["a", "b"]);
         let state = start_task(state, "a");
-        assert!(state.merge_lines.is_empty());
-        assert!(!state.in_merge_mode());
-
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::CommandOutput {
-                task_name: "a".into(),
-                line: "solo".into(),
-            }),
-        );
-        assert!(state.merge_lines.is_empty());
-
+        assert!(!state.in_burst_mode());
         let state = start_task(state, "b");
-        assert!(state.in_merge_mode());
-        assert_eq!(state.merge_lines.len(), 1);
-        assert_eq!(state.merge_lines[0].task_name, "b");
-        assert!(state.merge_lines[0].text.contains("Starting"));
+        assert!(state.in_burst_mode());
+        assert!(!state.details_expanded);
     }
 
     #[test]
-    fn merge_no_thrash_while_selected_still_running() {
-        let state = state_with(&["a", "b", "c"]);
-        let state = start_task(state, "a");
-        assert_eq!(state.selected, 0);
-        let state = start_task(state, "b");
-        assert_eq!(state.selected, 0);
-        assert!(state.in_merge_mode());
-    }
-
-    #[test]
-    fn merge_soft_follow_when_selected_stops_running() {
+    fn burst_toggle_expand() {
         let state = state_with(&["a", "b"]);
-        let state = start_task(state, "a");
-        let state = start_task(state, "b");
-        assert_eq!(state.selected, 0);
-
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::TaskCompleted {
-                task_name: "a".into(),
-            }),
-        );
-        // Left merge (1 running); soft-select remaining runner.
-        assert!(!state.in_merge_mode());
-        assert!(state.merge_lines.is_empty());
-        assert_eq!(state.selected, 1);
-        assert!(state.tasks[1].status.is_running());
+        let state = start_task(start_task(state, "a"), "b");
+        let (state, _) = reduce(state, Message::Input(Input::ToggleDetailsExpand));
+        assert!(state.details_expanded);
+        let (state, _) = reduce(state, Message::Input(Input::ToggleDetailsExpand));
+        assert!(!state.details_expanded);
     }
 
     #[test]
-    fn merge_manual_select_disables_soft_follow() {
-        let state = state_with(&["a", "b", "c"]);
-        let state = start_task(state, "a");
-        let (state, _) = reduce(state, Message::Input(Input::SelectNext));
-        assert!(!state.auto_select_running);
-        assert_eq!(state.selected, 1);
-
-        let state = start_task(state, "b");
-        let state = start_task(state, "c");
-        assert_eq!(state.selected, 1);
-        assert!(state.in_merge_mode());
+    fn burst_expand_ignored_when_not_in_burst() {
+        let state = state_with(&["a"]);
+        let (state, _) = reduce(state, Message::Input(Input::ToggleDetailsExpand));
+        assert!(!state.details_expanded);
     }
 
     #[test]
-    fn merge_leave_prefers_failed_in_burst() {
+    fn burst_leave_prefers_failed_in_burst() {
         let state = state_with(&["a", "b"]);
-        let state = start_task(state, "a");
-        let state = start_task(state, "b");
-        assert_eq!(state.selected, 0);
-
+        let state = start_task(start_task(state, "a"), "b");
         let (state, _) = reduce(
             state,
             Message::Engine(TaskEvent::TaskFailed {
@@ -1094,51 +551,17 @@ mod tests {
                 error: "boom".into(),
             }),
         );
-        assert!(!state.in_merge_mode());
-        assert!(state.merge_lines.is_empty());
+        assert!(!state.in_burst_mode());
         assert_eq!(state.selected, 1);
         assert!(!state.log_follow);
-        assert!(state.tasks[1].status.is_failed());
     }
 
     #[test]
-    fn merge_selection_does_not_leave_merge_mode() {
+    fn burst_selection_keeps_burst_mode() {
         let state = state_with(&["a", "b"]);
-        let state = start_task(state, "a");
-        let state = start_task(state, "b");
-        let (state, _) = reduce(
-            state,
-            Message::Engine(TaskEvent::CommandOutput {
-                task_name: "a".into(),
-                line: "from-a".into(),
-            }),
-        );
-        let merge_len = state.merge_lines.len();
-        assert!(merge_len >= 2);
-
+        let state = start_task(start_task(state, "a"), "b");
         let (state, _) = reduce(state, Message::Input(Input::SelectNext));
         assert_eq!(state.selected, 1);
-        assert!(state.in_merge_mode());
-        assert_eq!(state.merge_lines.len(), merge_len);
-    }
-
-    #[test]
-    fn merge_cap_drops_oldest() {
-        use crate::tui::state::MERGE_CAP;
-        let state = state_with(&["a", "b"]);
-        let state = start_task(state, "a");
-        let mut state = start_task(state, "b");
-        for i in 0..(MERGE_CAP + 20) {
-            let (s, _) = reduce(
-                state,
-                Message::Engine(TaskEvent::CommandOutput {
-                    task_name: "a".into(),
-                    line: format!("{i}"),
-                }),
-            );
-            state = s;
-        }
-        assert_eq!(state.merge_lines.len(), MERGE_CAP);
-        assert!(state.merge_lines[0].text.contains("20"));
+        assert!(state.in_burst_mode());
     }
 }

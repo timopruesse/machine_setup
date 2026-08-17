@@ -20,8 +20,10 @@ pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
             TaskEvent::CommandStarted {
                 task_name,
                 command_desc,
+                command_index,
+                command_total,
             } => {
-                println!("   [{task_name}] > {command_desc}");
+                println!("   [{task_name}] ({command_index}/{command_total}) > {command_desc}");
             }
             TaskEvent::CommandOutput { task_name, line } => {
                 println!("   [{task_name}]   {line}");
@@ -29,15 +31,23 @@ pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
             TaskEvent::CommandCompleted {
                 task_name,
                 command_desc,
+                command_index,
+                command_total,
             } => {
-                println!("   [{task_name}]   [done] {command_desc}");
+                println!(
+                    "   [{task_name}] ({command_index}/{command_total})   [done] {command_desc}"
+                );
             }
             TaskEvent::CommandFailed {
                 task_name,
                 command_desc,
+                command_index,
+                command_total,
                 error,
             } => {
-                eprintln!("   [{task_name}]   [FAILED] {command_desc}: {error}");
+                eprintln!(
+                    "   [{task_name}] ({command_index}/{command_total})   [FAILED] {command_desc}: {error}"
+                );
             }
             TaskEvent::TaskCompleted { task_name } => {
                 println!("OK {task_name}");

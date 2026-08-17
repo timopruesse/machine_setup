@@ -135,6 +135,19 @@ created lazily on first tree-apply use. Does **not** order Tasks by
 dependency — that remains the **Task graph**.
 _Avoid_: scheduler (do not call the FS pool the "scheduler").
 
+**Details pane**:
+The run TUI module that resolves and renders Task output — single-task log,
+**Runner grid** during parallel bursts, or expanded full log (`Enter`).
+View resolution and scroll/follow policy live here; `reduce` updates Task state
+only. The ratatui widget is an adapter behind the Details pane interface.
+_Avoid_: log panel, log view, merge mode.
+
+**Runner grid**:
+The Details pane layout shown while ≥2 Tasks are `Running`: up to four fixed
+bands (one per runner), each showing command progress and a scrolling tail of
+that Task's log. Overflow runners appear as a count in the title bar.
+_Avoid_: merge stream, multiplex log, parallel log.
+
 **File ops**:
 The privilege seam for filesystem primitives (`mkdir`, copy, symlink, removal),
 with two adapters — **DirectFs** (`std::fs`) and **SudoFs** (`sudo`) — chosen

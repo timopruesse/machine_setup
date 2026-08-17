@@ -290,26 +290,60 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
 
     let executors: Vec<Box<dyn CommandExecutor>> =
         task.commands.iter().cloned().map(create_executor).collect();
+    let command_total = executors.len();
 
     if task.parallel {
         let mut handles = Vec::new();
 
-        for executor in executors {
-            let ctx = ctx.clone();
-            handles.push(tokio::spawn(async move {
-                execute_with_gate(executor.as_ref(), &ctx).await
-            }));
-        }
-
-        for handle in handles {
-            handle.await.map_err(|e| Error::Other(e.to_string()))??;
-        }
-    } else {
-        for executor in &executors {
+        for (i, executor) in executors.into_iter().enumerate() {
+            let command_index = i + 1;
             let desc = executor.description();
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: name.to_string(),
                 command_desc: desc.clone(),
+                command_index,
+                command_total,
+            });
+            let ctx = ctx.clone();
+            handles.push(tokio::spawn(async move {
+                let result = execute_with_gate(executor.as_ref(), &ctx).await;
+                (desc, command_index, result)
+            }));
+        }
+
+        for handle in handles {
+            let (desc, command_index, result) =
+                handle.await.map_err(|e| Error::Other(e.to_string()))?;
+            match result {
+                Ok(()) => {
+                    ctx.emit(TaskEvent::CommandCompleted {
+                        task_name: name.to_string(),
+                        command_desc: desc,
+                        command_index,
+                        command_total,
+                    });
+                }
+                Err(e) => {
+                    ctx.emit(TaskEvent::CommandFailed {
+                        task_name: name.to_string(),
+                        command_desc: desc,
+                        command_index,
+                        command_total,
+                        error: e.to_string(),
+                    });
+                    return Err(e);
+                }
+            }
+        }
+    } else {
+        for (i, executor) in executors.iter().enumerate() {
+            let command_index = i + 1;
+            let desc = executor.description();
+            ctx.emit(TaskEvent::CommandStarted {
+                task_name: name.to_string(),
+                command_desc: desc.clone(),
+                command_index,
+                command_total,
             });
 
             match execute_with_gate(executor.as_ref(), ctx).await {
@@ -317,12 +351,16 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
                     ctx.emit(TaskEvent::CommandCompleted {
                         task_name: name.to_string(),
                         command_desc: desc,
+                        command_index,
+                        command_total,
                     });
                 }
                 Err(e) => {
                     ctx.emit(TaskEvent::CommandFailed {
                         task_name: name.to_string(),
                         command_desc: desc,
+                        command_index,
+                        command_total,
                         error: e.to_string(),
                     });
                     return Err(e);

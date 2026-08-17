@@ -20,18 +20,25 @@ pub enum TaskEvent {
     CommandStarted {
         task_name: String,
         command_desc: String,
+        /// 1-based index within the task's command list.
+        command_index: usize,
+        command_total: usize,
     },
 
     /// A command within a task completed successfully.
     CommandCompleted {
         task_name: String,
         command_desc: String,
+        command_index: usize,
+        command_total: usize,
     },
 
     /// A command within a task failed.
     CommandFailed {
         task_name: String,
         command_desc: String,
+        command_index: usize,
+        command_total: usize,
         error: String,
     },
 

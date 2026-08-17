@@ -1,7 +1,9 @@
 pub mod catalog;
+pub mod details;
 pub mod event_loop;
 pub mod format;
 pub mod message;
+pub mod parallel_burst;
 pub mod plain;
 pub mod reduce;
 pub mod state;

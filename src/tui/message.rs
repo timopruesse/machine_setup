@@ -27,6 +27,8 @@ pub enum Input {
     LogPageDown,
     LogHome,
     LogEnd,
+    /// Enter: expand/collapse full log during a parallel burst.
+    ToggleDetailsExpand,
 }
 
 /// All messages the reducer accepts.
