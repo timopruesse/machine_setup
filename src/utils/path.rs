@@ -122,9 +122,31 @@ pub fn should_ignore(path: &Path, ignore_list: &[String]) -> bool {
     })
 }
 
+/// Compact path for log output: replace home directory prefix with `~/`.
+pub fn shorten_path(path: &Path) -> String {
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(stripped) = path.strip_prefix(&home) {
+            if stripped.as_os_str().is_empty() {
+                return "~".to_string();
+            }
+            return format!("~/{}", stripped.display());
+        }
+    }
+    path.display().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shorten_path_uses_tilde_for_home() {
+        if let Some(home) = dirs::home_dir() {
+            let p = home.join("dotfiles/.zshrc");
+            assert_eq!(shorten_path(&p), "~/dotfiles/.zshrc");
+            assert_eq!(shorten_path(&home), "~");
+        }
+    }
 
     #[test]
     fn test_expand_tilde() {

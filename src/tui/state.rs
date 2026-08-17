@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::engine::mode::Mode;
+use crate::engine::output::OutputKind;
 
 /// Max log lines retained per task (oldest dropped).
 pub const LOG_CAP: usize = 2000;
@@ -35,12 +36,19 @@ impl TaskStatus {
     }
 }
 
+/// One line in a task log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogLine {
+    pub kind: OutputKind,
+    pub text: String,
+}
+
 /// State for a single task in the TUI.
 #[derive(Debug, Clone)]
 pub struct TaskState {
     pub name: String,
     pub status: TaskStatus,
-    pub log_lines: Vec<String>,
+    pub log_lines: Vec<LogLine>,
     pub command_count: usize,
     pub current_command: Option<String>,
     pub command_index: Option<usize>,
@@ -73,9 +81,9 @@ impl TaskState {
     }
 
     /// Append a log line, enforcing [`LOG_CAP`].
-    pub fn push_log(&mut self, line: String) {
+    pub fn push_log(&mut self, kind: OutputKind, line: String) {
         let line = crate::tui::format::strip_ansi(&line);
-        self.log_lines.push(line);
+        self.log_lines.push(LogLine { kind, text: line });
         if self.log_lines.len() > LOG_CAP {
             let excess = self.log_lines.len() - LOG_CAP;
             self.log_lines.drain(0..excess);

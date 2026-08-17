@@ -109,13 +109,14 @@ pub fn sync_log_scroll(state: &mut UiState) {
 pub fn active_log_len(state: &UiState) -> usize {
     use super::details;
 
+    let mode = details::details_mode(state);
     if state.in_burst_mode() && !state.details_expanded {
         details::selected_band_log_len(state)
     } else {
         state
             .tasks
             .get(state.selected)
-            .map(|t| t.log_lines.len())
+            .map(|t| details::task_display_len(t, mode))
             .unwrap_or(0)
     }
 }

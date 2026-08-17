@@ -71,7 +71,7 @@ impl TreeOpKind for SymlinkKind {
     }
 
     fn ensure_dir(&self, ops: &dyn FileOps, dir: &Path, ctx: &CommandContext) -> Result<()> {
-        tree::ensure_real_dir(ops, dir, |msg| ctx.log(msg))
+        tree::ensure_real_dir(ops, dir, |msg| ctx.log_progress(msg))
     }
 
     fn on_install_file(
@@ -105,10 +105,16 @@ fn symlink_one(
 ) -> Result<()> {
     if dest.exists() || dest.symlink_metadata().is_ok() {
         if force {
-            progress.note_apply(|| format!("Removing existing: {}", dest.display()));
+            progress
+                .note_apply(|| format!("remove {}", crate::engine::context::display_path(dest)));
             ops.remove_path(dest)?;
         } else {
-            progress.note_skip(|| format!("Skipping (already exists): {}", dest.display()));
+            progress.note_skip(|| {
+                format!(
+                    "skip {} (exists)",
+                    crate::engine::context::display_path(dest)
+                )
+            });
             return Ok(());
         }
     }
@@ -121,7 +127,13 @@ fn symlink_one(
         )));
     }
 
-    progress.note_apply(|| format!("Symlink: {} -> {}", src.display(), dest.display()));
+    progress.note_apply(|| {
+        format!(
+            "link {} → {}",
+            crate::engine::context::display_path(src),
+            crate::engine::context::display_path(dest)
+        )
+    });
     ops.create_symlink(src, dest)
 }
 
@@ -143,7 +155,7 @@ fn would_self_symlink(src: &Path, dest: &Path) -> bool {
 /// Remove the symlink an install would have created at `dest`, if present.
 fn remove_link(ops: &dyn FileOps, dest: &Path, progress: &FileProgress<'_>) -> Result<()> {
     if dest.symlink_metadata().is_ok() {
-        progress.note_apply(|| format!("Removing symlink: {}", dest.display()));
+        progress.note_apply(|| format!("unlink {}", crate::engine::context::display_path(dest)));
         ops.remove_symlink(dest)?;
     }
     Ok(())

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use tokio::process::Command;
 
 use crate::config::types::CloneArgs;
-use crate::engine::context::CommandContext;
+use crate::engine::context::{display_path, CommandContext};
 use crate::engine::mode::Mode;
 use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
@@ -39,11 +39,10 @@ impl CloneCommand {
     async fn clone_repo(&self, ctx: &CommandContext) -> Result<()> {
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
 
-        // Already cloned — fall through to a pull instead.
         if target.join(".git").exists() {
-            ctx.log(format!(
-                "Repository already exists at {}, running update instead",
-                target.display()
+            ctx.log_progress(format!(
+                "clone exists at {} — updating",
+                display_path(&target)
             ));
             return self.git_pull(&target, ctx).await;
         }
@@ -54,21 +53,19 @@ impl CloneCommand {
     async fn pull_repo(&self, ctx: &CommandContext) -> Result<()> {
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
 
-        // Not cloned yet — fall through to a clone instead.
         if !target.join(".git").exists() {
-            ctx.log("Repository not found, running install instead");
+            ctx.log_progress("clone missing — installing");
             return self.git_clone(&target, ctx).await;
         }
 
         self.git_pull(&target, ctx).await
     }
 
-    /// Clone the repository into `target`. Non-recursive low-level action.
     async fn git_clone(&self, target: &std::path::Path, ctx: &CommandContext) -> Result<()> {
-        ctx.log(format!(
-            "Cloning {} into {}",
+        ctx.log_progress(format!(
+            "clone {} → {}",
             self.args.url,
-            target.display()
+            display_path(target)
         ));
 
         if let Some(parent) = target.parent() {
@@ -76,24 +73,28 @@ impl CloneCommand {
         }
 
         run_git_command(
-            &["clone", &self.args.url, &target.to_string_lossy()],
+            &[
+                "clone",
+                "--quiet",
+                &self.args.url,
+                &target.to_string_lossy(),
+            ],
             None,
             ctx,
         )
         .await
     }
 
-    /// Pull the latest changes in `target`. Non-recursive low-level action.
     async fn git_pull(&self, target: &std::path::Path, ctx: &CommandContext) -> Result<()> {
-        ctx.log(format!("Pulling latest in {}", target.display()));
-        run_git_command(&["pull"], Some(target), ctx).await
+        ctx.log_progress(format!("pull {}", display_path(target)));
+        run_git_command(&["pull", "--quiet"], Some(target), ctx).await
     }
 
     async fn remove_repo(&self, ctx: &CommandContext) -> Result<()> {
         let target = expand_path(&self.args.target, Some(&ctx.config_dir));
 
         if target.exists() {
-            ctx.log(format!("Removing repository: {}", target.display()));
+            ctx.log_progress(format!("remove {}", display_path(&target)));
             std::fs::remove_dir_all(&target)?;
         }
 
@@ -119,8 +120,7 @@ async fn run_git_command(
         .spawn()
         .map_err(|e| Error::GitFailed(format!("Failed to spawn git: {e}")))?;
 
-    // git emits progress on stderr — don't tag those lines as errors.
-    let status = process::stream_and_wait(child, ctx, process::StderrLabel::Plain)
+    let status = process::stream_and_wait(child, ctx, process::StreamOptions::git())
         .await
         .map_err(|e| Error::GitFailed(format!("Failed to wait for git: {e}")))?;
 

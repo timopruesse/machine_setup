@@ -1,4 +1,5 @@
 use crate::engine::event::TaskEvent;
+use crate::engine::output::OutputKind;
 
 use super::message::{Effect, Input, Message};
 use super::parallel_burst::{
@@ -36,7 +37,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             task.command_count = command_count;
             task.depth = depth;
             let line = format!("Starting ({command_count} commands)...");
-            task.push_log(line);
+            task.push_log(OutputKind::TaskStatus, line);
             state.ensure_task_color(&name);
             (name.clone(), SoftSelect::Prefer(name), false)
         }
@@ -49,7 +50,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             let reason = crate::tui::format::strip_ansi(&reason);
             task.status = TaskStatus::Skipped(reason.clone());
             let line = format!("Skipped: {reason}");
-            task.push_log(line);
+            task.push_log(OutputKind::TaskStatus, line);
             state.skipped += 1;
             (name, SoftSelect::AnyRunning, false)
         }
@@ -62,17 +63,16 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             let task = find_or_create_task(state, &name);
             let command_desc = crate::tui::format::strip_ansi(&command_desc);
             set_command_progress(task, command_index, command_total, &command_desc);
-            let line = format!("> {command_desc}");
-            task.push_log(line);
+            task.push_log(OutputKind::CommandStart, command_desc);
             (name, SoftSelect::None, false)
         }
         TaskEvent::CommandOutput {
             task_name: name,
             line,
+            kind,
         } => {
             let task = find_or_create_task(state, &name);
-            let line = format!("  {line}");
-            task.push_log(line);
+            task.push_log(kind, line);
             (name, SoftSelect::None, false)
         }
         TaskEvent::CommandCompleted {
@@ -83,8 +83,8 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
         } => {
             let task = find_or_create_task(state, &name);
             clear_command_progress(task);
-            let line = format!("  [done] {command_desc} ({command_index}/{command_total})");
-            task.push_log(line);
+            let line = format!("{command_desc} ({command_index}/{command_total})");
+            task.push_log(OutputKind::CommandDone, line);
             (name, SoftSelect::None, false)
         }
         TaskEvent::CommandFailed {
@@ -96,9 +96,8 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
         } => {
             let task = find_or_create_task(state, &name);
             clear_command_progress(task);
-            let line =
-                format!("  [FAILED] {command_desc} ({command_index}/{command_total}): {error}");
-            task.push_log(line);
+            let line = format!("{command_desc} ({command_index}/{command_total}): {error}");
+            task.push_log(OutputKind::CommandFailed, line);
             (name, SoftSelect::None, false)
         }
         TaskEvent::TaskCompleted { task_name: name } => {
@@ -106,8 +105,7 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             task.freeze_duration();
             task.status = TaskStatus::Completed;
             clear_command_progress(task);
-            let line = "Completed successfully.".to_string();
-            task.push_log(line);
+            task.push_log(OutputKind::TaskStatus, "Completed successfully.".into());
             state.succeeded += 1;
             (name, SoftSelect::AnyRunning, false)
         }
@@ -120,8 +118,8 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             let error = crate::tui::format::strip_ansi(&error);
             task.status = TaskStatus::Failed(error.clone());
             clear_command_progress(task);
-            let line = format!("FAILED: {error}");
-            task.push_log(line);
+            let line = format!("Failed: {error}");
+            task.push_log(OutputKind::TaskStatus, line);
             state.failed += 1;
             (name, SoftSelect::AnyRunning, running_before >= 2)
         }
@@ -133,8 +131,8 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
         } => {
             let task = find_or_create_task(state, &name);
             task.mark_running();
-            let line = format!("  Retry {attempt}/{max_attempts}: {error}");
-            task.push_log(line);
+            let line = format!("Retry {attempt}/{max_attempts}: {error}");
+            task.push_log(OutputKind::TaskStatus, line);
             state.ensure_task_color(&name);
             (name.clone(), SoftSelect::Prefer(name), false)
         }
@@ -412,12 +410,15 @@ mod tests {
             Message::Engine(TaskEvent::CommandOutput {
                 task_name: "a".into(),
                 line: colored.into(),
+                kind: OutputKind::Subprocess,
             }),
         );
         assert_eq!(
-            state.tasks[0].log_lines.last().map(String::as_str),
-            Some("  zsh-users/zsh-autosuggestions:")
+            state.tasks[0].log_lines.last().map(|l| l.text.as_str()),
+            Some("zsh-users/zsh-autosuggestions:")
         );
+        let stored = &state.tasks[0].log_lines.last().unwrap().text;
+        assert!(!stored.contains("[1m") && !stored.contains("[33m"));
     }
 
     #[test]
@@ -429,6 +430,7 @@ mod tests {
                 Message::Engine(TaskEvent::CommandOutput {
                     task_name: "a".into(),
                     line: format!("line-{i}"),
+                    kind: OutputKind::Subprocess,
                 }),
             );
             state = s;
@@ -443,6 +445,7 @@ mod tests {
             Message::Engine(TaskEvent::CommandOutput {
                 task_name: "a".into(),
                 line: "new".into(),
+                kind: OutputKind::Subprocess,
             }),
         );
         assert!(!state.log_follow);
@@ -487,6 +490,7 @@ mod tests {
                 Message::Engine(TaskEvent::CommandOutput {
                     task_name: "a".into(),
                     line: format!("{i}"),
+                    kind: OutputKind::Subprocess,
                 }),
             );
             state = s;

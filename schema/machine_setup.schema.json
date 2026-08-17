@@ -135,6 +135,10 @@
                 "install": {
                   "$ref": "#/$defs/stringOrVec"
                 },
+                "quiet": {
+                  "default": false,
+                  "type": "boolean"
+                },
                 "shell": {
                   "enum": [
                     "bash",

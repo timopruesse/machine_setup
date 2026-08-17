@@ -47,7 +47,7 @@ async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result
         std::borrow::Cow::Owned(path.to_string_lossy().into_owned())
     };
 
-    ctx.log(format!("Loading sub-config: {config_str}"));
+    ctx.log_info(format!("Loading sub-config: {config_str}"));
 
     let config = crate::config::load_config(&config_str)?;
 

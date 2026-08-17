@@ -14,7 +14,11 @@ pub enum TaskEvent {
     TaskSkipped { task_name: String, reason: String },
 
     /// A command within a task produced output.
-    CommandOutput { task_name: String, line: String },
+    CommandOutput {
+        task_name: String,
+        line: String,
+        kind: crate::engine::output::OutputKind,
+    },
 
     /// A command within a task started.
     CommandStarted {

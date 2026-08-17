@@ -33,40 +33,57 @@ impl CommandExecutor for RunCommand {
 async fn run_for_mode(args: &RunArgs, mode: Mode, ctx: &CommandContext) -> Result<()> {
     let commands = args.commands_for_mode(mode);
     if commands.is_empty() {
-        ctx.log(format!("No commands defined for mode: {mode}"));
+        ctx.log_info(format!("No commands defined for mode: {mode}"));
         return Ok(());
     }
 
     let active_shell = args.shell.as_ref().unwrap_or(&ctx.default_shell);
     let script = shell::build_shell_command(commands, active_shell, &args.env)?;
 
-    ctx.log(format!(
-        "Running {} command(s) with {}",
-        commands.len(),
-        active_shell
-    ));
+    if !args.quiet {
+        ctx.log_info(format!(
+            "Running {} command(s) with {}",
+            commands.len(),
+            active_shell
+        ));
+    }
 
-    match active_shell {
+    let stream_opts = if args.quiet {
+        process::StreamOptions::quiet()
+    } else {
+        process::StreamOptions::interactive()
+    };
+
+    let result = match active_shell {
         crate::config::types::Shell::Bash | crate::config::types::Shell::Zsh => {
-            // Pipe the in-memory script straight to the shell over stdin —
-            // no temp file round-trip needed.
-            execute_script_stdin(&script, active_shell, ctx).await
+            execute_script_stdin(&script, active_shell, ctx, stream_opts).await
         }
         crate::config::types::Shell::PowerShell => {
-            // PowerShell needs -File for reliable execution on Windows, so
-            // we still materialize a script on disk for this path only.
             let script_path = shell::write_temp_script(&script, active_shell, &ctx.temp_dir)?;
-            let result = execute_script_file(&script_path, active_shell, ctx).await;
+            let result = execute_script_file(&script_path, active_shell, ctx, stream_opts).await;
             let _ = std::fs::remove_file(&script_path);
             result
         }
+    };
+
+    if args.quiet {
+        match &result {
+            Ok(()) => ctx.log_info(format!("Completed {} command(s)", commands.len())),
+            Err(e) => ctx.log_kind(
+                crate::engine::output::OutputKind::CommandFailed,
+                format!("Shell failed: {e}"),
+            ),
+        }
     }
+
+    result
 }
 
 async fn execute_script_stdin(
     script: &str,
     shell_type: &crate::config::types::Shell,
     ctx: &CommandContext,
+    options: process::StreamOptions,
 ) -> Result<()> {
     let shell_bin = shell::shell_binary(shell_type);
 
@@ -88,13 +105,14 @@ async fn execute_script_stdin(
         // Drop stdin to signal EOF
     }
 
-    wait_with_output(child, ctx).await
+    wait_with_output(child, ctx, options).await
 }
 
 async fn execute_script_file(
     script_path: &std::path::Path,
     shell_type: &crate::config::types::Shell,
     ctx: &CommandContext,
+    options: process::StreamOptions,
 ) -> Result<()> {
     let shell_bin = shell::shell_binary(shell_type);
 
@@ -108,11 +126,15 @@ async fn execute_script_file(
         .spawn()
         .map_err(|e| Error::ShellFailed(format!("Failed to spawn {shell_bin}: {e}")))?;
 
-    wait_with_output(child, ctx).await
+    wait_with_output(child, ctx, options).await
 }
 
-async fn wait_with_output(child: tokio::process::Child, ctx: &CommandContext) -> Result<()> {
-    let status = process::stream_and_wait(child, ctx, process::StderrLabel::Prefixed)
+async fn wait_with_output(
+    child: tokio::process::Child,
+    ctx: &CommandContext,
+    options: process::StreamOptions,
+) -> Result<()> {
+    let status = process::stream_and_wait(child, ctx, options)
         .await
         .map_err(|e| Error::ShellFailed(format!("Failed to wait for shell: {e}")))?;
 

@@ -168,7 +168,8 @@ fn kind_args_schema(kind: &str) -> Value {
                 "env": {
                     "type": "object",
                     "additionalProperties": { "type": "string" }
-                }
+                },
+                "quiet": { "type": "boolean", "default": false }
             }
         }),
         "machine_setup" => json!({

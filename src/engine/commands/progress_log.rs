@@ -30,7 +30,7 @@ impl<'a> FileProgress<'a> {
     pub fn note_apply(&self, line: impl FnOnce() -> String) {
         let n = self.applied.fetch_add(1, Ordering::Relaxed) + 1;
         if should_log_detail(n) {
-            self.ctx.log(line());
+            self.ctx.log_progress(line());
         }
     }
 
@@ -38,7 +38,7 @@ impl<'a> FileProgress<'a> {
     pub fn note_skip(&self, line: impl FnOnce() -> String) {
         let n = self.skipped.fetch_add(1, Ordering::Relaxed) + 1;
         if should_log_detail(n) {
-            self.ctx.log(line());
+            self.ctx.log_progress(line());
         }
     }
 
@@ -47,7 +47,7 @@ impl<'a> FileProgress<'a> {
         let applied = self.applied.load(Ordering::Relaxed);
         let skipped = self.skipped.load(Ordering::Relaxed);
         if applied > DETAIL || skipped > DETAIL {
-            self.ctx.log(format!(
+            self.ctx.log_progress(format!(
                 "{}: {} applied, {} skipped",
                 self.label, applied, skipped
             ));

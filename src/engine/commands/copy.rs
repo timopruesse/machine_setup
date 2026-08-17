@@ -97,10 +97,10 @@ impl TreeOpKind for CopyKind {
         ctx: &CommandContext,
     ) -> Option<Result<()>> {
         if Self::eligible_for_bulk_sudo(src, &self.args, ctx.mode) {
-            ctx.log(format!(
-                "Bulk copy (sudo): {} -> {}",
-                src.display(),
-                target.display()
+            ctx.log_progress(format!(
+                "bulk copy {} → {}",
+                crate::engine::context::display_path(src),
+                crate::engine::context::display_path(target),
             ));
             return Some(crate::utils::sudo::sudo_copy_tree(src, target));
         }
@@ -128,7 +128,8 @@ impl TreeOpKind for CopyKind {
         progress: &FileProgress<'_>,
     ) -> Result<()> {
         if dest.exists() {
-            progress.note_apply(|| format!("Removing: {}", dest.display()));
+            progress
+                .note_apply(|| format!("remove {}", crate::engine::context::display_path(dest)));
             ops.remove_file(dest)
         } else {
             Ok(())
@@ -157,11 +158,22 @@ pub fn should_skip_copy(src: &Path, dest: &Path) -> bool {
 /// new as the source.
 fn copy_one(ops: &dyn FileOps, src: &Path, dest: &Path, progress: &FileProgress<'_>) -> Result<()> {
     if should_skip_copy(src, dest) {
-        progress.note_skip(|| format!("Skipping (target newer): {}", dest.display()));
+        progress.note_skip(|| {
+            format!(
+                "skip {} (newer)",
+                crate::engine::context::display_path(dest)
+            )
+        });
         return Ok(());
     }
 
-    progress.note_apply(|| format!("Copying: {} -> {}", src.display(), dest.display()));
+    progress.note_apply(|| {
+        format!(
+            "copy {} → {}",
+            crate::engine::context::display_path(src),
+            crate::engine::context::display_path(dest)
+        )
+    });
     ops.copy_file(src, dest)
 }
 

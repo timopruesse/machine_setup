@@ -276,6 +276,10 @@ pub struct RunArgs {
     /// Environment variables
     #[serde(default)]
     pub env: HashMap<String, String>,
+
+    /// When true, suppress subprocess stdout (stderr still logged; failures surface errors).
+    #[serde(default)]
+    pub quiet: bool,
 }
 
 impl RunArgs {

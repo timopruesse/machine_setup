@@ -1,6 +1,7 @@
 use tokio::sync::mpsc;
 
 use crate::engine::event::TaskEvent;
+use crate::tui::log_display;
 
 /// Plain text event consumer for --no-tui / CI environments.
 pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
@@ -25,8 +26,13 @@ pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
             } => {
                 println!("   [{task_name}] ({command_index}/{command_total}) > {command_desc}");
             }
-            TaskEvent::CommandOutput { task_name, line } => {
-                println!("   [{task_name}]   {line}");
+            TaskEvent::CommandOutput {
+                task_name,
+                line,
+                kind,
+            } => {
+                let prefix = log_display::plain_prefix(*kind);
+                println!("   [{task_name}]{prefix}{line}");
             }
             TaskEvent::CommandCompleted {
                 task_name,

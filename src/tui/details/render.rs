@@ -5,10 +5,11 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::Frame;
 
 use super::{
-    band_log_window, details_mode, progress_label, selected_band_index, visible_runner_indices,
+    details_mode, display_window, progress_label, selected_band_index, visible_runner_indices,
     DetailsMode,
 };
 use crate::tui::format::{format_duration, task_elapsed, task_palette_color};
+use crate::tui::log_display;
 use crate::tui::state::{TaskStatus, UiState};
 
 pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
@@ -20,6 +21,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
 }
 
 fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
+    let mode = DetailsMode::RunnerGrid;
     let (visible, overflow) = visible_runner_indices(state);
     let n = visible.len();
     if n == 0 {
@@ -71,7 +73,7 @@ fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
         let inner_h = band_area.height.saturating_sub(2) as usize;
         let body_h = inner_h.saturating_sub(1).max(1);
         let scroll = if is_selected { state.log_scroll } else { 0 };
-        let window = band_log_window(task, body_h, scroll, is_selected);
+        let window = display_window(task, mode, body_h, scroll, !is_selected);
 
         let mut header = vec![Span::styled(
             task.name.as_str(),
@@ -98,7 +100,7 @@ fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
 
         let body: Vec<Line> = window
             .iter()
-            .map(|line| Line::from(Span::styled(line.as_str(), line_style(line))))
+            .map(|line| log_line_to_ratatui(line))
             .collect();
 
         let border = if is_selected {
@@ -133,7 +135,17 @@ fn render_expanded(f: &mut Frame, area: Rect, state: &UiState) {
         task.name,
         if others == 1 { "" } else { "s" }
     );
-    render_task_log(f, area, task, &title, state.log_scroll, Color::Yellow, true);
+    render_task_log(
+        f,
+        area,
+        TaskLogPane {
+            task,
+            title: &title,
+            log_scroll: state.log_scroll,
+            border_color: Color::Yellow,
+            mode: DetailsMode::ExpandedTask,
+        },
+    );
 }
 
 fn render_single(f: &mut Frame, area: Rect, state: &UiState) {
@@ -149,22 +161,41 @@ fn render_single(f: &mut Frame, area: Rect, state: &UiState) {
 
     let title = format!(" {} ", task.name);
     let border_color = status_border_color(&task.status);
-    render_task_log(f, area, task, &title, state.log_scroll, border_color, false);
+    render_task_log(
+        f,
+        area,
+        TaskLogPane {
+            task,
+            title: &title,
+            log_scroll: state.log_scroll,
+            border_color,
+            mode: DetailsMode::SingleTask,
+        },
+    );
 }
 
-fn render_task_log(
-    f: &mut Frame,
-    area: Rect,
-    task: &crate::tui::state::TaskState,
-    title: &str,
+struct TaskLogPane<'a> {
+    task: &'a crate::tui::state::TaskState,
+    title: &'a str,
     log_scroll: usize,
     border_color: Color,
-    expanded: bool,
-) {
+    mode: DetailsMode,
+}
+
+fn render_task_log(f: &mut Frame, area: Rect, pane: TaskLogPane<'_>) {
+    let TaskLogPane {
+        task,
+        title,
+        log_scroll,
+        border_color,
+        mode,
+    } = pane;
+    let expanded = matches!(mode, DetailsMode::ExpandedTask);
     let mut status_spans = status_spans(task);
 
     let inner_height = area.height.saturating_sub(2) as usize;
-    let total_lines = task.log_lines.len();
+    let display = log_display::display_lines(task, mode, expanded);
+    let total_lines = display.len();
 
     let scroll = if total_lines > inner_height {
         let max_scroll = total_lines.saturating_sub(inner_height);
@@ -173,10 +204,11 @@ fn render_task_log(
         0
     };
 
-    let lines: Vec<Line> = task
-        .log_lines
-        .iter()
-        .map(|line| Line::from(Span::styled(line.as_str(), line_style(line))))
+    let lines: Vec<Line> = display
+        .into_iter()
+        .skip(scroll)
+        .take(inner_height)
+        .map(|line| log_line_to_ratatui(line))
         .collect();
 
     if expanded {
@@ -204,10 +236,22 @@ fn render_task_log(
                     bottom
                 })),
         )
-        .wrap(Wrap { trim: false })
-        .scroll((scroll as u16, 0));
+        .wrap(Wrap { trim: false });
 
     f.render_widget(paragraph, area);
+}
+
+fn log_line_to_ratatui(line: &crate::tui::state::LogLine) -> Line<'static> {
+    use crate::engine::output::OutputKind;
+    let mut style = log_display::style_for_kind(line.kind);
+    if line.kind == OutputKind::TaskStatus {
+        if line.text.starts_with("Failed") {
+            style = style.fg(Color::Red);
+        } else if line.text.starts_with("Completed") {
+            style = style.fg(Color::Green);
+        }
+    }
+    Line::from(Span::styled(line.text.clone(), style))
 }
 
 fn status_spans(task: &crate::tui::state::TaskState) -> Vec<Span<'static>> {
@@ -265,28 +309,6 @@ fn status_border_color(status: &TaskStatus) -> Color {
         TaskStatus::Completed => Color::Green,
         TaskStatus::Failed(_) => Color::Red,
         _ => Color::DarkGray,
-    }
-}
-
-fn line_style(line: &str) -> Style {
-    if line.starts_with("> ") {
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else if line.contains("[FAILED]") {
-        Style::default().fg(Color::Red)
-    } else if line.contains("[done]") {
-        Style::default().fg(Color::Green)
-    } else if line.starts_with("  [stderr]") {
-        Style::default().fg(Color::Yellow)
-    } else if line.starts_with("Completed") {
-        Style::default().fg(Color::Green)
-    } else if line.starts_with("FAILED") {
-        Style::default().fg(Color::Red)
-    } else if line.starts_with("Skipped") {
-        Style::default().fg(Color::DarkGray)
-    } else {
-        Style::default().fg(Color::White)
     }
 }
 

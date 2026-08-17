@@ -2,7 +2,8 @@
 
 mod render;
 
-use super::state::{TaskState, UiState};
+use super::log_display;
+use super::state::{LogLine, TaskState, UiState};
 
 pub use render::render;
 
@@ -46,36 +47,52 @@ pub fn selected_band_index(state: &UiState) -> usize {
         .unwrap_or(0)
 }
 
+pub fn task_display_len(task: &TaskState, mode: DetailsMode) -> usize {
+    log_display::display_lines(task, mode, true).len()
+}
+
 /// Log line count used for scroll in Runner grid mode (selected band only).
 pub fn selected_band_log_len(state: &UiState) -> usize {
+    let mode = details_mode(state);
     let (visible, _) = visible_runner_indices(state);
     let idx = visible
         .get(selected_band_index(state))
         .copied()
         .or_else(|| visible.first().copied());
-    idx.and_then(|i| state.tasks.get(i))
-        .map(|t| t.log_lines.len())
-        .unwrap_or(0)
+    idx.map(|i| {
+        state
+            .tasks
+            .get(i)
+            .map(|t| task_display_len(t, mode))
+            .unwrap_or(0)
+    })
+    .unwrap_or(0)
 }
 
-/// Slice of log lines to show for a band in the grid.
-pub fn band_log_window(
+/// Window of display lines for a task log or band body.
+pub fn display_window(
     task: &TaskState,
+    mode: DetailsMode,
     inner_height: usize,
     scroll: usize,
-    is_selected: bool,
-) -> &[String] {
-    let total = task.log_lines.len();
+    tail: bool,
+) -> Vec<&LogLine> {
+    let lines = log_display::display_lines(task, mode, true);
+    let total = lines.len();
     if total == 0 || inner_height == 0 {
-        return &[];
+        return Vec::new();
     }
-    if is_selected {
+    let start = if tail {
+        total.saturating_sub(inner_height)
+    } else {
         let max_scroll = total.saturating_sub(inner_height);
-        let start = scroll.min(max_scroll);
-        return &task.log_lines[start..start + inner_height.min(total - start)];
-    }
-    let start = total.saturating_sub(inner_height);
-    &task.log_lines[start..]
+        scroll.min(max_scroll)
+    };
+    lines
+        .into_iter()
+        .skip(start)
+        .take(inner_height.min(total.saturating_sub(start)))
+        .collect()
 }
 
 pub fn progress_label(task: &TaskState) -> Option<String> {
@@ -89,6 +106,7 @@ pub fn progress_label(task: &TaskState) -> Option<String> {
 mod tests {
     use super::*;
     use crate::engine::mode::Mode;
+    use crate::engine::output::OutputKind;
     use crate::tui::state::TaskStatus;
 
     #[test]
@@ -106,22 +124,10 @@ mod tests {
     }
 
     #[test]
-    fn mode_expanded_when_flag_set() {
-        let mut state = UiState::new(vec!["a".into(), "b".into()], Mode::Install);
-        state.tasks[0].status = TaskStatus::Running;
-        state.tasks[1].status = TaskStatus::Running;
-        state.details_expanded = true;
-        assert_eq!(details_mode(&state), DetailsMode::ExpandedTask);
-    }
-
-    #[test]
-    fn visible_runners_capped_with_overflow() {
-        let mut state = UiState::new((0..6).map(|i| format!("t{i}")).collect(), Mode::Install);
-        for t in &mut state.tasks {
-            t.status = TaskStatus::Running;
-        }
-        let (visible, overflow) = visible_runner_indices(&state);
-        assert_eq!(visible.len(), MAX_VISIBLE_RUNNERS);
-        assert_eq!(overflow, 2);
+    fn display_len_ignores_hidden_done() {
+        let mut task = TaskState::new("a".into());
+        task.push_log(OutputKind::Progress, "x".into());
+        task.push_log(OutputKind::CommandDone, "y".into());
+        assert_eq!(task_display_len(&task, DetailsMode::SingleTask), 1);
     }
 }

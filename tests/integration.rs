@@ -64,7 +64,7 @@ fn has_event(events: &[TaskEvent], predicate: impl Fn(&TaskEvent) -> bool) -> bo
 
 fn find_output(events: &[TaskEvent], task: &str, needle: &str) -> bool {
     events.iter().any(|e| {
-        matches!(e, TaskEvent::CommandOutput { task_name, line }
+        matches!(e, TaskEvent::CommandOutput { task_name, line, kind: _ }
             if task_name == task && line.contains(needle))
     })
 }

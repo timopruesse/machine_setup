@@ -2,15 +2,47 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 
 use crate::engine::context::CommandContext;
+use crate::engine::output::{sanitize_subprocess_line, OutputKind};
 
 /// Whether to tag stderr lines when forwarding them to the log.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub enum StderrLabel {
-    /// Prefix stderr lines with `[stderr]` so the UI can style them.
+    /// Emit as [`OutputKind::SubprocessErr`].
+    #[default]
     Prefixed,
-    /// Forward stderr unchanged (useful for tools like `git` that emit
-    /// progress on stderr).
+    /// Emit as [`OutputKind::Subprocess`] (e.g. git progress on stderr).
     Plain,
+}
+
+/// Controls subprocess stream forwarding.
+#[derive(Copy, Clone, Default)]
+pub struct StreamOptions {
+    /// When true, stdout is not forwarded (stderr still logged on failure paths).
+    pub quiet_stdout: bool,
+    pub stderr_label: StderrLabel,
+}
+
+impl StreamOptions {
+    pub fn interactive() -> Self {
+        Self {
+            quiet_stdout: false,
+            stderr_label: StderrLabel::Prefixed,
+        }
+    }
+
+    pub fn quiet() -> Self {
+        Self {
+            quiet_stdout: true,
+            stderr_label: StderrLabel::Prefixed,
+        }
+    }
+
+    pub fn git() -> Self {
+        Self {
+            quiet_stdout: false,
+            stderr_label: StderrLabel::Plain,
+        }
+    }
 }
 
 /// Stream a child process's stdout and stderr to the context's event
@@ -18,28 +50,26 @@ pub enum StderrLabel {
 pub async fn stream_and_wait(
     mut child: Child,
     ctx: &CommandContext,
-    stderr_label: StderrLabel,
+    options: StreamOptions,
 ) -> std::io::Result<std::process::ExitStatus> {
-    let stdout_handle = child.stdout.take().map(|stdout| {
-        let ctx = ctx.clone();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stdout).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                ctx.log(line);
-            }
+    let stdout_handle = if options.quiet_stdout {
+        None
+    } else {
+        child.stdout.take().map(|stdout| {
+            let ctx = ctx.clone();
+            tokio::spawn(async move { stream_lines(stdout, &ctx, OutputKind::Subprocess).await })
         })
-    });
+    };
 
+    let stderr_label = options.stderr_label;
     let stderr_handle = child.stderr.take().map(|stderr| {
         let ctx = ctx.clone();
         tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                match stderr_label {
-                    StderrLabel::Prefixed => ctx.log(format!("[stderr] {line}")),
-                    StderrLabel::Plain => ctx.log(line),
-                }
-            }
+            let kind = match stderr_label {
+                StderrLabel::Prefixed => OutputKind::SubprocessErr,
+                StderrLabel::Plain => OutputKind::Subprocess,
+            };
+            stream_lines(stderr, &ctx, kind).await;
         })
     });
 
@@ -53,4 +83,22 @@ pub async fn stream_and_wait(
     }
 
     Ok(status)
+}
+
+async fn stream_lines<R>(reader: R, ctx: &CommandContext, kind: OutputKind)
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let mut lines = BufReader::new(reader).lines();
+    let mut last_was_blank = false;
+    while let Ok(Some(line)) = lines.next_line().await {
+        let Some(line) = sanitize_subprocess_line(line) else {
+            if !last_was_blank {
+                last_was_blank = true;
+            }
+            continue;
+        };
+        last_was_blank = false;
+        ctx.log_kind(kind, line);
+    }
 }

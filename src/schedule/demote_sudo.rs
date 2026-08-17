@@ -236,6 +236,7 @@ mod tests {
                         uninstall: StringOrVec::default(),
                         shell: None,
                         env: HashMap::new(),
+                        quiet: false,
                     }),
                 ],
                 os: Default::default(),
