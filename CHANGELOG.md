@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.9.0]
+
+### Added
+- Richer Task conditions on `only_if` / `skip_if`: path (backward compatible), `env`, `command`, and `mode` predicates
+- Configurable `retry_delay_secs` on Tasks (default `1`)
+- `machine_setup` Sub-config admission knobs: `force` and `with_deps`
+- Documented Tree materialization ignore language: exact path components, `foo/bar` sequences, and glob-lite `*`/`?` (no substring-anywhere matches)
+
+### Changed
+- Command kind catalog owns unattended sudo demotion; schedule only decides when to demote
+- Closed `Executor` enum from the catalog (static dispatch) instead of `Box<dyn CommandExecutor>`
+- Authoring recipes register through a shared recipe catalog used by CLI and wizard
+- Tree-shaped Command executors implement Tree-op policy directly (no shallow kind shells)
+- Task event `task_name` is interned as `Arc<str>` to cut per-line allocations
+
 ## [2.8.1]
 
 ### Performance
