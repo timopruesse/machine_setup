@@ -77,4 +77,4 @@ tasks:
 
 GitHub Actions runs `cargo check`, `cargo test`, and `cargo clippy -D warnings` on every push/PR to `main`. Clippy warnings are treated as errors — the same applies locally via `make lint`.
 
-Release builds are triggered by `v*` tags and produce binaries for macOS x86_64/ARM64, Linux x86_64, and Windows x86_64.
+Release builds are triggered by `v*` tags and produce binaries for macOS x86_64/ARM64, Linux x86_64, and Windows x86_64. Cutting a release: see [docs/RELEASE.md](docs/RELEASE.md) (`make release-check`, `bash release/tag.sh --push`).

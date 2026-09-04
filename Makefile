@@ -1,4 +1,4 @@
-.PHONY: check test lint schema schema-check bench build run create_release
+.PHONY: check test lint schema schema-check bench build run release-check release-tag create_release
 check:
 	cargo check
 
@@ -25,5 +25,15 @@ build:
 run:
 	cargo run -- install -c ./example_config.yaml
 
+# Release helpers — full checklist in docs/RELEASE.md
+release-check:
+	bash release/check.sh
+
+release-tag:
+	bash release/tag.sh
+
 create_release:
-	./release/push_tag.sh
+	@echo "See docs/RELEASE.md"
+	@echo "After committing CHANGELOG + Cargo.toml + Cargo.lock:"
+	@echo "  make release-check && bash release/tag.sh --push"
+	@false
