@@ -22,10 +22,10 @@ pub struct CommandContext {
     pub mode: Mode,
 
     /// Directory where the config file is located (for resolving relative paths).
-    pub config_dir: PathBuf,
+    pub config_dir: Arc<PathBuf>,
 
     /// Temp directory for scripts and history.
-    pub temp_dir: PathBuf,
+    pub temp_dir: Arc<PathBuf>,
 
     /// Default shell from config.
     pub default_shell: Shell,

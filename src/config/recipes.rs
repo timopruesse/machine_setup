@@ -83,7 +83,7 @@ pub fn emit_by_key(key: &str, input: RecipeEmitInput<'_>) -> Result<EmittedTask>
     match key {
         "dotfiles" => {
             let RecipeEmitInput::Dotfiles(p) = input else {
-                return Err(Error::Other(format!(
+                return Err(Error::RecipeError(format!(
                     "recipe `{key}` expects dotfiles params"
                 )));
             };
@@ -91,7 +91,7 @@ pub fn emit_by_key(key: &str, input: RecipeEmitInput<'_>) -> Result<EmittedTask>
         }
         "git-repo" => {
             let RecipeEmitInput::GitRepo(p) = input else {
-                return Err(Error::Other(format!(
+                return Err(Error::RecipeError(format!(
                     "recipe `{key}` expects git-repo params"
                 )));
             };
@@ -99,13 +99,13 @@ pub fn emit_by_key(key: &str, input: RecipeEmitInput<'_>) -> Result<EmittedTask>
         }
         "brew-bundle" => {
             let RecipeEmitInput::BrewBundle(p) = input else {
-                return Err(Error::Other(format!(
+                return Err(Error::RecipeError(format!(
                     "recipe `{key}` expects brew-bundle params"
                 )));
             };
             emit_brew_bundle(&p)
         }
-        other => Err(Error::Other(format!("unknown recipe key: {other}"))),
+        other => Err(Error::RecipeError(format!("unknown recipe key: {other}"))),
     }
 }
 

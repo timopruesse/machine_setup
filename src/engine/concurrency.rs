@@ -87,6 +87,10 @@ impl ConcurrencyGate {
 
     /// Acquire one permit; held for the lifetime of the returned guard.
     pub async fn acquire(self: &Arc<Self>) -> OwnedSemaphorePermit {
+        #[expect(
+            clippy::expect_used,
+            reason = "ConcurrencyGate semaphore is never closed"
+        )]
         self.sem
             .clone()
             .acquire_owned()
@@ -101,6 +105,10 @@ impl ConcurrencyGate {
 
     /// Wait until the Exclusive lane is free.
     pub async fn acquire_lane(&self, lane: ExclusiveLane) -> OwnedSemaphorePermit {
+        #[expect(
+            clippy::expect_used,
+            reason = "Exclusive lane semaphore is never closed"
+        )]
         self.lanes[lane.index()]
             .clone()
             .acquire_owned()
@@ -110,6 +118,10 @@ impl ConcurrencyGate {
 }
 
 fn build_fs_pool(limit: usize) -> ThreadPool {
+    #[expect(
+        clippy::expect_used,
+        reason = "Rayon pool build only fails on invalid config we control"
+    )]
     rayon::ThreadPoolBuilder::new()
         .num_threads(limit)
         .thread_name(|i| format!("machine-setup-fs-{i}"))

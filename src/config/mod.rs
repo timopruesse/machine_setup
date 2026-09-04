@@ -75,12 +75,12 @@ fn load_config_from_url(url: &str) -> Result<AppConfig> {
 
     let response = ureq::get(&raw_url)
         .call()
-        .map_err(|e| Error::Other(format!("Failed to fetch config: {e}")))?;
+        .map_err(|e| Error::ConfigFetchFailed(format!("{e}")))?;
 
     let content = response
         .into_body()
         .read_to_string()
-        .map_err(|e| Error::Other(format!("Failed to read response: {e}")))?;
+        .map_err(|e| Error::ConfigFetchFailed(format!("read response: {e}")))?;
 
     let ext = url_extension(&raw_url);
 

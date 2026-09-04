@@ -82,10 +82,10 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
         }
 
         if let Some(auto) = &task.auto_update {
-            if let Err(msg) = crate::schedule::ScheduleKey::parse_auto_update(auto) {
+            if let Err(err) = crate::schedule::ScheduleKey::parse_auto_update(auto) {
                 issues.push(ValidationIssue {
                     task_name: name.clone(),
-                    message: msg,
+                    message: err.to_string(),
                     severity: Severity::Error,
                 });
             } else if task.commands.iter().any(catalog::entry_requires_sudo) {
@@ -148,11 +148,15 @@ mod tests {
     use crate::config::types::*;
     use indexmap::IndexMap;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use tempfile::tempdir;
 
     fn make_config(tasks: IndexMap<String, TaskConfig>) -> AppConfig {
         AppConfig {
-            tasks,
+            tasks: tasks
+                .into_iter()
+                .map(|(name, task)| (name, Arc::new(task)))
+                .collect(),
             temp_dir: "~/.machine_setup".to_string(),
             default_shell: Shell::Bash,
             parallel: false,

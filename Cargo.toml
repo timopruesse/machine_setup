@@ -27,7 +27,7 @@ ratatui = "0.30"
 crossterm = "0.29"
 
 # Config parsing
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 serde_yaml = "0.9"
 serde_json = "1"
 
@@ -66,3 +66,19 @@ harness = false
 lto = "thin"
 codegen-units = 1
 strip = true
+
+[lints.rust]
+future_incompatible = "warn"
+nonstandard_style = "warn"
+
+[lints.clippy]
+# Handbook-priority lints (Apollo Ch. 2). Default clippy groups stay at
+# their usual levels; CI/`make lint` still treat warnings as errors.
+redundant_clone = "deny"
+needless_collect = "deny"
+clone_on_copy = "deny"
+large_enum_variant = "warn"
+# Lock the production unwrap/expect baseline (unit-test modules are
+# cfg(test) and not compiled by `make lint`'s default clippy targets).
+unwrap_used = "deny"
+expect_used = "deny"

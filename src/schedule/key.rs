@@ -1,39 +1,50 @@
 //! Daily schedule key normalization (`at` / daily cron → `HHMM`).
 
 use crate::config::types::AutoUpdateConfig;
+use crate::error::{Error, Result};
 
 /// Stable daily schedule identity, e.g. `0730` for 07:30 local time.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ScheduleKey(String);
+pub struct ScheduleKey {
+    key: String,
+    hour: u32,
+    minute: u32,
+}
 
 impl ScheduleKey {
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.key
     }
 
     pub fn hour_minute(&self) -> (u32, u32) {
-        let hour: u32 = self.0[0..2].parse().expect("ScheduleKey hour");
-        let minute: u32 = self.0[2..4].parse().expect("ScheduleKey minute");
-        (hour, minute)
+        (self.hour, self.minute)
     }
 
-    pub fn from_hour_minute(hour: u32, minute: u32) -> Result<Self, String> {
+    pub fn from_hour_minute(hour: u32, minute: u32) -> Result<Self> {
         if hour > 23 {
-            return Err(format!("hour out of range: {hour}"));
+            return Err(Error::ScheduleError(format!("hour out of range: {hour}")));
         }
         if minute > 59 {
-            return Err(format!("minute out of range: {minute}"));
+            return Err(Error::ScheduleError(format!(
+                "minute out of range: {minute}"
+            )));
         }
-        Ok(Self(format!("{hour:02}{minute:02}")))
+        Ok(Self {
+            key: format!("{hour:02}{minute:02}"),
+            hour,
+            minute,
+        })
     }
 
     /// Parse `auto_update` into a daily key. Errors are human-readable.
-    pub fn parse_auto_update(cfg: &AutoUpdateConfig) -> Result<Self, String> {
+    pub fn parse_auto_update(cfg: &AutoUpdateConfig) -> Result<Self> {
         match (&cfg.at, &cfg.cron) {
-            (Some(_), Some(_)) => {
-                Err("auto_update: set only one of `at` or `cron`, not both".to_string())
-            }
-            (None, None) => Err("auto_update: set `at` or `cron`".to_string()),
+            (Some(_), Some(_)) => Err(Error::ScheduleError(
+                "auto_update: set only one of `at` or `cron`, not both".into(),
+            )),
+            (None, None) => Err(Error::ScheduleError(
+                "auto_update: set `at` or `cron`".into(),
+            )),
             (Some(at), None) => parse_at(at),
             (None, Some(cron)) => parse_daily_cron(cron),
         }
@@ -42,55 +53,62 @@ impl ScheduleKey {
 
 impl std::fmt::Display for ScheduleKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (h, m) = self.hour_minute();
-        write!(f, "{h:02}:{m:02}")
+        write!(f, "{:02}:{:02}", self.hour, self.minute)
     }
 }
 
-fn parse_at(raw: &str) -> Result<ScheduleKey, String> {
+fn parse_at(raw: &str) -> Result<ScheduleKey> {
     let s = raw.trim();
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 2 {
-        return Err(format!("auto_update.at: expected HH:MM, got '{raw}'"));
+        return Err(Error::ScheduleError(format!(
+            "auto_update.at: expected HH:MM, got '{raw}'"
+        )));
     }
     let hour: u32 = parts[0]
         .parse()
-        .map_err(|_| format!("auto_update.at: invalid hour in '{raw}'"))?;
+        .map_err(|_| Error::ScheduleError(format!("auto_update.at: invalid hour in '{raw}'")))?;
     let minute: u32 = parts[1]
         .parse()
-        .map_err(|_| format!("auto_update.at: invalid minute in '{raw}'"))?;
-    ScheduleKey::from_hour_minute(hour, minute).map_err(|e| format!("auto_update.at: {e}"))
+        .map_err(|_| Error::ScheduleError(format!("auto_update.at: invalid minute in '{raw}'")))?;
+    ScheduleKey::from_hour_minute(hour, minute).map_err(|e| match e {
+        Error::ScheduleError(msg) => Error::ScheduleError(format!("auto_update.at: {msg}")),
+        other => other,
+    })
 }
 
 /// Accept only daily 5-field cron: `M H * * *` (minute hour DOM mon DOW).
-fn parse_daily_cron(raw: &str) -> Result<ScheduleKey, String> {
+fn parse_daily_cron(raw: &str) -> Result<ScheduleKey> {
     let s = raw.trim();
     let fields: Vec<&str> = s.split_whitespace().collect();
     if fields.len() != 5 {
-        return Err(format!(
+        return Err(Error::ScheduleError(format!(
             "auto_update.cron: expected 5 fields, got {} in '{raw}'",
             fields.len()
-        ));
+        )));
     }
     let minute = parse_cron_number(fields[0], "minute")?;
     let hour = parse_cron_number(fields[1], "hour")?;
     if fields[2] != "*" || fields[3] != "*" || fields[4] != "*" {
-        return Err(format!(
+        return Err(Error::ScheduleError(format!(
             "auto_update.cron: only daily schedules are supported in v1 (use `M H * * *` or `at`); got '{raw}'"
-        ));
+        )));
     }
-    ScheduleKey::from_hour_minute(hour, minute).map_err(|e| format!("auto_update.cron: {e}"))
+    ScheduleKey::from_hour_minute(hour, minute).map_err(|e| match e {
+        Error::ScheduleError(msg) => Error::ScheduleError(format!("auto_update.cron: {msg}")),
+        other => other,
+    })
 }
 
-fn parse_cron_number(field: &str, name: &str) -> Result<u32, String> {
+fn parse_cron_number(field: &str, name: &str) -> Result<u32> {
     if field.contains(['*', '/', ',', '-', 'L', 'W', '#']) {
-        return Err(format!(
+        return Err(Error::ScheduleError(format!(
             "auto_update.cron: {name} must be a single number for daily v1 schedules, got '{field}'"
-        ));
+        )));
     }
     field
         .parse()
-        .map_err(|_| format!("auto_update.cron: invalid {name} '{field}'"))
+        .map_err(|_| Error::ScheduleError(format!("auto_update.cron: invalid {name} '{field}'")))
 }
 
 #[cfg(test)]
@@ -131,7 +149,9 @@ mod tests {
             at: None,
             cron: Some("0 7 * * 1".into()),
         };
-        let err = ScheduleKey::parse_auto_update(&cfg).unwrap_err();
+        let err = ScheduleKey::parse_auto_update(&cfg)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("daily"), "{err}");
     }
 
@@ -141,9 +161,10 @@ mod tests {
             at: Some("07:30".into()),
             cron: Some("30 7 * * *".into()),
         };
-        assert!(ScheduleKey::parse_auto_update(&cfg)
+        let err = ScheduleKey::parse_auto_update(&cfg)
             .unwrap_err()
-            .contains("only one"));
+            .to_string();
+        assert!(err.contains("only one"), "{err}");
     }
 
     #[test]

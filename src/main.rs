@@ -200,6 +200,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     // All non-execution verbs returned above.
+    #[expect(
+        clippy::expect_used,
+        reason = "non-execution verbs return before this point"
+    )]
     let mode = Mode::from_command(&cli.command)
         .expect("non-execution verbs are handled before this point");
 
@@ -257,6 +261,10 @@ async fn run_execution(
         pre_authenticate_sudo();
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "non-execution verbs return before this point"
+    )]
     let mode = Mode::from_command(&cli.command)
         .expect("non-execution verbs are handled before this point");
 

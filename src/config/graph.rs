@@ -11,17 +11,19 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use indexmap::IndexMap;
 
+use std::sync::Arc;
+
 use super::types::TaskConfig;
 use crate::error::{Error, Result};
 
 /// A view over tasks and their `depends_on` edges. Borrows the task map; cheap
 /// to construct.
 pub struct TaskGraph<'a> {
-    tasks: &'a IndexMap<String, TaskConfig>,
+    tasks: &'a IndexMap<String, Arc<TaskConfig>>,
 }
 
 impl<'a> TaskGraph<'a> {
-    pub fn new(tasks: &'a IndexMap<String, TaskConfig>) -> Self {
+    pub fn new(tasks: &'a IndexMap<String, Arc<TaskConfig>>) -> Self {
         Self { tasks }
     }
 
@@ -58,7 +60,7 @@ impl<'a> TaskGraph<'a> {
 
         fn dfs<'b>(
             node: &'b str,
-            tasks: &'b IndexMap<String, TaskConfig>,
+            tasks: &'b IndexMap<String, Arc<TaskConfig>>,
             colors: &mut HashMap<&'b str, Color>,
             path: &mut Vec<&'b str>,
         ) -> Option<Vec<String>> {
@@ -70,6 +72,11 @@ impl<'a> TaskGraph<'a> {
                     match colors.get(dep.as_str()).copied() {
                         Some(Color::Gray) => {
                             // Back edge — reconstruct the cycle path.
+                            // Back edge implies `dep` is already on `path`.
+                            #[expect(
+                                clippy::unwrap_used,
+                                reason = "Gray dep must already appear on the DFS path"
+                            )]
                             let start = path.iter().position(|&n| n == dep.as_str()).unwrap();
                             let mut cycle: Vec<String> =
                                 path[start..].iter().map(|s| s.to_string()).collect();
@@ -275,10 +282,10 @@ mod tests {
         }
     }
 
-    fn graph_of(pairs: &[(&str, &[&str])]) -> IndexMap<String, TaskConfig> {
+    fn graph_of(pairs: &[(&str, &[&str])]) -> IndexMap<String, Arc<TaskConfig>> {
         let mut map = IndexMap::new();
         for (name, deps) in pairs {
-            map.insert(name.to_string(), task(deps));
+            map.insert(name.to_string(), Arc::new(task(deps)));
         }
         map
     }

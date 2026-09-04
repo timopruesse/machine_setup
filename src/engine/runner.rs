@@ -1,14 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::config::graph::TaskGraph;
 use crate::config::history::History;
-use crate::config::types::{AppConfig, CommandEntry, TaskConfig};
+use crate::config::types::{AppConfig, TaskConfig};
 use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
 
-use super::commands::{create_executor, exclusive_lane, CommandExecutor, Executor};
-use super::concurrency::ConcurrencyGate;
+use super::commands::{catalog, create_executor, CommandExecutor, Executor};
+use super::concurrency::{ConcurrencyGate, ExclusiveLane};
 use super::conditions::evaluate_skip;
 use super::context::CommandContext;
 use super::event::TaskEvent;
@@ -20,7 +20,7 @@ pub struct TaskRunner {
     mode: Mode,
     events: SharedSink,
     gate: Arc<ConcurrencyGate>,
-    config_dir: PathBuf,
+    config_dir: Arc<PathBuf>,
     depth: usize,
 }
 
@@ -40,7 +40,7 @@ impl TaskRunner {
             mode,
             events,
             gate,
-            config_dir: std::env::current_dir().unwrap_or_default(),
+            config_dir: Arc::new(std::env::current_dir().unwrap_or_default()),
             depth: 0,
         }
     }
@@ -52,7 +52,7 @@ impl TaskRunner {
     }
 
     pub fn with_config_dir(mut self, dir: PathBuf) -> Self {
-        self.config_dir = dir;
+        self.config_dir = Arc::new(dir);
         self
     }
 
@@ -83,8 +83,8 @@ impl TaskRunner {
         let ordered = graph.topo_order(task_names)?;
         let ordered: &[String] = &ordered;
 
-        let temp_dir = expand_path(&self.config.temp_dir, None);
-        let mut history = History::load(&temp_dir).unwrap_or_default();
+        let temp_dir = Arc::new(expand_path(&self.config.temp_dir, None));
+        let mut history = History::load(temp_dir.as_path()).unwrap_or_default();
 
         // Both execution modes are the same loop over layers; sequential is the
         // degenerate case where each task is its own layer (so the join below
@@ -103,12 +103,18 @@ impl TaskRunner {
 
         let mut tally = Tally::default();
         for layer in &layers {
-            self.run_layer(layer, force, &temp_dir, &mut history, &mut tally)
-                .await;
+            self.run_layer(
+                layer,
+                force,
+                Arc::clone(&temp_dir),
+                &mut history,
+                &mut tally,
+            )
+            .await;
         }
 
         // Save history
-        if let Err(e) = history.save(&temp_dir) {
+        if let Err(e) = history.save(temp_dir.as_path()) {
             tracing::warn!("Failed to save history: {e}");
         }
 
@@ -119,7 +125,7 @@ impl TaskRunner {
         });
 
         if tally.failed > 0 {
-            Err(Error::Other(format!("{} task(s) failed", tally.failed)))
+            Err(Error::TasksFailed(tally.failed))
         } else {
             Ok(())
         }
@@ -137,22 +143,22 @@ impl TaskRunner {
         &self,
         layer: &[String],
         force: bool,
-        temp_dir: &Path,
+        temp_dir: Arc<PathBuf>,
         history: &mut History,
         tally: &mut Tally,
     ) {
         let mut handles = Vec::new();
 
         for name in layer {
-            let task_config = &self.config.tasks[name];
+            let task_config = Arc::clone(&self.config.tasks[name]);
 
             if let Some(reason) = evaluate_skip(
-                task_config,
+                task_config.as_ref(),
                 name,
                 self.mode,
                 force,
                 history,
-                &self.config_dir,
+                self.config_dir.as_path(),
                 &self.config.default_shell,
             ) {
                 self.send(TaskEvent::TaskSkipped {
@@ -163,11 +169,10 @@ impl TaskRunner {
                 continue;
             }
 
-            let ctx = self.create_context(name, temp_dir);
-            let task = task_config.clone();
+            let ctx = self.create_context(name, Arc::clone(&temp_dir));
             let name = Arc::clone(&ctx.task_name);
             handles.push(tokio::spawn(async move {
-                let result = run_task_with_retry(&task, &ctx).await;
+                let result = run_task_with_retry(&task_config, &ctx).await;
                 (name, result)
             }));
         }
@@ -200,17 +205,17 @@ impl TaskRunner {
 
     /// Get task configs for display.
     #[allow(dead_code)]
-    pub fn tasks(&self) -> &indexmap::IndexMap<String, TaskConfig> {
+    pub fn tasks(&self) -> &indexmap::IndexMap<String, Arc<TaskConfig>> {
         &self.config.tasks
     }
 
-    fn create_context(&self, task_name: &str, temp_dir: &Path) -> CommandContext {
+    fn create_context(&self, task_name: &str, temp_dir: Arc<PathBuf>) -> CommandContext {
         CommandContext {
             events: Arc::clone(&self.events),
             gate: Arc::clone(&self.gate),
             mode: self.mode,
-            config_dir: self.config_dir.clone(),
-            temp_dir: temp_dir.to_path_buf(),
+            config_dir: Arc::clone(&self.config_dir),
+            temp_dir,
             default_shell: self.config.default_shell.clone(),
             task_name: Arc::<str>::from(task_name),
             depth: self.depth,
@@ -265,10 +270,11 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
     if task.parallel {
         let mut handles = Vec::new();
 
-        for (i, entry) in task.commands.iter().cloned().enumerate() {
+        for (i, entry) in task.commands.iter().enumerate() {
             let command_index = i + 1;
-            let executor = create_executor(entry.clone());
-            let desc = executor.description();
+            let executor = create_executor(entry);
+            let desc = catalog::description(entry);
+            let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: Arc::clone(&ctx.task_name),
                 command_desc: desc.clone(),
@@ -278,7 +284,7 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
             let ctx = ctx.clone();
             handles.push(tokio::spawn(async move {
                 let result =
-                    execute_with_gate(&entry, &executor, &ctx, &desc, command_index, command_total)
+                    execute_with_gate(lane, &executor, &ctx, &desc, command_index, command_total)
                         .await;
                 (desc, command_index, result)
             }));
@@ -286,7 +292,7 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
 
         for handle in handles {
             let (desc, command_index, result) =
-                handle.await.map_err(|e| Error::Other(e.to_string()))?;
+                handle.await.map_err(|e| Error::TaskJoin(e.to_string()))?;
             match result {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
@@ -311,8 +317,9 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
     } else {
         for (i, entry) in task.commands.iter().enumerate() {
             let command_index = i + 1;
-            let executor = create_executor(entry.clone());
-            let desc = executor.description();
+            let executor = create_executor(entry);
+            let desc = catalog::description(entry);
+            let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: Arc::clone(&ctx.task_name),
                 command_desc: desc.clone(),
@@ -320,8 +327,7 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
                 command_total,
             });
 
-            match execute_with_gate(entry, &executor, ctx, &desc, command_index, command_total)
-                .await
+            match execute_with_gate(lane, &executor, ctx, &desc, command_index, command_total).await
             {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
@@ -354,14 +360,14 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
 
 /// Admit a Command entry: Exclusive lane (if any) first, then work permit.
 async fn execute_with_gate(
-    entry: &CommandEntry,
+    lane: Option<ExclusiveLane>,
     executor: &Executor,
     ctx: &CommandContext,
     command_desc: &str,
     command_index: usize,
     command_total: usize,
 ) -> Result<()> {
-    let _lane_permit = if let Some(lane) = exclusive_lane(entry, ctx.mode) {
+    let _lane_permit = if let Some(lane) = lane {
         match ctx.gate.try_acquire_lane(lane) {
             Some(permit) => Some(permit),
             None => {

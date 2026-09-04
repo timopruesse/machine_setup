@@ -82,24 +82,24 @@ pub fn sudo_bash_script(script: &str) -> Result<()> {
         .args(["bash", "-s"])
         .stdin(Stdio::piped())
         .spawn()
-        .map_err(|e| Error::Other(format!("Failed to run sudo bash: {e}")))?;
+        .map_err(|e| Error::SudoFailed(format!("Failed to run sudo bash: {e}")))?;
 
     {
         let stdin = child
             .stdin
             .as_mut()
-            .ok_or_else(|| Error::Other("Failed to open sudo bash stdin".into()))?;
+            .ok_or_else(|| Error::SudoFailed("Failed to open sudo bash stdin".into()))?;
         stdin
             .write_all(script.as_bytes())
-            .map_err(|e| Error::Other(format!("Failed to write sudo script: {e}")))?;
+            .map_err(|e| Error::SudoFailed(format!("Failed to write sudo script: {e}")))?;
     }
 
     let status = child
         .wait()
-        .map_err(|e| Error::Other(format!("Failed to wait for sudo bash: {e}")))?;
+        .map_err(|e| Error::SudoFailed(format!("Failed to wait for sudo bash: {e}")))?;
 
     if !status.success() {
-        return Err(Error::Other(format!(
+        return Err(Error::SudoFailed(format!(
             "sudo bash script failed with exit code {}",
             status.code().unwrap_or(-1)
         )));
@@ -111,10 +111,10 @@ fn run_sudo(args: &[&str]) -> Result<()> {
     let status = Command::new("sudo")
         .args(args)
         .status()
-        .map_err(|e| Error::Other(format!("Failed to run sudo: {e}")))?;
+        .map_err(|e| Error::SudoFailed(format!("Failed to run sudo: {e}")))?;
 
     if !status.success() {
-        return Err(Error::Other(format!(
+        return Err(Error::SudoFailed(format!(
             "sudo {} failed with exit code {}",
             args.join(" "),
             status.code().unwrap_or(-1)

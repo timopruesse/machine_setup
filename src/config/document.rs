@@ -131,11 +131,11 @@ pub fn validate_after_write(path: &Path) -> Result<bool> {
 
 pub fn validate_task_name(name: &str) -> Result<()> {
     if name.is_empty() {
-        return Err(Error::Other("Task name must not be empty".into()));
+        return Err(Error::InvalidTaskName("must not be empty".into()));
     }
     if name.contains(':') || name.contains('#') || name.contains('\n') {
-        return Err(Error::Other(format!(
-            "Task name contains invalid characters: {name:?}"
+        return Err(Error::InvalidTaskName(format!(
+            "contains invalid characters: {name:?}"
         )));
     }
     Ok(())

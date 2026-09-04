@@ -43,7 +43,7 @@ pub fn rows<'a>(config: &'a AppConfig, history: &'a History) -> Vec<TaskStatusRo
             let hist = history.tasks.get(name);
             TaskStatusRow {
                 name,
-                task,
+                task: task.as_ref(),
                 installed: history.is_installed(name),
                 os_applies: task.os.matches_current(),
                 history: hist,
@@ -110,6 +110,7 @@ mod tests {
     use super::*;
     use crate::config::types::*;
     use indexmap::IndexMap;
+    use std::sync::Arc;
 
     fn empty_task() -> TaskConfig {
         TaskConfig {
@@ -128,7 +129,7 @@ mod tests {
     fn config_with(names: &[&str]) -> AppConfig {
         let mut tasks = IndexMap::new();
         for name in names {
-            tasks.insert((*name).into(), empty_task());
+            tasks.insert((*name).into(), Arc::new(empty_task()));
         }
         AppConfig {
             tasks,

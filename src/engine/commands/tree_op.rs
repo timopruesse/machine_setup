@@ -71,7 +71,7 @@ pub async fn execute(
     let ctx = ctx.clone();
     tokio::task::spawn_blocking(move || run_sync(&src, &target, &kind, &ctx))
         .await
-        .map_err(|e| Error::Other(e.to_string()))?
+        .map_err(|e| Error::TaskJoin(e.to_string()))?
 }
 
 fn run_sync(src: &str, target: &str, kind: &dyn TreeOpKind, ctx: &CommandContext) -> Result<()> {

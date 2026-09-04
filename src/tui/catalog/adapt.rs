@@ -167,6 +167,7 @@ mod tests {
     use crate::config::os::{Os, OsFilter};
     use crate::config::types::*;
     use indexmap::IndexMap;
+    use std::sync::Arc;
 
     fn empty_task() -> TaskConfig {
         task_with_os(OsFilter::All)
@@ -193,7 +194,7 @@ mod tests {
     fn config_with_tasks(tasks: Vec<(&str, TaskConfig)>) -> AppConfig {
         let mut map = IndexMap::new();
         for (name, task) in tasks {
-            map.insert(name.into(), task);
+            map.insert(name.into(), Arc::new(task));
         }
         AppConfig {
             tasks: map,

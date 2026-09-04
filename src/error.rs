@@ -32,6 +32,9 @@ pub enum Error {
     #[error("Task not found: {0}")]
     TaskNotFound(String),
 
+    #[error("Invalid task name: {0}")]
+    InvalidTaskName(String),
+
     #[error("Shell execution failed: {0}")]
     ShellFailed(String),
 
@@ -47,14 +50,44 @@ pub enum Error {
     #[error("Schedule error: {0}")]
     ScheduleError(String),
 
+    #[error("Sudo failed: {0}")]
+    SudoFailed(String),
+
+    #[error("Authoring recipe error: {0}")]
+    RecipeError(String),
+
+    #[error("Interactive prompt failed: {0}")]
+    PromptFailed(String),
+
+    #[error("Aborted.")]
+    Aborted,
+
+    #[error("Wizard requires an interactive terminal; use `init` / `add` instead")]
+    WizardRequiresTty,
+
+    #[error("Wizard requires a local Config document path, not a URL")]
+    WizardRequiresLocalPath,
+
+    #[error("Config document has validation errors")]
+    ConfigValidationFailed,
+
+    #[error("Failed to fetch remote config: {0}")]
+    ConfigFetchFailed(String),
+
+    #[error("Update check failed: {0}")]
+    UpdateCheckFailed(String),
+
+    #[error("{0} task(s) failed")]
+    TasksFailed(usize),
+
+    #[error("Task join failed: {0}")]
+    TaskJoin(String),
+
     #[error("Cyclic dependency detected: {0}")]
     CyclicDependency(String),
 
     #[error("Unknown dependency: task '{0}' depends on '{1}' which does not exist")]
     MissingDependency(String, String),
-
-    #[error("{0}")]
-    Other(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

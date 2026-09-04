@@ -31,6 +31,7 @@ mod tests {
     use super::*;
     use crate::config::types::*;
     use indexmap::IndexMap;
+    use std::sync::Arc;
 
     fn task_with(auto: Option<AutoUpdateConfig>) -> TaskConfig {
         TaskConfig {
@@ -51,17 +52,17 @@ mod tests {
         let mut tasks = IndexMap::new();
         tasks.insert(
             "bun".into(),
-            task_with(Some(AutoUpdateConfig {
+            Arc::new(task_with(Some(AutoUpdateConfig {
                 at: Some("07:30".into()),
                 cron: None,
-            })),
+            }))),
         );
         tasks.insert(
             "node".into(),
-            task_with(Some(AutoUpdateConfig {
+            Arc::new(task_with(Some(AutoUpdateConfig {
                 at: None,
                 cron: Some("30 7 * * *".into()),
-            })),
+            }))),
         );
         let config = AppConfig {
             tasks,

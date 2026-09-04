@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 pub const TTL_HOURS: i64 = 24;
 
@@ -25,12 +25,12 @@ impl UpdateCheckCache {
             return Ok(Self::default());
         }
         let content = std::fs::read_to_string(&path)?;
-        serde_json::from_str(&content).map_err(|e| Error::Other(e.to_string()))
+        Ok(serde_json::from_str(&content)?)
     }
 
     pub fn save(&self, temp_dir: &Path) -> Result<()> {
         std::fs::create_dir_all(temp_dir)?;
-        let content = serde_json::to_string(self).map_err(|e| Error::Other(e.to_string()))?;
+        let content = serde_json::to_string(self)?;
         std::fs::write(Self::path(temp_dir), content)?;
         Ok(())
     }

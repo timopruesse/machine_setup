@@ -52,12 +52,16 @@ pub fn resolve_single_file_dest(src: &Path, target: &Path) -> ResolvedDest {
             dir_to_create: target.parent().map(Path::to_path_buf),
         }
     } else {
-        let name = src
-            .file_name()
-            .expect("source file path always has a final component");
-        ResolvedDest {
-            dest: target.join(name),
-            dir_to_create: Some(target.to_path_buf()),
+        // Rare for real files (`/` / `..`); fall back to writing at `target`.
+        match src.file_name() {
+            Some(name) => ResolvedDest {
+                dest: target.join(name),
+                dir_to_create: Some(target.to_path_buf()),
+            },
+            None => ResolvedDest {
+                dest: target.to_path_buf(),
+                dir_to_create: target.parent().map(Path::to_path_buf),
+            },
         }
     }
 }
@@ -199,41 +203,34 @@ fn apply_files<F>(
 where
     F: Fn(&Path, &Path) -> Result<()> + Sync,
 {
-    if !should_parallelize(pool, files.len()) {
-        for (src, dest) in files {
-            on_file(src, dest)?;
+    if let Some(pool) = pool {
+        if pool.current_num_threads() > 1 && files.len() >= PARALLEL_FILE_THRESHOLD {
+            return pool.install(|| {
+                files
+                    .par_iter()
+                    .try_for_each(|(src, dest)| on_file(src, dest))
+            });
         }
-        return Ok(());
     }
-
-    let pool = pool.expect("should_parallelize implies pool");
-    pool.install(|| {
-        files
-            .par_iter()
-            .try_for_each(|(src, dest)| on_file(src, dest))
-    })
+    for (src, dest) in files {
+        on_file(src, dest)?;
+    }
+    Ok(())
 }
 
 fn apply_dests<F>(pool: Option<&ThreadPool>, dests: &[PathBuf], on_dest: &F) -> Result<()>
 where
     F: Fn(&Path) -> Result<()> + Sync,
 {
-    if !should_parallelize(pool, dests.len()) {
-        for dest in dests {
-            on_dest(dest)?;
+    if let Some(pool) = pool {
+        if pool.current_num_threads() > 1 && dests.len() >= PARALLEL_FILE_THRESHOLD {
+            return pool.install(|| dests.par_iter().try_for_each(|dest| on_dest(dest)));
         }
-        return Ok(());
     }
-
-    let pool = pool.expect("should_parallelize implies pool");
-    pool.install(|| dests.par_iter().try_for_each(|dest| on_dest(dest)))
-}
-
-fn should_parallelize(pool: Option<&ThreadPool>, n: usize) -> bool {
-    match pool {
-        Some(pool) => pool.current_num_threads() > 1 && n >= PARALLEL_FILE_THRESHOLD,
-        None => false,
+    for dest in dests {
+        on_dest(dest)?;
     }
+    Ok(())
 }
 
 #[cfg(test)]

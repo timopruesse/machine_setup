@@ -143,13 +143,13 @@ pub fn maybe_print_update_notice_with<S, E>(
     let mut cache = UpdateCheckCache::load(temp_dir).unwrap_or_default();
 
     let latest = if cache.is_fresh(now) {
-        cache.latest_version.clone()
+        cache.latest_version
     } else {
         // Claim the TTL slot so concurrent invocations do not stampede.
         cache.checked_at = Some(now);
         let _ = cache.save(temp_dir);
         on_stale();
-        cache.latest_version.clone()
+        cache.latest_version
     };
 
     let Some(latest) = latest else {

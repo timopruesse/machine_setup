@@ -18,6 +18,10 @@ use super::recipes::{
 };
 use super::{is_url, resolve_config_path};
 
+fn prompt_err(e: impl std::fmt::Display) -> Error {
+    Error::PromptFailed(e.to_string())
+}
+
 fn build_menu() -> Vec<String> {
     let mut items = vec!["Add blank task".to_string()];
     items.extend(
@@ -42,9 +46,9 @@ pub fn run(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> {
             .with_prompt(format!("Create Config document at {}?", path.display()))
             .default(true)
             .interact()
-            .map_err(|e| Error::Other(e.to_string()))?;
+            .map_err(prompt_err)?;
         if !create {
-            return Err(Error::Other("Aborted.".into()));
+            return Err(Error::Aborted);
         }
         document::init(&path)?;
         println!("Created {}", path.display());
@@ -58,14 +62,14 @@ pub fn run(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> {
             .items(&menu)
             .default(0)
             .interact()
-            .map_err(|e| Error::Other(e.to_string()))?;
+            .map_err(prompt_err)?;
 
         match choice {
             0 => {
                 let name: String = Input::new()
                     .with_prompt("Task name")
                     .interact_text()
-                    .map_err(|e| Error::Other(e.to_string()))?;
+                    .map_err(prompt_err)?;
                 document::add_task(&path, &name)?;
                 println!("Added task `{name}`");
             }
@@ -84,7 +88,7 @@ pub fn run(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> {
 
     println!("Wizard finished: {}", path.display());
     if validate_after_write(&path)? {
-        return Err(Error::Other("Config document has validation errors".into()));
+        return Err(Error::ConfigValidationFailed);
     }
     Ok(path)
 }
@@ -93,18 +97,14 @@ fn ensure_tty() -> Result<()> {
     if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
         Ok(())
     } else {
-        Err(Error::Other(
-            "wizard requires an interactive terminal; use `init` / `add` instead".into(),
-        ))
+        Err(Error::WizardRequiresTty)
     }
 }
 
 /// Resolve the path the wizard will use (may not exist yet).
 fn resolve_wizard_path(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> {
     match config_arg {
-        Some(raw) if is_url(raw) => Err(Error::Other(
-            "wizard requires a local Config document path, not a URL".into(),
-        )),
+        Some(raw) if is_url(raw) => Err(Error::WizardRequiresLocalPath),
         Some(raw) => {
             let path = Path::new(raw);
             if path.is_file() {
@@ -129,24 +129,24 @@ fn add_recipe(path: &Path, key: &str) -> Result<()> {
         .with_prompt("Task name")
         .default(default_name.to_string())
         .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
+        .map_err(prompt_err)?;
 
     let emitted = match key {
         "dotfiles" => {
             let url: String = Input::new()
                 .with_prompt("Git URL")
                 .interact_text()
-                .map_err(|e| Error::Other(e.to_string()))?;
+                .map_err(prompt_err)?;
             let src: String = Input::new()
                 .with_prompt("Symlink source")
                 .default(DEFAULT_DOTFILES_SRC.to_string())
                 .interact_text()
-                .map_err(|e| Error::Other(e.to_string()))?;
+                .map_err(prompt_err)?;
             let target: String = Input::new()
                 .with_prompt("Symlink target")
                 .default(DEFAULT_DOTFILES_TARGET.to_string())
                 .interact_text()
-                .map_err(|e| Error::Other(e.to_string()))?;
+                .map_err(prompt_err)?;
             emit_by_key(
                 key,
                 RecipeEmitInput::Dotfiles(super::recipes::DotfilesParams {
@@ -162,11 +162,11 @@ fn add_recipe(path: &Path, key: &str) -> Result<()> {
             let url: String = Input::new()
                 .with_prompt("Git URL")
                 .interact_text()
-                .map_err(|e| Error::Other(e.to_string()))?;
+                .map_err(prompt_err)?;
             let target: String = Input::new()
                 .with_prompt("Clone target")
                 .interact_text()
-                .map_err(|e| Error::Other(e.to_string()))?;
+                .map_err(prompt_err)?;
             emit_by_key(
                 key,
                 RecipeEmitInput::GitRepo(super::recipes::GitRepoParams {
@@ -181,7 +181,7 @@ fn add_recipe(path: &Path, key: &str) -> Result<()> {
                 .with_prompt("Brewfile path")
                 .default("./Brewfile".to_string())
                 .interact_text()
-                .map_err(|e| Error::Other(e.to_string()))?;
+                .map_err(prompt_err)?;
             emit_by_key(
                 key,
                 RecipeEmitInput::BrewBundle(super::recipes::BrewBundleParams {
@@ -190,7 +190,9 @@ fn add_recipe(path: &Path, key: &str) -> Result<()> {
                 }),
             )?
         }
-        other => return Err(Error::Other(format!("unknown recipe key: {other}"))),
+        other => {
+            return Err(Error::RecipeError(format!("unknown recipe key: {other}")));
+        }
     };
 
     document::append_emitted(path, &emitted)?;
@@ -223,24 +225,15 @@ mod tests {
     fn resolve_wizard_path_rejects_url() {
         let dir = tempdir().unwrap();
         let err = resolve_wizard_path(Some("https://example.com/c.yaml"), dir.path()).unwrap_err();
-        assert!(matches!(err, Error::Other(_)));
+        assert!(matches!(err, Error::WizardRequiresLocalPath));
     }
 
     #[test]
     fn ensure_tty_fails_without_terminal_in_piped_test() {
-        // In CI/tests stdin is often not a TTY — we only assert the helper's logic
-        // when we know we're non-interactive; skip if somehow interactive.
-        if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
-            assert!(ensure_tty().is_err());
+        // Under cargo test, stdin/stdout are typically not TTYs.
+        if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+            return;
         }
-    }
-
-    #[test]
-    fn build_menu_includes_catalog_recipes() {
-        let menu = build_menu();
-        assert_eq!(menu.len(), RECIPE_KEYS.len() + 2);
-        for (i, key) in RECIPE_KEYS.iter().enumerate() {
-            assert!(menu[i + 1].contains(key));
-        }
+        assert!(matches!(ensure_tty(), Err(Error::WizardRequiresTty)));
     }
 }

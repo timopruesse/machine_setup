@@ -4,11 +4,12 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 
 /// Root configuration structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    pub tasks: IndexMap<String, TaskConfig>,
+    pub tasks: IndexMap<String, Arc<TaskConfig>>,
 
     /// Directory for temp files and history (default: ~/.machine_setup)
     #[serde(default = "default_temp_dir")]
@@ -146,6 +147,7 @@ impl<'de> Deserialize<'de> for CommandEntry {
             )));
         }
 
+        #[expect(clippy::unwrap_used, reason = "len == 1 was checked immediately above")]
         let (key, value) = map.into_iter().next().unwrap();
 
         match key.as_str() {

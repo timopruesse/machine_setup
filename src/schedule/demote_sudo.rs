@@ -1,6 +1,7 @@
 //! Demote sudo for non-interactive `schedule run` (no TTY / password prompt).
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::config::types::AppConfig;
 use crate::engine::commands::catalog;
@@ -21,6 +22,7 @@ pub fn demote_config_for_schedule(
         if !selected.contains(name.as_str()) {
             continue;
         }
+        let task = Arc::make_mut(task);
         if !task.commands.iter().any(catalog::entry_requires_sudo) {
             continue;
         }
@@ -41,10 +43,14 @@ mod tests {
     };
     use indexmap::IndexMap;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     fn make_config(tasks: IndexMap<String, TaskConfig>) -> AppConfig {
         AppConfig {
-            tasks,
+            tasks: tasks
+                .into_iter()
+                .map(|(name, task)| (name, Arc::new(task)))
+                .collect(),
             temp_dir: "~/.machine_setup".to_string(),
             default_shell: crate::config::types::Shell::Bash,
             parallel: false,

@@ -37,13 +37,13 @@ pub struct KindIssue {
 }
 
 /// Create a Command executor from a Command entry (closed enum — ADR-0006).
-pub fn create_executor(entry: CommandEntry) -> Executor {
+pub fn create_executor(entry: &CommandEntry) -> Executor {
     match entry {
-        CommandEntry::Copy(args) => Executor::Copy(CopyCommand::new(args)),
-        CommandEntry::Symlink(args) => Executor::Symlink(SymlinkCommand::new(args)),
-        CommandEntry::Clone(args) => Executor::Clone(CloneCommand::new(args)),
-        CommandEntry::Run(args) => Executor::Run(RunCommand::new(args)),
-        CommandEntry::MachineSetup(args) => Executor::MachineSetup(SetupCommand::new(args)),
+        CommandEntry::Copy(args) => Executor::Copy(CopyCommand::new(args.clone())),
+        CommandEntry::Symlink(args) => Executor::Symlink(SymlinkCommand::new(args.clone())),
+        CommandEntry::Clone(args) => Executor::Clone(CloneCommand::new(args.clone())),
+        CommandEntry::Run(args) => Executor::Run(RunCommand::new(args.clone())),
+        CommandEntry::MachineSetup(args) => Executor::MachineSetup(SetupCommand::new(args.clone())),
     }
 }
 

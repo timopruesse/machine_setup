@@ -61,6 +61,7 @@ mod tests {
     use super::*;
     use crate::config::types::*;
     use indexmap::IndexMap;
+    use std::sync::Arc;
 
     fn task(deps: &[&str]) -> TaskConfig {
         TaskConfig {
@@ -79,7 +80,7 @@ mod tests {
     fn config(pairs: &[(&str, &[&str])]) -> AppConfig {
         let mut tasks = IndexMap::new();
         for (name, deps) in pairs {
-            tasks.insert(name.to_string(), task(deps));
+            tasks.insert(name.to_string(), Arc::new(task(deps)));
         }
         AppConfig {
             tasks,

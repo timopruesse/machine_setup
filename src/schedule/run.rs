@@ -128,12 +128,12 @@ pub fn parse_key_arg(raw: &str) -> Result<ScheduleKey> {
         let minute: u32 = s[2..4]
             .parse()
             .map_err(|_| Error::ScheduleError(format!("invalid schedule key '{raw}'")))?;
-        return ScheduleKey::from_hour_minute(hour, minute).map_err(Error::ScheduleError);
+        return ScheduleKey::from_hour_minute(hour, minute);
     }
     // Allow HH:MM as convenience
     let cfg = crate::config::types::AutoUpdateConfig {
         at: Some(s.to_string()),
         cron: None,
     };
-    ScheduleKey::parse_auto_update(&cfg).map_err(Error::ScheduleError)
+    ScheduleKey::parse_auto_update(&cfg)
 }

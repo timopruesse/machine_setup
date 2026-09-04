@@ -143,6 +143,10 @@ impl Default for SudoFs {
 
 impl SudoFs {
     fn push(&self, op: sudo::SudoOp) {
+        #[expect(
+            clippy::expect_used,
+            reason = "SudoFs mutex is never poisoned by design"
+        )]
         self.pending.lock().expect("SudoFs lock").push(op);
     }
 }
@@ -194,6 +198,10 @@ impl FileOps for SudoFs {
     }
 
     fn flush(&self) -> Result<()> {
+        #[expect(
+            clippy::expect_used,
+            reason = "SudoFs mutex is never poisoned by design"
+        )]
         let ops = std::mem::take(&mut *self.pending.lock().expect("SudoFs lock"));
         if ops.is_empty() {
             return Ok(());

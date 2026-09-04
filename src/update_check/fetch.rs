@@ -28,19 +28,19 @@ pub fn fetch_latest_tag() -> Result<String> {
         .header("User-Agent", "machine_setup-update-check")
         .header("Accept", "application/vnd.github+json")
         .call()
-        .map_err(|e| Error::Other(format!("update check fetch failed: {e}")))?
+        .map_err(|e| Error::UpdateCheckFailed(format!("update check fetch failed: {e}")))?
         .into_body()
         .read_to_string()
-        .map_err(|e| Error::Other(format!("update check read failed: {e}")))?;
+        .map_err(|e| Error::UpdateCheckFailed(format!("update check read failed: {e}")))?;
 
     parse_tag_name(&body)
 }
 
 pub fn parse_tag_name(json: &str) -> Result<String> {
-    let release: LatestRelease =
-        serde_json::from_str(json).map_err(|e| Error::Other(format!("update check parse: {e}")))?;
+    let release: LatestRelease = serde_json::from_str(json)
+        .map_err(|e| Error::UpdateCheckFailed(format!("update check parse: {e}")))?;
     if release.tag_name.trim().is_empty() {
-        return Err(Error::Other("empty tag_name".into()));
+        return Err(Error::UpdateCheckFailed("empty tag_name".into()));
     }
     Ok(release.tag_name)
 }
