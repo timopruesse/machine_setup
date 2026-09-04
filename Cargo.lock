@@ -1100,6 +1100,7 @@ dependencies = [
  "dialoguer",
  "dirs",
  "indexmap",
+ "libc",
  "ratatui",
  "rayon",
  "serde",

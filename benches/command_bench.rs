@@ -3,6 +3,9 @@
 //! Generate-once fixtures per process; SudoFs cases require
 //! `MACHINE_SETUP_BENCH_SUDO=1`.
 //!
+//! Tree ladder size: `MACHINE_SETUP_BENCH_TREE_SIZE=1000|10000` (default 1000).
+//! Runner smoke always uses the 1k fixture regardless of that env var.
+//!
 //! Fixed bring-up: `startup/task_runner_new` and `runner_smoke/empty_task`.
 //! Process `--help` wall-clock is intentionally outside Criterion (manual /
 //! OS process spawn — flaky under CI).
@@ -23,6 +26,9 @@ use machine_setup::engine::commands::create_executor;
 use machine_setup::engine::commands::fs_ops::{self, DirectFs, FileOps};
 use machine_setup::engine::commands::tree::{
     self, install_tree_with_pool, uninstall_tree_with_pool,
+};
+use machine_setup::engine::commands::tree_measure::{
+    parse_bench_tree_size, CRITERION_DEFAULT_FILES,
 };
 use machine_setup::engine::concurrency::resolve_limit;
 use machine_setup::engine::mode::Mode;
@@ -46,7 +52,18 @@ const REGISTRY_YAML: &str = r#"
     config: /tmp/ms-bench-nested.yaml
 "#;
 
-const N_FILES: usize = 1_000;
+fn criterion_tree_size() -> usize {
+    let raw = std::env::var("MACHINE_SETUP_BENCH_TREE_SIZE").ok();
+    parse_bench_tree_size(raw.as_deref()).unwrap_or_else(|e| panic!("{e}"))
+}
+
+fn size_label(n: usize) -> &'static str {
+    match n {
+        1_000 => "1k_files",
+        10_000 => "10k_files",
+        _ => panic!("unexpected criterion tree size {n}"),
+    }
+}
 
 struct TreeFixture {
     _root: TempDir,
@@ -76,9 +93,20 @@ impl TreeFixture {
     }
 }
 
-fn fixture_1k() -> &'static TreeFixture {
-    static FIXTURE: OnceLock<TreeFixture> = OnceLock::new();
-    FIXTURE.get_or_init(|| TreeFixture::generate(N_FILES))
+fn fixture_for(n: usize) -> &'static TreeFixture {
+    // Use separate OnceLocks per allowed size so 1k runner smoke never shares
+    // a 10k fixture.
+    match n {
+        1_000 => {
+            static F: OnceLock<TreeFixture> = OnceLock::new();
+            F.get_or_init(|| TreeFixture::generate(1_000))
+        }
+        10_000 => {
+            static F: OnceLock<TreeFixture> = OnceLock::new();
+            F.get_or_init(|| TreeFixture::generate(10_000))
+        }
+        _ => panic!("unexpected criterion tree size {n}"),
+    }
 }
 
 fn bench_pool() -> &'static ThreadPool {
@@ -121,12 +149,13 @@ fn link_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
 }
 
 fn bench_tree_install_direct(c: &mut Criterion) {
-    let fixture = fixture_1k();
+    let n = criterion_tree_size();
+    let fixture = fixture_for(n);
     let ops = DirectFs;
     let mut group = c.benchmark_group("tree_install_direct");
     group.warm_up_time(Duration::from_secs(1));
     group.measurement_time(Duration::from_secs(3));
-    group.bench_function("1k_files", |b| {
+    group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || tempfile::tempdir().expect("dest"),
             |dest| {
@@ -142,13 +171,14 @@ fn bench_tree_install_sudo(c: &mut Criterion) {
     if !sudo_enabled() {
         return;
     }
-    let fixture = fixture_1k();
+    let n = criterion_tree_size();
+    let fixture = fixture_for(n);
     let ops = fs_ops::select(true);
     let mut group = c.benchmark_group("tree_install_sudo");
     group.sample_size(10);
     group.warm_up_time(Duration::from_secs(1));
     group.measurement_time(Duration::from_secs(5));
-    group.bench_function("1k_files", |b| {
+    group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || tempfile::tempdir().expect("dest"),
             |dest| {
@@ -161,7 +191,8 @@ fn bench_tree_install_sudo(c: &mut Criterion) {
 }
 
 fn bench_mtime_skip(c: &mut Criterion) {
-    let fixture = fixture_1k();
+    let n = criterion_tree_size();
+    let fixture = fixture_for(n);
     let ops = DirectFs;
     let synced = tempfile::tempdir().expect("synced");
     copy_tree(&ops, fixture.src(), synced.path());
@@ -169,7 +200,7 @@ fn bench_mtime_skip(c: &mut Criterion) {
     let mut group = c.benchmark_group("mtime_skip");
     group.warm_up_time(Duration::from_secs(1));
     group.measurement_time(Duration::from_secs(3));
-    group.bench_function("1k_already_synced", |b| {
+    group.bench_function(size_label(n), |b| {
         b.iter(|| {
             install_tree_with_pool(
                 fixture.src(),
@@ -191,12 +222,13 @@ fn bench_mtime_skip(c: &mut Criterion) {
 }
 
 fn bench_symlink_tree(c: &mut Criterion) {
-    let fixture = fixture_1k();
+    let n = criterion_tree_size();
+    let fixture = fixture_for(n);
     let ops = DirectFs;
     let mut group = c.benchmark_group("tree_symlink_direct");
     group.warm_up_time(Duration::from_secs(1));
     group.measurement_time(Duration::from_secs(3));
-    group.bench_function("1k_files", |b| {
+    group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || tempfile::tempdir().expect("dest"),
             |dest| {
@@ -209,12 +241,13 @@ fn bench_symlink_tree(c: &mut Criterion) {
 }
 
 fn bench_uninstall_tree(c: &mut Criterion) {
-    let fixture = fixture_1k();
+    let n = criterion_tree_size();
+    let fixture = fixture_for(n);
     let ops = DirectFs;
     let mut group = c.benchmark_group("tree_uninstall_direct");
     group.warm_up_time(Duration::from_secs(1));
     group.measurement_time(Duration::from_secs(3));
-    group.bench_function("1k_files", |b| {
+    group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || {
                 let dest = tempfile::tempdir().expect("dest");
@@ -349,7 +382,7 @@ tasks:
 }
 
 fn bench_runner_smoke(c: &mut Criterion) {
-    let fixture = fixture_1k();
+    let fixture = fixture_for(CRITERION_DEFAULT_FILES);
     let rt = tokio::runtime::Runtime::new().expect("runtime");
 
     let mut group = c.benchmark_group("runner_smoke");

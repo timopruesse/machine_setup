@@ -8,6 +8,7 @@ pub mod run;
 pub mod setup;
 pub mod symlink;
 pub mod tree;
+pub mod tree_measure;
 pub mod tree_op;
 
 use async_trait::async_trait;

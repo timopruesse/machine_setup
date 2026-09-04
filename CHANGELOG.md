@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Command-bench tree size ladder (1k default / 10k via `MACHINE_SETUP_BENCH_TREE_SIZE`) and a report-only 100k tree memory harness for the ADR-0004 chunking gate
+
 ## [2.9.0]
 
 ### Added

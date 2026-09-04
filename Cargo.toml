@@ -49,6 +49,7 @@ tokio-util = "0.7"
 indexmap = { version = "2", features = ["serde"] }
 ureq = "3"
 rayon = "1"
+libc = "0.2"
 
 [build-dependencies]
 winresource = "0.1"

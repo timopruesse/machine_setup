@@ -211,7 +211,11 @@ benches barely move. Also tracks fixed bring-up (`TaskRunner::new`, empty-task
 smoke). Process `--help` wall-clock stays outside Criterion (manual / OS
 spawn). Report-only (no absolute ms CI asserts). SudoFs cases opt-in via
 `MACHINE_SETUP_BENCH_SUDO=1`. Deepening steps capture before/after locally;
-soft regression thresholds are a human call, not CI.
+soft regression thresholds are a human call, not CI. Memory harness
+(`examples/tree_memory_harness.rs`) is separate from Criterion: 100k DirectFs
+install, peak RSS + PathBuf estimate, `PASS`/`RECOMMEND_CHUNK` against ADR-0004
+thresholds; also report-only. Opt-in Criterion size via
+`MACHINE_SETUP_BENCH_TREE_SIZE=10000`.
 _Avoid_: performance test (ambiguous with correctness tests), profiling.
 
 ## Relationships

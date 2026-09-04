@@ -13,7 +13,24 @@ concurrency knob.
 ## Deferred: chunked / streaming file lists
 
 Install/uninstall still collect the full file (or dest) list, then apply.
-Chunked or streaming apply (to cut peak `PathBuf` memory on huge trees) is
-**deferred** until Command bench with a large fixture (or a real Config
-document) shows memory or allocator pain worth complicating the
-mkdir-then-apply invariant.
+Chunked or streaming apply (to cut peak `PathBuf` memory on huge trees) stays
+**deferred** until the memory harness recommends it (or a real Config document
+shows pain).
+
+### How to measure
+
+| Ladder | How |
+| --- | --- |
+| 1k wall-clock | `cargo bench --bench command_bench` (default) |
+| 10k wall-clock | `MACHINE_SETUP_BENCH_TREE_SIZE=10000 cargo bench --bench command_bench` |
+| 100k memory | `cargo run --example tree_memory_harness --release` |
+
+Gate constants (source of truth: `src/engine/commands/tree_measure.rs`):
+
+- Peak RSS ≥ **256 MiB** on the 100k DirectFs install, **or**
+- PathBuf list estimate ≥ **64 MiB**
+
+→ harness prints `verdict=RECOMMEND_CHUNK` (exit 0). Otherwise `verdict=PASS`.
+Reopen chunked apply only after a local harness run recommends it. Report-only;
+not enforced in CI. SudoFs is out of scope for the harness (`MACHINE_SETUP_BENCH_SUDO`
+remains Criterion-only).
