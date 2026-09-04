@@ -51,6 +51,16 @@ async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result
 
     let config = crate::config::load_config(&config_str)?;
 
+    let run_set = match (&args.task, args.with_deps) {
+        (Some(task_name), true) => Some(crate::config::selection::expand_for_mode(
+            &config,
+            std::slice::from_ref(task_name),
+            ctx.mode,
+            true,
+        )?),
+        _ => None,
+    };
+
     // Resolve the sub-config's directory for its own relative paths. URLs
     // and unresolvable paths fall back to the parent's config_dir.
     let sub_config_dir = crate::config::resolve_config_dir(&config_str, &ctx.config_dir);
@@ -60,9 +70,9 @@ async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result
         .with_config_dir(sub_config_dir)
         .with_depth(ctx.depth + 1);
 
-    if let Some(task_name) = &args.task {
-        runner.run_single_task(task_name, false).await
-    } else {
-        runner.run_all(false).await
+    match (run_set, &args.task) {
+        (Some(tasks), _) => runner.run_tasks(&tasks, args.force).await,
+        (None, Some(task_name)) => runner.run_single_task(task_name, args.force).await,
+        (None, None) => runner.run_all(args.force).await,
     }
 }

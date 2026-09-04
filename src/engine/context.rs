@@ -30,8 +30,8 @@ pub struct CommandContext {
     /// Default shell from config.
     pub default_shell: Shell,
 
-    /// Name of the current task being executed.
-    pub task_name: String,
+    /// Name of the current task being executed (shared across Task events).
+    pub task_name: Arc<str>,
 
     /// Nesting depth (0 = top-level, 1 = sub-config, etc.)
     pub depth: usize,
@@ -59,7 +59,7 @@ impl CommandContext {
             _ => line.into(),
         };
         self.emit(TaskEvent::CommandOutput {
-            task_name: self.task_name.clone(),
+            task_name: Arc::clone(&self.task_name),
             line,
             kind,
         });

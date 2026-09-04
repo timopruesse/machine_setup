@@ -1,7 +1,9 @@
 use super::os::OsFilter;
+use crate::engine::mode::Mode;
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 
 /// Root configuration structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +40,10 @@ fn default_shell() -> Shell {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_retry_delay() -> u64 {
+    1
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,13 +91,13 @@ pub struct TaskConfig {
     #[serde(default)]
     pub parallel: bool,
 
-    /// Only run this task if all these paths exist
+    /// Only run when all conditions are satisfied
     #[serde(default)]
-    pub only_if: StringOrVec,
+    pub only_if: Conditions,
 
-    /// Skip this task if any of these paths exist
+    /// Skip when any condition is satisfied
     #[serde(default)]
-    pub skip_if: StringOrVec,
+    pub skip_if: Conditions,
 
     /// Task names that must complete before this task runs
     #[serde(default)]
@@ -100,6 +106,10 @@ pub struct TaskConfig {
     /// Number of retry attempts on failure (0 = no retry)
     #[serde(default)]
     pub retry: u32,
+
+    /// Seconds to wait between retry attempts (default: 1)
+    #[serde(default = "default_retry_delay")]
+    pub retry_delay_secs: u64,
 
     /// Daily OS-timer auto-update (see `schedule apply`)
     #[serde(default)]
@@ -330,6 +340,125 @@ impl RunArgs {
 pub struct MachineSetupArgs {
     pub config: String,
     pub task: Option<String>,
+    /// Bypass History skip in the nested Runner (default false).
+    #[serde(default)]
+    pub force: bool,
+    /// When `task` is set, expand transitive `depends_on` like CLI `--with-deps`
+    /// (default false; no-op when `task` is omitted).
+    #[serde(default)]
+    pub with_deps: bool,
+}
+
+/// A single task condition (path, env, command, or mode).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub enum Condition {
+    Path(String),
+    Env(String),
+    Command(String),
+    Mode(Vec<Mode>),
+}
+
+/// Task conditions — backward compatible with plain path strings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Conditions(Vec<Condition>);
+
+impl Conditions {
+    pub fn iter(&self) -> impl Iterator<Item = &Condition> {
+        self.0.iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl From<Vec<Condition>> for Conditions {
+    fn from(value: Vec<Condition>) -> Self {
+        Self(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for Conditions {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ConditionsVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ConditionsVisitor {
+            type Value = Conditions;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a path string or a list of condition strings or objects")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Conditions(vec![Condition::Path(v.to_string())]))
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut conditions = Vec::new();
+                while let Some(entry) = seq.next_element::<ConditionEntry>()? {
+                    conditions.push(match entry {
+                        ConditionEntry::PathStr(s) => Condition::Path(s),
+                        ConditionEntry::Obj(obj) => obj.into_condition(),
+                    });
+                }
+                Ok(Conditions(conditions))
+            }
+        }
+
+        deserializer.deserialize_any(ConditionsVisitor)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ConditionEntry {
+    PathStr(String),
+    Obj(ConditionObj),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ConditionObj {
+    Path { path: String },
+    Env { env: String },
+    Command { command: String },
+    Mode { mode: ModeConditionValue },
+}
+
+impl ConditionObj {
+    fn into_condition(self) -> Condition {
+        match self {
+            ConditionObj::Path { path } => Condition::Path(path),
+            ConditionObj::Env { env } => Condition::Env(env),
+            ConditionObj::Command { command } => Condition::Command(command),
+            ConditionObj::Mode { mode } => Condition::Mode(mode.into_modes()),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ModeConditionValue {
+    One(Mode),
+    Many(Vec<Mode>),
+}
+
+impl ModeConditionValue {
+    fn into_modes(self) -> Vec<Mode> {
+        match self {
+            ModeConditionValue::One(m) => vec![m],
+            ModeConditionValue::Many(v) => v,
+        }
+    }
 }
 
 /// A value that can be a single string or a list of strings.
@@ -443,6 +572,34 @@ tasks:
     fn test_string_or_vec_multiple() {
         let val: StringOrVec = serde_yaml::from_str(r#"["a", "b"]"#).unwrap();
         assert_eq!(val.as_slice(), &["a", "b"]);
+    }
+
+    #[test]
+    fn test_conditions_path_string_compat() {
+        let val: Conditions = serde_yaml::from_str(r#""~/.ssh""#).unwrap();
+        assert_eq!(
+            val.iter().collect::<Vec<_>>(),
+            vec![&Condition::Path("~/.ssh".into())]
+        );
+    }
+
+    #[test]
+    fn test_conditions_path_list_compat() {
+        let val: Conditions = serde_yaml::from_str(r#"["/a", "/b"]"#).unwrap();
+        assert_eq!(val.iter().count(), 2);
+    }
+
+    #[test]
+    fn test_conditions_rich_forms() {
+        let yaml = r#"
+- path: "/etc/hosts"
+- env: "HOME"
+- command: "which git"
+- mode: install
+- mode: [update, uninstall]
+"#;
+        let val: Conditions = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(val.iter().count(), 5);
     }
 
     #[test]

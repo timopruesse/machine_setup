@@ -5,7 +5,7 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
-use cli::{AddTarget, Cli, Command, RecipeCommand, ScheduleAction};
+use cli::{AddTarget, Cli, Command, ScheduleAction};
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
@@ -102,7 +102,7 @@ fn main() -> anyhow::Result<()> {
                 println!("Added task `{name}` to {}", path.display());
             }
             AddTarget::Recipe { recipe } => {
-                let emitted = emit_recipe(recipe)?;
+                let emitted = config::recipes::emit_from_cli(recipe)?;
                 let name = emitted.name.clone();
                 config::document::append_emitted(&path, &emitted)?;
                 println!("Added recipe task `{name}` to {}", path.display());
@@ -237,38 +237,6 @@ fn resolve_existing_document(
         return Ok(path);
     }
     Ok(config::locator::find(cwd)?)
-}
-
-fn emit_recipe(recipe: &RecipeCommand) -> anyhow::Result<config::recipes::EmittedTask> {
-    use config::recipes::{
-        emit_brew_bundle, emit_dotfiles, emit_git_repo, BrewBundleParams, DotfilesParams,
-        GitRepoParams,
-    };
-
-    Ok(match recipe {
-        RecipeCommand::Dotfiles {
-            url,
-            src,
-            target,
-            ignore,
-            name,
-        } => {
-            let ignore_refs: Vec<&str> = ignore.iter().map(String::as_str).collect();
-            emit_dotfiles(&DotfilesParams {
-                name,
-                url,
-                src,
-                target,
-                ignore: ignore_refs,
-            })?
-        }
-        RecipeCommand::GitRepo { url, target, name } => {
-            emit_git_repo(&GitRepoParams { name, url, target })?
-        }
-        RecipeCommand::BrewBundle { file, name } => {
-            emit_brew_bundle(&BrewBundleParams { name, file })?
-        }
-    })
 }
 
 async fn run_execution(

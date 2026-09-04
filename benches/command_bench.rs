@@ -404,9 +404,7 @@ fn bench_startup(c: &mut Criterion) {
     group.finish();
 }
 
-fn parse_and_create_executors(
-    yaml: &str,
-) -> Vec<Box<dyn machine_setup::engine::commands::CommandExecutor>> {
+fn parse_and_create_executors(yaml: &str) -> Vec<machine_setup::engine::commands::Executor> {
     let entries: Vec<CommandEntry> = serde_yaml::from_str(yaml).expect("registry yaml");
     entries.into_iter().map(create_executor).collect()
 }

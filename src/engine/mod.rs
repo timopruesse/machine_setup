@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod concurrency;
+pub mod conditions;
 pub mod context;
 pub mod event;
 pub mod mode;

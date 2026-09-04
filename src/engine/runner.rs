@@ -7,8 +7,9 @@ use crate::config::types::{AppConfig, CommandEntry, TaskConfig};
 use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
 
-use super::commands::{create_executor, exclusive_lane, CommandExecutor};
+use super::commands::{create_executor, exclusive_lane, CommandExecutor, Executor};
 use super::concurrency::ConcurrencyGate;
+use super::conditions::evaluate_skip;
 use super::context::CommandContext;
 use super::event::TaskEvent;
 use super::mode::Mode;
@@ -145,9 +146,17 @@ impl TaskRunner {
         for name in layer {
             let task_config = &self.config.tasks[name];
 
-            if let Some(reason) = self.should_skip(task_config, name, force, history) {
+            if let Some(reason) = evaluate_skip(
+                task_config,
+                name,
+                self.mode,
+                force,
+                history,
+                &self.config_dir,
+                &self.config.default_shell,
+            ) {
                 self.send(TaskEvent::TaskSkipped {
-                    task_name: name.clone(),
+                    task_name: Arc::<str>::from(name.as_str()),
                     reason,
                 });
                 tally.skipped += 1;
@@ -156,9 +165,9 @@ impl TaskRunner {
 
             let ctx = self.create_context(name, temp_dir);
             let task = task_config.clone();
-            let name = name.clone();
+            let name = Arc::clone(&ctx.task_name);
             handles.push(tokio::spawn(async move {
-                let result = run_task_with_retry(&name, &task, &ctx).await;
+                let result = run_task_with_retry(&task, &ctx).await;
                 (name, result)
             }));
         }
@@ -183,43 +192,6 @@ impl TaskRunner {
         }
     }
 
-    /// Check if a task should be skipped (OS filter, conditions, history).
-    fn should_skip(
-        &self,
-        task: &TaskConfig,
-        name: &str,
-        force: bool,
-        history: &History,
-    ) -> Option<String> {
-        // Check OS filter
-        if !task.os.matches_current() {
-            return Some("OS mismatch".to_string());
-        }
-
-        // Check only_if conditions
-        for path_str in task.only_if.as_slice() {
-            let path = expand_path(path_str, Some(&self.config_dir));
-            if !path.exists() {
-                return Some(format!("Condition not met: '{path_str}' does not exist"));
-            }
-        }
-
-        // Check skip_if conditions
-        for path_str in task.skip_if.as_slice() {
-            let path = expand_path(path_str, Some(&self.config_dir));
-            if path.exists() {
-                return Some(format!("Skipped: '{path_str}' exists"));
-            }
-        }
-
-        // Check history
-        if self.mode == Mode::Install && !force && history.is_installed(name) {
-            return Some("Already installed (use --force to reinstall)".to_string());
-        }
-
-        None
-    }
-
     /// Get ordered task names (for list command / TUI display).
     #[allow(dead_code)]
     pub fn task_names(&self) -> Vec<String> {
@@ -240,7 +212,7 @@ impl TaskRunner {
             config_dir: self.config_dir.clone(),
             temp_dir: temp_dir.to_path_buf(),
             default_shell: self.config.default_shell.clone(),
-            task_name: task_name.to_string(),
+            task_name: Arc::<str>::from(task_name),
             depth: self.depth,
         }
     }
@@ -259,20 +231,20 @@ impl TaskRunner {
 }
 
 /// Run a task with retry support.
-async fn run_task_with_retry(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
+async fn run_task_with_retry(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
     let max_attempts = task.retry + 1;
 
     for attempt in 1..=max_attempts {
-        match run_task(name, task, ctx).await {
+        match run_task(task, ctx).await {
             Ok(()) => return Ok(()),
             Err(e) if attempt < max_attempts => {
                 ctx.emit(TaskEvent::TaskRetry {
-                    task_name: name.to_string(),
+                    task_name: Arc::clone(&ctx.task_name),
                     attempt,
                     max_attempts,
                     error: e.to_string(),
                 });
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(task.retry_delay_secs)).await;
             }
             Err(e) => return Err(e),
         }
@@ -281,9 +253,9 @@ async fn run_task_with_retry(name: &str, task: &TaskConfig, ctx: &CommandContext
     unreachable!()
 }
 
-async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
+async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
     ctx.emit(TaskEvent::TaskStarted {
-        task_name: name.to_string(),
+        task_name: Arc::clone(&ctx.task_name),
         command_count: task.commands.len(),
         depth: ctx.depth,
     });
@@ -298,22 +270,16 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
             let executor = create_executor(entry.clone());
             let desc = executor.description();
             ctx.emit(TaskEvent::CommandStarted {
-                task_name: name.to_string(),
+                task_name: Arc::clone(&ctx.task_name),
                 command_desc: desc.clone(),
                 command_index,
                 command_total,
             });
             let ctx = ctx.clone();
             handles.push(tokio::spawn(async move {
-                let result = execute_with_gate(
-                    &entry,
-                    executor.as_ref(),
-                    &ctx,
-                    &desc,
-                    command_index,
-                    command_total,
-                )
-                .await;
+                let result =
+                    execute_with_gate(&entry, &executor, &ctx, &desc, command_index, command_total)
+                        .await;
                 (desc, command_index, result)
             }));
         }
@@ -324,7 +290,7 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
             match result {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
-                        task_name: name.to_string(),
+                        task_name: Arc::clone(&ctx.task_name),
                         command_desc: desc,
                         command_index,
                         command_total,
@@ -332,7 +298,7 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
                 }
                 Err(e) => {
                     ctx.emit(TaskEvent::CommandFailed {
-                        task_name: name.to_string(),
+                        task_name: Arc::clone(&ctx.task_name),
                         command_desc: desc,
                         command_index,
                         command_total,
@@ -348,25 +314,18 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
             let executor = create_executor(entry.clone());
             let desc = executor.description();
             ctx.emit(TaskEvent::CommandStarted {
-                task_name: name.to_string(),
+                task_name: Arc::clone(&ctx.task_name),
                 command_desc: desc.clone(),
                 command_index,
                 command_total,
             });
 
-            match execute_with_gate(
-                entry,
-                executor.as_ref(),
-                ctx,
-                &desc,
-                command_index,
-                command_total,
-            )
-            .await
+            match execute_with_gate(entry, &executor, ctx, &desc, command_index, command_total)
+                .await
             {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
-                        task_name: name.to_string(),
+                        task_name: Arc::clone(&ctx.task_name),
                         command_desc: desc,
                         command_index,
                         command_total,
@@ -374,7 +333,7 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
                 }
                 Err(e) => {
                     ctx.emit(TaskEvent::CommandFailed {
-                        task_name: name.to_string(),
+                        task_name: Arc::clone(&ctx.task_name),
                         command_desc: desc,
                         command_index,
                         command_total,
@@ -387,7 +346,7 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
     }
 
     ctx.emit(TaskEvent::TaskCompleted {
-        task_name: name.to_string(),
+        task_name: Arc::clone(&ctx.task_name),
     });
 
     Ok(())
@@ -396,7 +355,7 @@ async fn run_task(name: &str, task: &TaskConfig, ctx: &CommandContext) -> Result
 /// Admit a Command entry: Exclusive lane (if any) first, then work permit.
 async fn execute_with_gate(
     entry: &CommandEntry,
-    executor: &dyn CommandExecutor,
+    executor: &Executor,
     ctx: &CommandContext,
     command_desc: &str,
     command_index: usize,

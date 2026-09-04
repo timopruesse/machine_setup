@@ -1,12 +1,14 @@
 //! Parallel burst presentation: selection and failure tracking while ≥2 Tasks run.
 
+use std::sync::Arc;
+
 use super::state::{TaskState, UiState};
 
 /// Hint for soft auto-select after an engine event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SoftSelect {
     None,
-    Prefer(String),
+    Prefer(Arc<str>),
     AnyRunning,
 }
 
@@ -15,7 +17,7 @@ pub enum SoftSelect {
 pub struct BurstContext {
     pub running_before: usize,
     pub running_after: usize,
-    pub task_name: String,
+    pub task_name: Arc<str>,
     pub soft: SoftSelect,
     pub task_failed_during_burst: bool,
 }
@@ -23,7 +25,7 @@ pub struct BurstContext {
 /// Apply parallel-burst selection rules after task state is updated.
 pub fn after_engine_event(state: &mut UiState, ctx: BurstContext) {
     if ctx.task_failed_during_burst {
-        if let Some(idx) = state.tasks.iter().position(|t| t.name == ctx.task_name) {
+        if let Some(idx) = state.tasks.iter().position(|t| t.name == *ctx.task_name) {
             if !state.burst_failed.contains(&idx) {
                 state.burst_failed.push(idx);
             }
@@ -63,7 +65,7 @@ fn leave_burst(state: &mut UiState) {
 fn apply_soft_select(state: &mut UiState, soft: SoftSelect) {
     match soft {
         SoftSelect::None => {}
-        SoftSelect::Prefer(name) => soft_auto_select(state, Some(name.as_str())),
+        SoftSelect::Prefer(name) => soft_auto_select(state, Some(name.as_ref())),
         SoftSelect::AnyRunning => soft_auto_select(state, None),
     }
 }

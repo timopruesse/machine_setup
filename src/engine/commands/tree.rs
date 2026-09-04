@@ -25,6 +25,7 @@ use crate::error::{Error, Result};
 use crate::utils::path::walk_relative;
 
 use super::fs_ops::FileOps;
+use super::ignore;
 
 /// Below this many files, thread-pool apply costs more than it saves.
 const PARALLEL_FILE_THRESHOLD: usize = 32;
@@ -111,14 +112,19 @@ where
 
     ensure_dir(target)?;
     let mut files = Vec::new();
-    walk_relative(src, target, ignore, |entry, dest| {
-        if entry.file_type().is_dir() {
-            ensure_dir(dest)
-        } else {
-            files.push((entry.path().to_path_buf(), dest.to_path_buf()));
-            Ok(())
-        }
-    })?;
+    walk_relative(
+        src,
+        target,
+        |relative| ignore::should_ignore(relative, ignore),
+        |entry, dest| {
+            if entry.file_type().is_dir() {
+                ensure_dir(dest)
+            } else {
+                files.push((entry.path().to_path_buf(), dest.to_path_buf()));
+                Ok(())
+            }
+        },
+    )?;
 
     apply_files(pool, &files, &on_file)
 }
@@ -170,12 +176,17 @@ where
     }
 
     let mut dests = Vec::new();
-    walk_relative(src, target, ignore, |entry, dest| {
-        if entry.file_type().is_file() {
-            dests.push(dest.to_path_buf());
-        }
-        Ok(())
-    })?;
+    walk_relative(
+        src,
+        target,
+        |relative| ignore::should_ignore(relative, ignore),
+        |entry, dest| {
+            if entry.file_type().is_file() {
+                dests.push(dest.to_path_buf());
+            }
+            Ok(())
+        },
+    )?;
 
     apply_dests(pool, &dests, &on_dest)
 }

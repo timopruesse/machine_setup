@@ -11,6 +11,7 @@ use super::progress_log::FileProgress;
 use super::tree_op::{self, TreeOpKind};
 use super::CommandExecutor;
 
+#[derive(Clone)]
 pub struct CopyCommand {
     args: CopyArgs,
 }
@@ -19,32 +20,7 @@ impl CopyCommand {
     pub fn new(args: CopyArgs) -> Self {
         Self { args }
     }
-}
 
-#[async_trait]
-impl CommandExecutor for CopyCommand {
-    async fn execute(&self, ctx: &CommandContext) -> Result<()> {
-        tree_op::execute(
-            &self.args.src,
-            &self.args.target,
-            CopyKind {
-                args: self.args.clone(),
-            },
-            ctx,
-        )
-        .await
-    }
-
-    fn description(&self) -> String {
-        self.args.to_string()
-    }
-}
-
-struct CopyKind {
-    args: CopyArgs,
-}
-
-impl CopyKind {
     /// Directory Install with empty ignore → one `sudo cp -a` (ADR-0002).
     /// Update keeps mtime-skip via per-file + script batch.
     ///
@@ -56,7 +32,18 @@ impl CopyKind {
     }
 }
 
-impl TreeOpKind for CopyKind {
+#[async_trait]
+impl CommandExecutor for CopyCommand {
+    async fn execute(&self, ctx: &CommandContext) -> Result<()> {
+        tree_op::execute(&self.args.src, &self.args.target, self.clone(), ctx).await
+    }
+
+    fn description(&self) -> String {
+        self.args.to_string()
+    }
+}
+
+impl TreeOpKind for CopyCommand {
     fn ignore(&self) -> &[String] {
         &self.args.ignore
     }
@@ -182,6 +169,7 @@ mod tests {
     use super::*;
     use crate::engine::commands::fs_ops::RecordingFs;
     use crate::engine::mode::Mode;
+    use std::sync::Arc;
     use tempfile::tempdir;
 
     fn ctx_for(dir: &Path) -> CommandContext {
@@ -195,7 +183,7 @@ mod tests {
             config_dir: dir.to_path_buf(),
             temp_dir: dir.to_path_buf(),
             default_shell: crate::config::types::Shell::Bash,
-            task_name: "t".to_string(),
+            task_name: Arc::<str>::from("t"),
             depth: 0,
         }
     }
@@ -279,12 +267,12 @@ mod tests {
             ignore: vec![],
             sudo: true,
         };
-        assert!(CopyKind::eligible_for_bulk_sudo(
+        assert!(CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &sudo_dir,
             Mode::Install
         ));
-        assert!(!CopyKind::eligible_for_bulk_sudo(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &sudo_dir,
             Mode::Update
@@ -294,7 +282,7 @@ mod tests {
             ignore: vec!["x".into()],
             ..sudo_dir.clone()
         };
-        assert!(!CopyKind::eligible_for_bulk_sudo(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &with_ignore,
             Mode::Install
@@ -304,12 +292,12 @@ mod tests {
             sudo: false,
             ..sudo_dir.clone()
         };
-        assert!(!CopyKind::eligible_for_bulk_sudo(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
             &no_sudo,
             Mode::Install
         ));
-        assert!(!CopyKind::eligible_for_bulk_sudo(
+        assert!(!CopyCommand::eligible_for_bulk_sudo(
             &src_file,
             &CopyArgs {
                 src: src_file.to_string_lossy().into(),

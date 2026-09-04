@@ -171,8 +171,18 @@
                 "config": {
                   "type": "string"
                 },
+                "force": {
+                  "default": false,
+                  "description": "Bypass History skip in the nested Runner",
+                  "type": "boolean"
+                },
                 "task": {
                   "type": "string"
+                },
+                "with_deps": {
+                  "default": false,
+                  "description": "When task is set, also run transitive depends_on (like CLI --with-deps)",
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -185,6 +195,96 @@
             "machine_setup"
           ],
           "type": "object"
+        }
+      ]
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "description": "Path that must exist (only_if) or exist to skip (skip_if)",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "env": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "env"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "install",
+                    "update",
+                    "uninstall"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "enum": [
+                      "install",
+                      "update",
+                      "uninstall"
+                    ],
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "conditions": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/condition"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/condition"
+          },
+          "type": "array"
         }
       ]
     },
@@ -233,7 +333,7 @@
           "type": "array"
         },
         "only_if": {
-          "$ref": "#/$defs/stringOrVec"
+          "$ref": "#/$defs/conditions"
         },
         "os": {
           "$ref": "#/$defs/osFilter"
@@ -247,8 +347,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "retry_delay_secs": {
+          "default": 1,
+          "description": "Seconds to wait between retry attempts",
+          "minimum": 0,
+          "type": "integer"
+        },
         "skip_if": {
-          "$ref": "#/$defs/stringOrVec"
+          "$ref": "#/$defs/conditions"
         }
       },
       "required": [

@@ -65,28 +65,28 @@ fn has_event(events: &[TaskEvent], predicate: impl Fn(&TaskEvent) -> bool) -> bo
 fn find_output(events: &[TaskEvent], task: &str, needle: &str) -> bool {
     events.iter().any(|e| {
         matches!(e, TaskEvent::CommandOutput { task_name, line, kind: _ }
-            if task_name == task && line.contains(needle))
+            if task_name.as_ref() == task && line.contains(needle))
     })
 }
 
 fn task_completed(events: &[TaskEvent], task: &str) -> bool {
     has_event(
         events,
-        |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == task),
+        |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == task),
     )
 }
 
 fn task_skipped(events: &[TaskEvent], task: &str) -> bool {
     has_event(
         events,
-        |e| matches!(e, TaskEvent::TaskSkipped { task_name, .. } if task_name == task),
+        |e| matches!(e, TaskEvent::TaskSkipped { task_name, .. } if task_name.as_ref() == task),
     )
 }
 
 fn task_failed(events: &[TaskEvent], task: &str) -> bool {
     has_event(
         events,
-        |e| matches!(e, TaskEvent::TaskFailed { task_name, .. } if task_name == task),
+        |e| matches!(e, TaskEvent::TaskFailed { task_name, .. } if task_name.as_ref() == task),
     )
 }
 
@@ -748,6 +748,161 @@ tasks:
 }
 
 #[tokio::test]
+async fn test_nested_machine_setup_force_reruns_installed_task() {
+    let dir = tempdir().unwrap();
+    let temp_dir = dir.path().join(".ms_temp");
+    let config_dir = dir.path().to_path_buf();
+
+    fs::write(
+        dir.path().join("sub.yaml"),
+        format!(
+            r#"
+temp_dir: "{}"
+tasks:
+  nested_once:
+    commands:
+      - run:
+          commands: "echo nested_force_run"
+"#,
+            temp_dir.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .unwrap();
+
+    // Install nested task directly so History records it under the sub-config temp_dir.
+    let sub_config = config::load_config(dir.path().join("sub.yaml").to_str().unwrap()).unwrap();
+    let (sub_events, _sub_rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let sub_runner =
+        TaskRunner::new(sub_config, Mode::Install, sub_events).with_config_dir(config_dir.clone());
+    let _ = sub_runner.run_single_task("nested_once", false).await;
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+temp_dir: "{}"
+tasks:
+  parent:
+    commands:
+      - machine_setup:
+          config: "./sub.yaml"
+          task: nested_once
+"#,
+            temp_dir.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .unwrap();
+
+    // Parent invokes nested runner without force — nested task should be skipped.
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner = TaskRunner::new(config, Mode::Install, events).with_config_dir(config_dir.clone());
+    let _ = runner.run_single_task("parent", false).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let mut skip_events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        skip_events.push(event);
+    }
+    assert!(task_skipped(&skip_events, "nested_once"));
+
+    // Parent with force on the machine_setup entry — nested task runs again.
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+temp_dir: "{}"
+tasks:
+  parent:
+    commands:
+      - machine_setup:
+          config: "./sub.yaml"
+          task: nested_once
+          force: true
+"#,
+            temp_dir.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .unwrap();
+
+    let config2 = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (events2, mut rx2) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner2 = TaskRunner::new(config2, Mode::Install, events2).with_config_dir(config_dir);
+    let _ = runner2.run_single_task("parent", true).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let mut force_events = Vec::new();
+    while let Ok(event) = rx2.try_recv() {
+        force_events.push(event);
+    }
+
+    assert!(task_completed(&force_events, "nested_once"));
+    assert!(find_output(
+        &force_events,
+        "nested_once",
+        "nested_force_run"
+    ));
+}
+
+#[tokio::test]
+async fn test_nested_machine_setup_with_deps_expands_on_update() {
+    let dir = tempdir().unwrap();
+    let temp_dir = dir.path().join(".ms_temp");
+
+    fs::write(
+        dir.path().join("sub.yaml"),
+        format!(
+            r#"
+temp_dir: "{}"
+tasks:
+  base:
+    commands:
+      - run:
+          update: "echo base_update"
+  leaf:
+    depends_on: [base]
+    commands:
+      - run:
+          update: "echo leaf_update"
+"#,
+            temp_dir.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        r#"
+tasks:
+  parent:
+    commands:
+      - machine_setup:
+          config: "./sub.yaml"
+          task: leaf
+          with_deps: true
+"#,
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (events, mut rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner =
+        TaskRunner::new(config, Mode::Update, events).with_config_dir(dir.path().to_path_buf());
+    let _ = runner.run_all(true).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let mut events = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        events.push(event);
+    }
+
+    assert!(find_output(&events, "base", "base_update"));
+    assert!(find_output(&events, "leaf", "leaf_update"));
+}
+
+#[tokio::test]
 async fn test_nested_sub_config_with_num_threads_one() {
     // Regression: shared ConcurrencyGate must not deadlock when the parent
     // machine_setup command would otherwise hold the only permit.
@@ -1057,11 +1212,11 @@ tasks:
     assert!(task_completed(&events, "second"));
 
     // Verify first completed before second started
-    let first_done = events
-        .iter()
-        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "first"));
+    let first_done = events.iter().position(
+        |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == "first"),
+    );
     let second_start = events.iter().position(
-        |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "second"),
+        |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "second"),
     );
     assert!(first_done.is_some());
     assert!(second_start.is_some());
@@ -1099,19 +1254,27 @@ tasks:
     // Verify order: a before b, b before c
     let a_done = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "a"))
+        .position(
+            |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == "a"),
+        )
         .unwrap();
     let b_start = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "b"))
+        .position(
+            |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "b"),
+        )
         .unwrap();
     let b_done = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "b"))
+        .position(
+            |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == "b"),
+        )
         .unwrap();
     let c_start = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "c"))
+        .position(
+            |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "c"),
+        )
         .unwrap();
 
     assert!(a_done < b_start);
@@ -1143,7 +1306,7 @@ tasks:
     assert!(!task_completed(&events, "dep"));
     assert!(!has_event(
         &events,
-        |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "dep"),
+        |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "dep"),
     ));
 }
 
@@ -1185,11 +1348,13 @@ tasks:
     assert!(task_completed(&events, "leaf"));
     let dep_done = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "dep"))
+        .position(
+            |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == "dep"),
+        )
         .unwrap();
     let leaf_start = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "leaf"))
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "leaf"))
         .unwrap();
     assert!(dep_done < leaf_start);
 }
@@ -1218,11 +1383,11 @@ tasks:
 
     let second_done = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "second"))
+        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == "second"))
         .unwrap();
     let first_start = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "first"))
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "first"))
         .unwrap();
     assert!(second_done < first_start);
 }
@@ -1251,11 +1416,13 @@ tasks:
     assert!(task_completed(&events, "dep"));
     let leaf_done = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "leaf"))
+        .position(
+            |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == "leaf"),
+        )
         .unwrap();
     let dep_start = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "dep"))
+        .position(|e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "dep"))
         .unwrap();
     assert!(leaf_done < dep_start);
 }
@@ -1357,9 +1524,9 @@ tasks:
     }
 
     // Should have a retry event and eventual success
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, TaskEvent::TaskRetry { task_name, .. } if task_name == "retryable")));
+    assert!(events.iter().any(
+        |e| matches!(e, TaskEvent::TaskRetry { task_name, .. } if task_name.as_ref() == "retryable")
+    ));
     assert!(task_completed(&events, "retryable"));
     assert!(find_output(&events, "retryable", "retry_success"));
 }
@@ -1596,12 +1763,14 @@ tasks:
 
     let base_done = events
         .iter()
-        .position(|e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name == "base"))
+        .position(
+            |e| matches!(e, TaskEvent::TaskCompleted { task_name } if task_name.as_ref() == "base"),
+        )
         .unwrap();
     let dependent_start = events
         .iter()
         .position(
-            |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name == "dependent"),
+            |e| matches!(e, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "dependent"),
         )
         .unwrap();
     assert!(base_done < dependent_start);

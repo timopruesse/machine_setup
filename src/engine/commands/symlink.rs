@@ -11,6 +11,7 @@ use super::tree;
 use super::tree_op::{self, TreeOpKind};
 use super::CommandExecutor;
 
+#[derive(Clone)]
 pub struct SymlinkCommand {
     args: SymlinkArgs,
 }
@@ -24,15 +25,7 @@ impl SymlinkCommand {
 #[async_trait]
 impl CommandExecutor for SymlinkCommand {
     async fn execute(&self, ctx: &CommandContext) -> Result<()> {
-        tree_op::execute(
-            &self.args.src,
-            &self.args.target,
-            SymlinkKind {
-                args: self.args.clone(),
-            },
-            ctx,
-        )
-        .await
+        tree_op::execute(&self.args.src, &self.args.target, self.clone(), ctx).await
     }
 
     fn description(&self) -> String {
@@ -40,11 +33,7 @@ impl CommandExecutor for SymlinkCommand {
     }
 }
 
-struct SymlinkKind {
-    args: SymlinkArgs,
-}
-
-impl TreeOpKind for SymlinkKind {
+impl TreeOpKind for SymlinkCommand {
     fn ignore(&self) -> &[String] {
         &self.args.ignore
     }
@@ -184,7 +173,7 @@ mod tests {
             config_dir: dir.to_path_buf(),
             temp_dir: dir.to_path_buf(),
             default_shell: crate::config::types::Shell::Bash,
-            task_name: "t".to_string(),
+            task_name: std::sync::Arc::<str>::from("t"),
             depth: 0,
         };
         (ctx, rx)

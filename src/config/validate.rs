@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::graph::TaskGraph;
-use super::types::AppConfig;
+use super::types::{AppConfig, Condition};
 use crate::engine::commands::catalog::{self, KindSeverity};
 
 #[derive(Debug)]
@@ -57,25 +57,8 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
     validate_dependencies(config, &mut issues);
 
     for (name, task) in &config.tasks {
-        // Validate condition paths
-        for path_str in task.only_if.as_slice() {
-            if path_str.trim().is_empty() {
-                issues.push(ValidationIssue {
-                    task_name: name.clone(),
-                    message: "only_if contains an empty path".to_string(),
-                    severity: Severity::Error,
-                });
-            }
-        }
-        for path_str in task.skip_if.as_slice() {
-            if path_str.trim().is_empty() {
-                issues.push(ValidationIssue {
-                    task_name: name.clone(),
-                    message: "skip_if contains an empty path".to_string(),
-                    severity: Severity::Error,
-                });
-            }
-        }
+        validate_conditions(name, &task.only_if, "only_if", &mut issues);
+        validate_conditions(name, &task.skip_if, "skip_if", &mut issues);
 
         if task.commands.is_empty() {
             issues.push(ValidationIssue {
@@ -118,6 +101,47 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
     issues
 }
 
+fn validate_conditions(
+    task_name: &str,
+    conditions: &super::types::Conditions,
+    field: &str,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    for cond in conditions.iter() {
+        match cond {
+            Condition::Path(path) if path.trim().is_empty() => {
+                issues.push(ValidationIssue {
+                    task_name: task_name.to_string(),
+                    message: format!("{field} contains an empty path"),
+                    severity: Severity::Warning,
+                });
+            }
+            Condition::Env(var) if var.trim().is_empty() => {
+                issues.push(ValidationIssue {
+                    task_name: task_name.to_string(),
+                    message: format!("{field} contains an empty env var name"),
+                    severity: Severity::Warning,
+                });
+            }
+            Condition::Command(cmd) if cmd.trim().is_empty() => {
+                issues.push(ValidationIssue {
+                    task_name: task_name.to_string(),
+                    message: format!("{field} contains an empty command"),
+                    severity: Severity::Warning,
+                });
+            }
+            Condition::Mode(modes) if modes.is_empty() => {
+                issues.push(ValidationIssue {
+                    task_name: task_name.to_string(),
+                    message: format!("{field} contains an empty mode list"),
+                    severity: Severity::Warning,
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,6 +174,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                retry_delay_secs: 1,
                 auto_update: None,
             },
         );
@@ -183,6 +208,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                retry_delay_secs: 1,
                 auto_update: None,
             },
         );
@@ -202,6 +228,8 @@ mod tests {
                 commands: vec![CommandEntry::MachineSetup(MachineSetupArgs {
                     config: "/nonexistent/config".to_string(),
                     task: None,
+                    force: false,
+                    with_deps: false,
                 })],
                 os: Default::default(),
                 parallel: false,
@@ -209,6 +237,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                retry_delay_secs: 1,
                 auto_update: None,
             },
         );
@@ -238,6 +267,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                retry_delay_secs: 1,
                 auto_update: None,
             },
         );
@@ -270,6 +300,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                retry_delay_secs: 1,
                 auto_update: None,
             },
         );
@@ -299,6 +330,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                retry_delay_secs: 1,
                 auto_update: Some(AutoUpdateConfig {
                     at: None,
                     cron: Some("0 7 * * 1".into()),
@@ -332,6 +364,7 @@ mod tests {
                 skip_if: Default::default(),
                 depends_on: Default::default(),
                 retry: 0,
+                retry_delay_secs: 1,
                 auto_update: Some(AutoUpdateConfig {
                     at: Some("07:30".into()),
                     cron: None,

@@ -1,8 +1,10 @@
 //! Authoring recipes — named emitters of Tasks built from existing Command entry kinds.
 //!
 //! Not new kinds (ADR-0006). Output is append-only YAML via the Config document module.
+//! CLI `add recipe` and the Config wizard both dispatch through this catalog.
 
-use crate::error::Result;
+use crate::cli::RecipeCommand;
+use crate::error::{Error, Result};
 
 /// A Task ready to append under `tasks:` (already indented with two spaces).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,12 +42,100 @@ pub struct BrewBundleParams<'a> {
     pub file: &'a str,
 }
 
+/// Registered recipe keys in menu / CLI order.
+pub const RECIPE_KEYS: &[&str] = &["dotfiles", "git-repo", "brew-bundle"];
+
 pub const DEFAULT_DOTFILES_NAME: &str = "dotfiles";
 pub const DEFAULT_GIT_REPO_NAME: &str = "git-repo";
 pub const DEFAULT_BREW_BUNDLE_NAME: &str = "brew-bundle";
 pub const DEFAULT_DOTFILES_SRC: &str = "./home";
 pub const DEFAULT_DOTFILES_TARGET: &str = "~";
 pub const DEFAULT_DOTFILES_IGNORE: &str = ".cursor";
+
+/// Wizard menu labels for each [`RECIPE_KEYS`] entry, same order.
+pub fn recipe_menu_labels() -> &'static [&'static str] {
+    &[
+        "Add recipe: dotfiles",
+        "Add recipe: git-repo",
+        "Add recipe: brew-bundle",
+    ]
+}
+
+/// Params collected from the wizard (or other callers) before emit-by-key dispatch.
+pub enum RecipeEmitInput<'a> {
+    Dotfiles(DotfilesParams<'a>),
+    GitRepo(GitRepoParams<'a>),
+    BrewBundle(BrewBundleParams<'a>),
+}
+
+/// Default task name for a catalog recipe key.
+pub fn default_name_for_key(key: &str) -> Option<&'static str> {
+    match key {
+        "dotfiles" => Some(DEFAULT_DOTFILES_NAME),
+        "git-repo" => Some(DEFAULT_GIT_REPO_NAME),
+        "brew-bundle" => Some(DEFAULT_BREW_BUNDLE_NAME),
+        _ => None,
+    }
+}
+
+/// Dispatch to the emitter registered for `key`.
+pub fn emit_by_key(key: &str, input: RecipeEmitInput<'_>) -> Result<EmittedTask> {
+    match key {
+        "dotfiles" => {
+            let RecipeEmitInput::Dotfiles(p) = input else {
+                return Err(Error::Other(format!(
+                    "recipe `{key}` expects dotfiles params"
+                )));
+            };
+            emit_dotfiles(&p)
+        }
+        "git-repo" => {
+            let RecipeEmitInput::GitRepo(p) = input else {
+                return Err(Error::Other(format!(
+                    "recipe `{key}` expects git-repo params"
+                )));
+            };
+            emit_git_repo(&p)
+        }
+        "brew-bundle" => {
+            let RecipeEmitInput::BrewBundle(p) = input else {
+                return Err(Error::Other(format!(
+                    "recipe `{key}` expects brew-bundle params"
+                )));
+            };
+            emit_brew_bundle(&p)
+        }
+        other => Err(Error::Other(format!("unknown recipe key: {other}"))),
+    }
+}
+
+/// Single CLI dispatch site for `add recipe` subcommands.
+pub fn emit_from_cli(cmd: &RecipeCommand) -> Result<EmittedTask> {
+    match cmd {
+        RecipeCommand::Dotfiles {
+            url,
+            src,
+            target,
+            ignore,
+            name,
+        } => {
+            let ignore_refs: Vec<&str> = ignore.iter().map(String::as_str).collect();
+            emit_dotfiles(&DotfilesParams {
+                name,
+                url,
+                src,
+                target,
+                ignore: ignore_refs,
+            })
+        }
+        RecipeCommand::GitRepo { url, target, name } => {
+            emit_git_repo(&GitRepoParams { name, url, target })
+        }
+        RecipeCommand::BrewBundle { file, name } => {
+            emit_brew_bundle(&BrewBundleParams { name, file })
+        }
+    }
+}
 
 /// Emit `clone` (into `.`) + `symlink` (force; ignore includes `.cursor`).
 pub fn emit_dotfiles(p: &DotfilesParams<'_>) -> Result<EmittedTask> {
@@ -186,6 +276,15 @@ mod tests {
             other => panic!("expected macos filter, got {other:?}"),
         }
         assert!(matches!(task.commands[0], CommandEntry::Run(_)));
+    }
+
+    #[test]
+    fn recipe_keys_match_catalog_emitters() {
+        assert_eq!(RECIPE_KEYS.len(), recipe_menu_labels().len());
+        assert!(default_name_for_key(RECIPE_KEYS[0]).is_some());
+        assert!(default_name_for_key(RECIPE_KEYS[1]).is_some());
+        assert!(default_name_for_key(RECIPE_KEYS[2]).is_some());
+        assert!(default_name_for_key("unknown").is_none());
     }
 
     #[test]

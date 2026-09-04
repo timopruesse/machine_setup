@@ -1,6 +1,6 @@
 //! Interactive wizard — dialoguer adapter on the Config document module.
 //!
-//! Requires a TTY. Creates the Config document if missing (after confirm), then
+//! Requires a TTY. Creates the Config document if needed (after confirm), then
 //! loops: blank Task, Authoring recipe, or done.
 
 use std::io::IsTerminal;
@@ -13,19 +13,21 @@ use crate::error::{Error, Result};
 use super::document::{self, validate_after_write};
 use super::locator;
 use super::recipes::{
-    emit_brew_bundle, emit_dotfiles, emit_git_repo, BrewBundleParams, DotfilesParams,
-    GitRepoParams, DEFAULT_BREW_BUNDLE_NAME, DEFAULT_DOTFILES_NAME, DEFAULT_DOTFILES_SRC,
-    DEFAULT_DOTFILES_TARGET, DEFAULT_GIT_REPO_NAME,
+    default_name_for_key, emit_by_key, recipe_menu_labels, RecipeEmitInput, DEFAULT_DOTFILES_SRC,
+    DEFAULT_DOTFILES_TARGET, RECIPE_KEYS,
 };
 use super::{is_url, resolve_config_path};
 
-const MENU: &[&str] = &[
-    "Add blank task",
-    "Add recipe: dotfiles",
-    "Add recipe: git-repo",
-    "Add recipe: brew-bundle",
-    "Done",
-];
+fn build_menu() -> Vec<String> {
+    let mut items = vec!["Add blank task".to_string()];
+    items.extend(
+        recipe_menu_labels()
+            .iter()
+            .map(|label| (*label).to_string()),
+    );
+    items.push("Done".to_string());
+    items
+}
 
 /// Run the wizard. Returns the Config document path written/updated.
 pub fn run(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> {
@@ -50,9 +52,10 @@ pub fn run(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> {
     }
 
     loop {
+        let menu = build_menu();
         let choice = Select::new()
             .with_prompt("What next?")
-            .items(MENU)
+            .items(&menu)
             .default(0)
             .interact()
             .map_err(|e| Error::Other(e.to_string()))?;
@@ -66,10 +69,10 @@ pub fn run(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> {
                 document::add_task(&path, &name)?;
                 println!("Added task `{name}`");
             }
-            1 => add_dotfiles(&path)?,
-            2 => add_git_repo(&path)?,
-            3 => add_brew_bundle(&path)?,
-            4 => break,
+            i if (1..=RECIPE_KEYS.len()).contains(&i) => {
+                add_recipe(&path, RECIPE_KEYS[i - 1])?;
+            }
+            i if i == RECIPE_KEYS.len() + 1 => break,
             _ => unreachable!("menu index out of range"),
         }
 
@@ -120,80 +123,76 @@ fn resolve_wizard_path(config_arg: Option<&str>, cwd: &Path) -> Result<PathBuf> 
     }
 }
 
-fn add_dotfiles(path: &Path) -> Result<()> {
+fn add_recipe(path: &Path, key: &str) -> Result<()> {
+    let default_name = default_name_for_key(key).unwrap_or(key);
     let name: String = Input::new()
         .with_prompt("Task name")
-        .default(DEFAULT_DOTFILES_NAME.to_string())
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let url: String = Input::new()
-        .with_prompt("Git URL")
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let src: String = Input::new()
-        .with_prompt("Symlink source")
-        .default(DEFAULT_DOTFILES_SRC.to_string())
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let target: String = Input::new()
-        .with_prompt("Symlink target")
-        .default(DEFAULT_DOTFILES_TARGET.to_string())
+        .default(default_name.to_string())
         .interact_text()
         .map_err(|e| Error::Other(e.to_string()))?;
 
-    let emitted = emit_dotfiles(&DotfilesParams {
-        name: &name,
-        url: &url,
-        src: &src,
-        target: &target,
-        ignore: vec![],
-    })?;
-    document::append_emitted(path, &emitted)?;
-    println!("Added recipe task `{name}`");
-    Ok(())
-}
+    let emitted = match key {
+        "dotfiles" => {
+            let url: String = Input::new()
+                .with_prompt("Git URL")
+                .interact_text()
+                .map_err(|e| Error::Other(e.to_string()))?;
+            let src: String = Input::new()
+                .with_prompt("Symlink source")
+                .default(DEFAULT_DOTFILES_SRC.to_string())
+                .interact_text()
+                .map_err(|e| Error::Other(e.to_string()))?;
+            let target: String = Input::new()
+                .with_prompt("Symlink target")
+                .default(DEFAULT_DOTFILES_TARGET.to_string())
+                .interact_text()
+                .map_err(|e| Error::Other(e.to_string()))?;
+            emit_by_key(
+                key,
+                RecipeEmitInput::Dotfiles(super::recipes::DotfilesParams {
+                    name: &name,
+                    url: &url,
+                    src: &src,
+                    target: &target,
+                    ignore: vec![],
+                }),
+            )?
+        }
+        "git-repo" => {
+            let url: String = Input::new()
+                .with_prompt("Git URL")
+                .interact_text()
+                .map_err(|e| Error::Other(e.to_string()))?;
+            let target: String = Input::new()
+                .with_prompt("Clone target")
+                .interact_text()
+                .map_err(|e| Error::Other(e.to_string()))?;
+            emit_by_key(
+                key,
+                RecipeEmitInput::GitRepo(super::recipes::GitRepoParams {
+                    name: &name,
+                    url: &url,
+                    target: &target,
+                }),
+            )?
+        }
+        "brew-bundle" => {
+            let file: String = Input::new()
+                .with_prompt("Brewfile path")
+                .default("./Brewfile".to_string())
+                .interact_text()
+                .map_err(|e| Error::Other(e.to_string()))?;
+            emit_by_key(
+                key,
+                RecipeEmitInput::BrewBundle(super::recipes::BrewBundleParams {
+                    name: &name,
+                    file: &file,
+                }),
+            )?
+        }
+        other => return Err(Error::Other(format!("unknown recipe key: {other}"))),
+    };
 
-fn add_git_repo(path: &Path) -> Result<()> {
-    let name: String = Input::new()
-        .with_prompt("Task name")
-        .default(DEFAULT_GIT_REPO_NAME.to_string())
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let url: String = Input::new()
-        .with_prompt("Git URL")
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let target: String = Input::new()
-        .with_prompt("Clone target")
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-
-    let emitted = emit_git_repo(&GitRepoParams {
-        name: &name,
-        url: &url,
-        target: &target,
-    })?;
-    document::append_emitted(path, &emitted)?;
-    println!("Added recipe task `{name}`");
-    Ok(())
-}
-
-fn add_brew_bundle(path: &Path) -> Result<()> {
-    let name: String = Input::new()
-        .with_prompt("Task name")
-        .default(DEFAULT_BREW_BUNDLE_NAME.to_string())
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let file: String = Input::new()
-        .with_prompt("Brewfile path")
-        .default("./Brewfile".to_string())
-        .interact_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-
-    let emitted = emit_brew_bundle(&BrewBundleParams {
-        name: &name,
-        file: &file,
-    })?;
     document::append_emitted(path, &emitted)?;
     println!("Added recipe task `{name}`");
     Ok(())
@@ -233,6 +232,15 @@ mod tests {
         // when we know we're non-interactive; skip if somehow interactive.
         if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
             assert!(ensure_tty().is_err());
+        }
+    }
+
+    #[test]
+    fn build_menu_includes_catalog_recipes() {
+        let menu = build_menu();
+        assert_eq!(menu.len(), RECIPE_KEYS.len() + 2);
+        for (i, key) in RECIPE_KEYS.iter().enumerate() {
+            assert!(menu[i + 1].contains(key));
         }
     }
 }

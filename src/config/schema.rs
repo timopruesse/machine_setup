@@ -55,6 +55,67 @@ pub fn generate() -> Value {
                     { "type": "array", "items": { "type": "string" } }
                 ]
             },
+            "condition": {
+                "oneOf": [
+                    { "type": "string", "description": "Path that must exist (only_if) or exist to skip (skip_if)" },
+                    {
+                        "type": "object",
+                        "required": ["path"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "path": { "type": "string" }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": ["env"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "env": { "type": "string" }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": ["command"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "command": { "type": "string" }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": ["mode"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "mode": {
+                                "oneOf": [
+                                    {
+                                        "type": "string",
+                                        "enum": ["install", "update", "uninstall"]
+                                    },
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "enum": ["install", "update", "uninstall"]
+                                        },
+                                        "minItems": 1
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            },
+            "conditions": {
+                "oneOf": [
+                    { "$ref": "#/$defs/condition" },
+                    {
+                        "type": "array",
+                        "items": { "$ref": "#/$defs/condition" }
+                    }
+                ]
+            },
             "osFilter": {
                 "oneOf": [
                     { "type": "string" },
@@ -72,13 +133,19 @@ pub fn generate() -> Value {
                     },
                     "os": { "$ref": "#/$defs/osFilter" },
                     "parallel": { "type": "boolean", "default": false },
-                    "only_if": { "$ref": "#/$defs/stringOrVec" },
-                    "skip_if": { "$ref": "#/$defs/stringOrVec" },
+                    "only_if": { "$ref": "#/$defs/conditions" },
+                    "skip_if": { "$ref": "#/$defs/conditions" },
                     "depends_on": {
                         "type": "array",
                         "items": { "type": "string" }
                     },
                     "retry": { "type": "integer", "minimum": 0, "default": 0 },
+                    "retry_delay_secs": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 1,
+                        "description": "Seconds to wait between retry attempts"
+                    },
                     "auto_update": { "$ref": "#/$defs/autoUpdate" }
                 }
             },
@@ -178,7 +245,17 @@ fn kind_args_schema(kind: &str) -> Value {
             "additionalProperties": false,
             "properties": {
                 "config": { "type": "string" },
-                "task": { "type": "string" }
+                "task": { "type": "string" },
+                "force": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Bypass History skip in the nested Runner"
+                },
+                "with_deps": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When task is set, also run transitive depends_on (like CLI --with-deps)"
+                }
             }
         }),
         other => panic!("KIND_KEYS out of sync with kind_args_schema: {other}"),

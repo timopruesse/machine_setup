@@ -1,4 +1,5 @@
 use crate::cli::Command;
+use serde::{Deserialize, Serialize};
 
 /// The execution modes the engine actually acts on.
 ///
@@ -7,7 +8,8 @@ use crate::cli::Command;
 /// reach the engine. Keeping `Mode` separate means every match over an
 /// execution mode is exhaustive in three real arms instead of carrying dead
 /// arms for verbs that can't occur.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Mode {
     Install,
     Update,

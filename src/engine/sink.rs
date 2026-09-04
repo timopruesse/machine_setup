@@ -63,7 +63,7 @@ mod tests {
             task_name: "t".into(),
         });
         match rx.try_recv() {
-            Ok(TaskEvent::TaskCompleted { task_name }) => assert_eq!(task_name, "t"),
+            Ok(TaskEvent::TaskCompleted { task_name }) => assert_eq!(task_name.as_ref(), "t"),
             other => panic!("unexpected: {other:?}"),
         }
     }

@@ -31,7 +31,10 @@ _Avoid_: config discovery, config search path, XDG config.
 **Authoring recipe**:
 A named emitter that appends one or more Tasks built only from existing Command
 entry kinds (`clone`, `symlink`, `run`, …). Not a new kind and not YAML sugar
-in the Config document. Initial recipes: `dotfiles`, `brew-bundle`, `git-repo`.
+in the Config document. Initial recipes are registered in the **recipe catalog**
+(`config/recipes.rs`): `dotfiles`, `git-repo`, `brew-bundle`. CLI `add recipe`
+and the **Config wizard** dispatch emitters through that catalog — not a plugin
+loader (ADR-0006).
 _Avoid_: plugin, template pack, command kind.
 
 **Config wizard**:
@@ -70,26 +73,31 @@ _Avoid_: engine (too broad), executor (means something narrower here).
 
 **Command executor**:
 The thing that runs one command entry for the current mode — one per command
-entry type, behind the `CommandExecutor` interface (single `execute` method).
+entry type. Concrete kinds implement the `CommandExecutor` interface; the
+catalog's `create_executor` returns the closed `Executor` enum (static
+dispatch — ADR-0006, no plugin `dyn` until a second adapter exists).
 _Avoid_: handler, command (see Flagged ambiguities).
 
 **Command kind catalog**:
 The single owner of Command-entry-kind behavior — parse helpers used after
-deserialize, validate, `create_executor`, `requires_sudo`, **Exclusive lane**
-inference from `run` script text, and display wiring co-located with Command
-executors. The `CommandEntry` enum stays public for exhaustiveness;
-Deserialize may match keys only to construct the enum. Modules outside the
-catalog must not `match` on variants for behavior. New kinds register here
-once. A new kind is justified only when the op needs **Tree materialization**,
-**File ops**, **Sub-config** nesting, or Mode semantics `run` cannot express
-— not for YAML sugar over shell recipes (ADR-0006).
+deserialize, validate, `create_executor`, `requires_sudo`, unattended sudo
+demotion, **Exclusive lane** inference from `run` script text, and display
+wiring co-located with Command executors. The `CommandEntry` enum stays public
+for exhaustiveness; Deserialize may match keys only to construct the enum.
+Modules outside the catalog must not `match` on variants for behavior. New
+kinds register here once. A new kind is justified only when the op needs
+**Tree materialization**, **File ops**, **Sub-config** nesting, or Mode
+semantics `run` cannot express — not for YAML sugar over shell recipes
+(ADR-0006).
 _Avoid_: command registry, plugin map, dispatcher (unless a second adapter
 justifies a real plugin seam — see ADR-0006).
 
 **Task event**:
 A message describing execution progress (`TaskEvent`) — lifecycle and
-per-line/per-file output alike. Emitted through the **Task event sink**; the
-TUI and plain logger consume events from the channel-backed adapter.
+per-line/per-file output alike. `task_name` is an `Arc<str>` interned once per
+Task so per-line output clones a refcount, not a new allocation. Emitted
+through the **Task event sink**; the TUI and plain logger consume events from
+the channel-backed adapter.
 _Avoid_: message, log, signal.
 
 **History**:
@@ -109,6 +117,15 @@ _Avoid_: task state, install ledger view.
 
 These name the deepened modules introduced to concentrate behavior; reviews
 should refer to them by these names.
+
+**Task condition**:
+Declarative gate on whether a Task runs — `only_if` (all must pass) and
+`skip_if` (any triggers skip). Each field accepts a path string, a list of
+path strings (backward compatible), or rich objects: `{ path }`, `{ env }`,
+`{ command }`, `{ mode }`. Evaluated in `engine::conditions` together with OS
+filter and install History skip; the Runner calls `evaluate_skip` before
+spawning work.
+_Avoid_: when clause, if guard, predicate.
 
 **Task graph**:
 The single home for everything derived from `depends_on` edges — transitive
@@ -170,10 +187,11 @@ _Avoid_: fs helper, file utils.
 **Tree materialization**:
 The shared traversal behind `copy` and `symlink`: destination resolution (the
 file-vs-directory target rule) plus the install/uninstall walk, parameterized by
-a per-file operation. Ignore skips matching files and does not descend into
-matching directories (the walk root is never ignored). Directory installs mkdir
-sequentially, then apply files on the Concurrency gate's shared Rayon pool
-(ADR-0004).
+a per-file operation. Ignore patterns (exact component names, `foo/bar` path
+sequences, glob-lite `*`/`?` within a component — not substring-anywhere) skip
+matching files and do not descend into matching directories (the walk root is
+never ignored). Directory installs mkdir sequentially, then apply files on the
+Concurrency gate's shared Rayon pool (ADR-0004).
 _Avoid_: file walker, copier.
 
 **Tree-op driver**:
@@ -225,7 +243,9 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
   drives **Tree materialization** through a **File ops** adapter (executors may
   still choose a bulk SudoFs path when eligible).
 - A `machine_setup` **Command entry** loads a **Sub-config** and runs it with a
-  nested **Runner**.
+  nested **Runner**. Optional `force` bypasses **History** skip in that nested
+  run; optional `with_deps` (when `task` is set) expands transitive
+  `depends_on` like CLI `--with-deps`.
 - The **Runner** and Command executors emit **Task events** through the
   **Task event sink** and consult/update **History**.
 - The **Command bench** exercises Tree materialization, File ops, the Runner,
@@ -238,7 +258,7 @@ _Avoid_: performance test (ambiguous with correctness tests), profiling.
   for `list` / `doctor`. Splitting files for execution remains **Sub-config**
   (ADR-0007) — not load-time include. In-place Task rewrite is rejected
   (ADR-0008). **Authoring recipes** and the **Config wizard** append via the
-  Config document module.
+  Config document module, sharing the **recipe catalog** in `config/recipes.rs`.
 
 ## Example dialogue
 

@@ -80,27 +80,27 @@ fn expand_env_vars(input: &str) -> String {
     result
 }
 
-/// Walk `src` and invoke `f` for each entry that isn't filtered out by
-/// `ignore_list`. The closure receives the raw `DirEntry` plus the
-/// precomputed destination path (`target` joined with the entry's
-/// `src`-relative suffix).
+/// Walk `src` and invoke `f` for each entry that passes `should_skip`.
+/// The closure receives the raw `DirEntry` plus the precomputed destination
+/// path (`target` joined with the entry's `src`-relative suffix).
 ///
-/// Ignored **directories** are not descended into; ignored **files** are
-/// skipped. The walk root (`src`) is never pruned by ignore.
+/// When `should_skip(relative)` is true, **directories** are not descended
+/// into and **files** are skipped. The walk root (`src`) is never pruned.
 ///
 /// `strip_prefix` is guaranteed to succeed because every WalkDir entry is
 /// rooted at `src`.
-pub fn walk_relative<F>(src: &Path, target: &Path, ignore_list: &[String], mut f: F) -> Result<()>
+pub fn walk_relative<F, P>(src: &Path, target: &Path, should_skip: P, mut f: F) -> Result<()>
 where
     F: FnMut(&DirEntry, &Path) -> Result<()>,
+    P: Fn(&Path) -> bool,
 {
     let walker = WalkDir::new(src).into_iter().filter_entry(|entry| {
-        // Never prune the walk root — ignore applies only to descendants.
+        // Never prune the walk root — skip applies only to descendants.
         if entry.depth() == 0 {
             return true;
         }
         let relative = entry.path().strip_prefix(src).unwrap_or(entry.path());
-        !should_ignore(relative, ignore_list)
+        !should_skip(relative)
     });
 
     for entry in walker.filter_map(|e| e.ok()) {
@@ -109,17 +109,6 @@ where
         f(&entry, &dest)?;
     }
     Ok(())
-}
-
-/// Check if a path should be ignored based on the ignore list.
-pub fn should_ignore(path: &Path, ignore_list: &[String]) -> bool {
-    let path_str = path.to_string_lossy();
-    ignore_list.iter().any(|pattern| {
-        // Simple string matching — check if the file/dir name matches
-        path.file_name()
-            .is_some_and(|name| name.to_string_lossy() == *pattern)
-            || path_str.contains(pattern.as_str())
-    })
 }
 
 /// Compact path for log output: replace home directory prefix with `~/`.
@@ -204,19 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn test_should_ignore() {
-        assert!(should_ignore(
-            Path::new("/path/to/README.md"),
-            &["README.md".to_string()]
-        ));
-        assert!(!should_ignore(
-            Path::new("/path/to/config.yaml"),
-            &["README.md".to_string()]
-        ));
-    }
-
-    #[test]
-    fn walk_relative_prunes_ignored_directory_children() {
+    fn walk_relative_prunes_skipped_directory_children() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("src");
         std::fs::create_dir_all(src.join("keep")).unwrap();
@@ -228,7 +205,13 @@ mod tests {
 
         let target = dir.path().join("dst");
         let mut seen = Vec::new();
-        walk_relative(&src, &target, &["skip_me".to_string()], |entry, _dest| {
+        let skip = |relative: &Path| {
+            relative.components().any(|c| match c {
+                std::path::Component::Normal(name) => name == "skip_me",
+                _ => false,
+            })
+        };
+        walk_relative(&src, &target, skip, |entry, _dest| {
             let rel = entry
                 .path()
                 .strip_prefix(&src)
