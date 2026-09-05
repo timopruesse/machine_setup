@@ -6,14 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Changed
-- TUI run dashboard and catalog viewer: SilkCircuit Neon theme, rounded borders, help-bar key hints (Esc quit when done, `q` cancel while running, `End` follow), narrow-terminal Details collapse, and completion strip in the header gauge
+## [2.10.0]
 
 ### Added
 - `replace task <name>` and `replace recipe …` — upsert a Task via Config rewrite (YAML-only); create path warns when the name was missing; overwrite prompts on a TTY or proceeds non-interactively; History unchanged
 - Authoring recipes and blank stubs emit typed `TaskConfig` (`EmittedTask { name, task }`); `add` still appends a serialized fragment and refuses duplicates
 - `remove task <name> [--fix-deps]` — delete a Task via Config rewrite; prompts (or `--fix-deps`) when dependents exist; prunes History
-- Command-bench tree size ladder (1k default / 10k via `MACHINE_SETUP_BENCH_TREE_SIZE`) and a report-only 100k tree memory harness for the ADR-0004 chunking gate
+- Command-bench tree size ladder (1k default / 10k via `MACHINE_SETUP_BENCH_TREE_SIZE`, opt-in 25k) and a report-only 100k tree memory harness for the ADR-0004 chunking gate
+- Tree materialization chunks by PathBuf estimate gate; File ops `apply_tree` entry points; K=1 gate admission for tree apply
+
+### Changed
+- TUI run dashboard and catalog viewer: SilkCircuit Neon theme, rounded borders, help-bar key hints (Esc quit when done, `q` cancel while running, `End` follow), narrow-terminal Details collapse, and completion strip in the header gauge
+- Deeper async concurrency seams (host-blocking, event sink capacity, condition checks off the hot path)
+- Subprocess stdout/stderr lines coalesce into `CommandOutputBatch` events; Command executors are lazy-cached on `TaskRunner`
+
+### Performance
+- Tree install hot path: APFS `clonefile` when available, plus stream apply (fewer full-tree allocations)
+- Local Criterion Command bench vs **v2.9.0** (Apple M4 Pro, macOS, 1k-file fixture, sequential runs):
+  - `tree_install_direct/1k_files`: **227 ms → 179 ms** (~21% faster)
+  - `tree_uninstall_direct/1k_files`: **63 ms → 34 ms** (~46% faster)
+  - `mtime_skip/1k`: **3.07 ms → 2.60 ms** (~15% faster)
+  - `runner_smoke/single_copy_1k_null_sink`: **221 ms → 181 ms** (~18% faster)
+  - `runner_smoke/parallel_two_copy_tasks_1k`: **401 ms → 279 ms** (~31% faster)
+
+### Fixed
+- Gate Windows `winresource` / manifest build-deps to the Windows host so non-Windows builds stay clean
 
 ## [2.9.0]
 
