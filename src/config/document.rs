@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::error::{Error, Result};
 
 use super::locator;
-use super::types::AppConfig;
+use super::types::{blank_task_config, AppConfig, TaskConfig};
 use super::{load_config, resolve_config_dir, validate};
 
 /// Stable raw URL for the checked-in Config schema (yaml-language-server modeline).
@@ -55,20 +55,37 @@ pub fn init(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Build a minimal blank Task for add/replace authoring.
+pub fn emitted_blank_task(task_name: &str) -> Result<super::recipes::EmittedTask> {
+    validate_task_name(task_name)?;
+    Ok(super::recipes::EmittedTask {
+        name: task_name.to_string(),
+        task: blank_task_config(),
+    })
+}
+
 /// Append a minimal Task stub. Requires an existing Config document. Refuses
 /// duplicate Task names.
 pub fn add_task(path: &Path, task_name: &str) -> Result<()> {
-    validate_task_name(task_name)?;
-    let stub = format!(
-        "\n  # Task `{task_name}`\n  # Optional: os: [linux, macos] | depends_on: [other] | parallel: true | retry: 1\n  # commands:\n  #   - run:\n  #       commands: \"echo hello\"\n  #   - symlink:\n  #       src: ./dotfiles/file\n  #       target: ~/file\n  #       force: true\n  {task_name}:\n    commands: []\n"
-    );
-    append_emitted(
-        path,
-        &super::recipes::EmittedTask {
-            name: task_name.to_string(),
-            yaml: stub,
-        },
-    )
+    append_emitted(path, &emitted_blank_task(task_name)?)
+}
+
+/// Serialize one task entry as a YAML fragment indented for nesting under `tasks:`.
+pub fn format_task_yaml_fragment(name: &str, task: &TaskConfig) -> Result<String> {
+    use indexmap::IndexMap;
+    let mut map = IndexMap::new();
+    map.insert(name.to_string(), task);
+    let raw = serde_yaml::to_string(&map)?;
+    let mut out = String::from("\n");
+    for line in raw.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        out.push_str("  ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    Ok(out)
 }
 
 /// Append an emitted Task YAML block (from stubs or Authoring recipes).
@@ -93,7 +110,7 @@ pub fn append_emitted(path: &Path, emitted: &super::recipes::EmittedTask) -> Res
         content = rewritten;
     }
 
-    content.push_str(&emitted.yaml);
+    content.push_str(&format_task_yaml_fragment(&emitted.name, &emitted.task)?);
     if !content.ends_with('\n') {
         content.push('\n');
     }
@@ -226,5 +243,37 @@ mod tests {
         let path = dir.path().join("machine_setup.yaml");
         init(&path).unwrap();
         assert!(!validate_after_write(&path).unwrap());
+    }
+
+    #[test]
+    fn blank_task_fragment_omits_default_fields_and_loads() {
+        use crate::config::os::OsFilter;
+
+        let fragment = format_task_yaml_fragment("stub", &blank_task_config()).unwrap();
+        assert!(
+            !fragment.contains("os: null"),
+            "fragment must not contain os: null:\n{fragment}"
+        );
+        assert!(!fragment.contains("parallel: false"));
+        assert!(!fragment.contains("depends_on:"));
+        assert!(!fragment.contains("retry:"));
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("machine_setup.yaml");
+        init(&path).unwrap();
+        add_task(&path, "stub").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            !text.contains("os: null"),
+            "appended stub must not contain os: null:\n{text}"
+        );
+        let config = load_after_write(&path).unwrap();
+        let task = &config.tasks["stub"];
+        assert!(matches!(task.os, OsFilter::All));
+        assert!(task.commands.is_empty());
+        assert!(!task.parallel);
+        assert!(task.depends_on.is_empty());
+        assert_eq!(task.retry, 0);
+        assert_eq!(task.retry_delay_secs, 1);
     }
 }

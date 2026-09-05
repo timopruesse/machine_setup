@@ -76,6 +76,11 @@ pub enum Command {
         #[command(subcommand)]
         target: RemoveTarget,
     },
+    /// Replace (upsert) a Task in the Config document (rewrites the file; comments/formatting may change)
+    Replace {
+        #[command(subcommand)]
+        target: ReplaceTarget,
+    },
     /// Manage OS-timer auto-update schedules
     Schedule {
         #[command(subcommand)]
@@ -130,6 +135,20 @@ pub enum RemoveTarget {
         /// Strip this name from other Tasks' depends_on, then remove (required non-interactively when dependents exist)
         #[arg(long)]
         fix_deps: bool,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum ReplaceTarget {
+    /// Replace a Task by name (creates if missing)
+    Task {
+        /// Task name
+        name: String,
+    },
+    /// Replace a Task from an Authoring recipe (existing Command entry kinds only)
+    Recipe {
+        #[command(subcommand)]
+        recipe: RecipeCommand,
     },
 }
 
@@ -203,6 +222,7 @@ impl std::fmt::Display for Command {
             Command::Wizard => write!(f, "wizard"),
             Command::Add { .. } => write!(f, "add"),
             Command::Remove { .. } => write!(f, "remove"),
+            Command::Replace { .. } => write!(f, "replace"),
             Command::Schedule { .. } => write!(f, "schedule"),
             Command::Schema => write!(f, "schema"),
             Command::Completions { .. } => write!(f, "completions"),

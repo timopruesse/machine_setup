@@ -52,7 +52,7 @@ impl std::fmt::Display for Os {
 
 /// Represents OS filtering: either a single OS or multiple.
 /// When empty/None, the task runs on all OSes.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(untagged)]
 pub enum OsFilter {
     #[default]
@@ -61,7 +61,29 @@ pub enum OsFilter {
     Multiple(Vec<Os>),
 }
 
+impl Serialize for OsFilter {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            OsFilter::All => {
+                // Omitted at `TaskConfig::os` via `skip_serializing_if`; never emit null.
+                use serde::ser::SerializeMap;
+                let map = serializer.serialize_map(Some(0))?;
+                map.end()
+            }
+            OsFilter::Single(os) => os.serialize(serializer),
+            OsFilter::Multiple(oses) => oses.serialize(serializer),
+        }
+    }
+}
+
 impl OsFilter {
+    pub fn is_all(&self) -> bool {
+        matches!(self, OsFilter::All)
+    }
+
     pub fn matches_current(&self) -> bool {
         match self {
             OsFilter::All => true,

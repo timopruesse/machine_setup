@@ -5,7 +5,8 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
-use cli::{AddTarget, Cli, Command, RemoveTarget, ScheduleAction};
+use cli::{AddTarget, Cli, Command, RemoveTarget, ReplaceTarget, ScheduleAction};
+use config::document_edit::ReplaceOutcome;
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
@@ -137,6 +138,37 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if let Command::Replace { target } = &cli.command {
+        let path = resolve_existing_document(cli.config.as_deref(), &cwd)?;
+        let emitted = match target {
+            ReplaceTarget::Task { name } => config::document::emitted_blank_task(name)?,
+            ReplaceTarget::Recipe { recipe } => config::recipes::emit_from_cli(recipe)?,
+        };
+        let outcome = config::document_edit::replace_task(
+            &path,
+            &emitted,
+            config::document_edit::ReplaceMode::Auto,
+        )?;
+        match outcome {
+            ReplaceOutcome::Created => {
+                eprintln!(
+                    "warning: task `{}` did not exist; created it in {}",
+                    emitted.name,
+                    path.display()
+                );
+            }
+            ReplaceOutcome::Replaced => {
+                println!("Replaced task `{}` in {}", emitted.name, path.display());
+            }
+        }
+        if config::document::validate_after_write(&path)? {
+            notice.emit(&cli.command);
+            std::process::exit(1);
+        }
+        notice.emit(&cli.command);
+        return Ok(());
+    }
+
     // Load config (supports local paths, URLs, and locator when `-c` omitted)
     let config_source = config::resolve_config_source(cli.config.as_deref(), &cwd)?;
     let app_config = config::load_config(&config_source)?;
@@ -256,7 +288,9 @@ fn resolve_existing_document(
 ) -> anyhow::Result<std::path::PathBuf> {
     if let Some(raw) = config_arg {
         if config::is_url(raw) {
-            anyhow::bail!("`add`/`remove` require a local Config document path, not a URL");
+            anyhow::bail!(
+                "`add`/`remove`/`replace` require a local Config document path, not a URL"
+            );
         }
         let path = config::resolve_config_path(Path::new(raw))?;
         return Ok(path);

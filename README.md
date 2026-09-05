@@ -68,14 +68,16 @@ cargo install machine_setup
 | wizard       | interactive Config document setup (TTY)  | `machine_setup wizard`               |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
 | remove task  | delete a Task (rewrites file; may drop comments) | `machine_setup remove task tools` |
+| replace task | upsert a Task stub (rewrites file; may drop comments) | `machine_setup replace task dotfiles` |
 | add recipe   | append a Task from an Authoring recipe   | `machine_setup add recipe git-repo --url … --target ~` |
+| replace recipe | upsert a Task from an Authoring recipe (rewrites file; may drop comments) | `machine_setup replace recipe git-repo --url … --target ~` |
 | schema       | print the Config JSON Schema to stdout   | `machine_setup schema`               |
 | schedule     | apply/remove OS timers for auto_update   | `machine_setup schedule apply`       |
 | completions  | generate shell completions               | `machine_setup completions zsh`      |
 
 By default (no `-c`), `machine_setup` looks for `machine_setup.yaml` / `.yml` / `.json` in the current directory, then at the git repository root. Explicit `-c` still accepts a path or URL. Supported formats are YAML and JSON.
 
-`init` always creates `./machine_setup.yaml` in the cwd when `-c` is omitted (it does not write into the git root). `add task` requires an existing file (`init` first) and refuses duplicate Task names. `remove task` rewrites the file via serde (comments may be lost); when other tasks depend on the target, the CLI prompts on a TTY or requires `--fix-deps` to strip those edges, and History for the removed Task is pruned. After `init` / `add` / `remove`, the Config document is validated automatically.
+`init` always creates `./machine_setup.yaml` in the cwd when `-c` is omitted (it does not write into the git root). `add task` requires an existing file (`init` first) and refuses duplicate Task names. `remove task` rewrites the file via serde (comments may be lost); when other tasks depend on the target, the CLI prompts on a TTY or requires `--fix-deps` to strip those edges, and History for the removed Task is pruned. `replace task` / `replace recipe` upsert a Task: if the name is missing, the CLI creates it with a warning; if it already exists, the CLI prompts on a TTY before overwriting (non-TTY overwrites with a notice). Replace also rewrites the file via serde (comments may be lost) but leaves History unchanged. After `init` / `add` / `remove` / `replace`, the Config document is validated automatically.
 
 ### Command line parameters
 

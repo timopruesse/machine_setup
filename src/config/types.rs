@@ -50,6 +50,18 @@ fn default_retry_delay() -> u64 {
     1
 }
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
+fn is_default_retry_delay(value: &u64) -> bool {
+    *value == default_retry_delay()
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Shell {
@@ -88,36 +100,54 @@ pub struct TaskConfig {
     pub commands: Vec<CommandEntry>,
 
     /// OS filter — omit to run on all OSes
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "OsFilter::is_all")]
     pub os: OsFilter,
 
     /// Run commands within this task in parallel
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub parallel: bool,
 
     /// Only run when all conditions are satisfied
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Conditions::is_empty")]
     pub only_if: Conditions,
 
     /// Skip when any condition is satisfied
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Conditions::is_empty")]
     pub skip_if: Conditions,
 
     /// Task names that must complete before this task runs
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends_on: Vec<String>,
 
     /// Number of retry attempts on failure (0 = no retry)
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub retry: u32,
 
     /// Seconds to wait between retry attempts (default: 1)
-    #[serde(default = "default_retry_delay")]
+    #[serde(
+        default = "default_retry_delay",
+        skip_serializing_if = "is_default_retry_delay"
+    )]
     pub retry_delay_secs: u64,
 
     /// Daily OS-timer auto-update (see `schedule apply`)
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_update: Option<AutoUpdateConfig>,
+}
+
+/// Default-empty task body for authoring stubs and recipe emitters.
+pub fn blank_task_config() -> TaskConfig {
+    TaskConfig {
+        commands: vec![],
+        os: OsFilter::All,
+        parallel: false,
+        only_if: Conditions::default(),
+        skip_if: Conditions::default(),
+        depends_on: vec![],
+        retry: 0,
+        retry_delay_secs: 1,
+        auto_update: None,
+    }
 }
 
 /// A command entry in the config. Each entry is a single-key map.
@@ -526,6 +556,18 @@ impl StringOrVec {
 
     pub fn as_mut_slice(&mut self) -> &mut [String] {
         &mut self.0
+    }
+}
+
+impl From<String> for StringOrVec {
+    fn from(s: String) -> Self {
+        StringOrVec(vec![s])
+    }
+}
+
+impl From<&str> for StringOrVec {
+    fn from(s: &str) -> Self {
+        StringOrVec(vec![s.to_string()])
     }
 }
 

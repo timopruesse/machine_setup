@@ -4,14 +4,17 @@
 //! CLI `add recipe` and the Config wizard both dispatch through this catalog.
 
 use crate::cli::RecipeCommand;
+use crate::config::os::{Os, OsFilter};
+use crate::config::types::{
+    blank_task_config, CloneArgs, CommandEntry, RunArgs, SymlinkArgs, TaskConfig,
+};
 use crate::error::{Error, Result};
 
-/// A Task ready to append under `tasks:` (already indented with two spaces).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A Task ready to append under `tasks:`.
+#[derive(Debug, Clone)]
 pub struct EmittedTask {
     pub name: String,
-    /// Full YAML block including the task key line, indented for nesting under `tasks:`.
-    pub yaml: String,
+    pub task: TaskConfig,
 }
 
 /// Parameters for the `dotfiles` recipe.
@@ -140,37 +143,45 @@ pub fn emit_from_cli(cmd: &RecipeCommand) -> Result<EmittedTask> {
 /// Emit `clone` (into `.`) + `symlink` (force; ignore includes `.cursor`).
 pub fn emit_dotfiles(p: &DotfilesParams<'_>) -> Result<EmittedTask> {
     crate::config::document::validate_task_name(p.name)?;
-    let mut ignore = p.ignore.clone();
-    if !ignore.contains(&DEFAULT_DOTFILES_IGNORE) {
-        ignore.insert(0, DEFAULT_DOTFILES_IGNORE);
+    let mut ignore: Vec<String> = p.ignore.iter().map(|s| (*s).to_string()).collect();
+    if !ignore.iter().any(|i| i == DEFAULT_DOTFILES_IGNORE) {
+        ignore.insert(0, DEFAULT_DOTFILES_IGNORE.to_string());
     }
-    let ignore_yaml = format_ignore_list(&ignore);
-    let yaml = format!(
-        "\n  # Authoring recipe: dotfiles\n  {name}:\n    commands:\n      - clone:\n          url: {url}\n          target: \".\"\n      - symlink:\n          src: {src}\n          target: {target}\n          force: true\n          ignore:\n{ignore}",
-        name = p.name,
-        url = quote_yaml(p.url),
-        src = quote_yaml(p.src),
-        target = quote_yaml(p.target),
-        ignore = ignore_yaml,
-    );
+    let task = TaskConfig {
+        commands: vec![
+            CommandEntry::Clone(CloneArgs {
+                url: p.url.to_string(),
+                target: ".".to_string(),
+            }),
+            CommandEntry::Symlink(SymlinkArgs {
+                src: p.src.to_string(),
+                target: p.target.to_string(),
+                ignore,
+                force: true,
+                sudo: false,
+            }),
+        ],
+        ..blank_task_config()
+    };
     Ok(EmittedTask {
         name: p.name.to_string(),
-        yaml,
+        task,
     })
 }
 
 /// Emit a single `clone` Command entry.
 pub fn emit_git_repo(p: &GitRepoParams<'_>) -> Result<EmittedTask> {
     crate::config::document::validate_task_name(p.name)?;
-    let yaml = format!(
-        "\n  # Authoring recipe: git-repo\n  {name}:\n    commands:\n      - clone:\n          url: {url}\n          target: {target}\n",
-        name = p.name,
-        url = quote_yaml(p.url),
-        target = quote_yaml(p.target),
-    );
+    let task = TaskConfig {
+        commands: vec![CommandEntry::Clone(CloneArgs {
+            url: p.url.to_string(),
+            target: p.target.to_string(),
+        })],
+        ..blank_task_config()
+    };
     Ok(EmittedTask {
         name: p.name.to_string(),
-        yaml,
+        task,
     })
 }
 
@@ -178,27 +189,23 @@ pub fn emit_git_repo(p: &GitRepoParams<'_>) -> Result<EmittedTask> {
 pub fn emit_brew_bundle(p: &BrewBundleParams<'_>) -> Result<EmittedTask> {
     crate::config::document::validate_task_name(p.name)?;
     let cmd = format!("brew bundle --file={}", shell_single_quote(p.file));
-    let yaml = format!(
-        "\n  # Authoring recipe: brew-bundle\n  {name}:\n    os: [macos]\n    commands:\n      - run:\n          install: {install}\n          update: {update}\n",
-        name = p.name,
-        install = quote_yaml(&cmd),
-        update = quote_yaml(&cmd),
-    );
+    let task = TaskConfig {
+        os: OsFilter::Multiple(vec![Os::Macos]),
+        commands: vec![CommandEntry::Run(RunArgs {
+            commands: Default::default(),
+            install: cmd.clone().into(),
+            update: cmd.into(),
+            uninstall: Default::default(),
+            shell: None,
+            env: Default::default(),
+            quiet: false,
+        })],
+        ..blank_task_config()
+    };
     Ok(EmittedTask {
         name: p.name.to_string(),
-        yaml,
+        task,
     })
-}
-
-fn format_ignore_list(items: &[&str]) -> String {
-    items
-        .iter()
-        .map(|i| format!("            - {}\n", quote_yaml(i)))
-        .collect()
-}
-
-fn quote_yaml(s: &str) -> String {
-    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 fn shell_single_quote(s: &str) -> String {
@@ -211,6 +218,78 @@ mod tests {
     use crate::config::document::{self, load_after_write};
     use crate::config::types::CommandEntry;
     use tempfile::tempdir;
+
+    #[test]
+    fn emit_git_repo_is_typed_clone() {
+        let emitted = emit_git_repo(&GitRepoParams {
+            name: "my-repo",
+            url: "https://github.com/user/repo.git",
+            target: "~/projects/repo",
+        })
+        .unwrap();
+        assert_eq!(emitted.name, "my-repo");
+        assert_eq!(emitted.task.commands.len(), 1);
+        match &emitted.task.commands[0] {
+            CommandEntry::Clone(a) => {
+                assert_eq!(a.url, "https://github.com/user/repo.git");
+                assert_eq!(a.target, "~/projects/repo");
+            }
+            other => panic!("expected Clone, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn emit_dotfiles_is_typed_clone_and_symlink() {
+        let emitted = emit_dotfiles(&DotfilesParams {
+            name: DEFAULT_DOTFILES_NAME,
+            url: "git@github.com:user/.dotfiles.git",
+            src: DEFAULT_DOTFILES_SRC,
+            target: DEFAULT_DOTFILES_TARGET,
+            ignore: vec![],
+        })
+        .unwrap();
+        assert_eq!(emitted.name, DEFAULT_DOTFILES_NAME);
+        assert_eq!(emitted.task.commands.len(), 2);
+        match &emitted.task.commands[0] {
+            CommandEntry::Clone(a) => {
+                assert_eq!(a.url, "git@github.com:user/.dotfiles.git");
+                assert_eq!(a.target, ".");
+            }
+            other => panic!("expected Clone, got {other:?}"),
+        }
+        match &emitted.task.commands[1] {
+            CommandEntry::Symlink(a) => {
+                assert_eq!(a.src, DEFAULT_DOTFILES_SRC);
+                assert_eq!(a.target, DEFAULT_DOTFILES_TARGET);
+                assert!(a.force);
+                assert!(a.ignore.iter().any(|i| i == ".cursor"));
+            }
+            other => panic!("expected Symlink, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn emit_brew_bundle_is_typed_macos_run() {
+        use crate::config::os::{Os, OsFilter};
+        let emitted = emit_brew_bundle(&BrewBundleParams {
+            name: DEFAULT_BREW_BUNDLE_NAME,
+            file: "./Brewfile",
+        })
+        .unwrap();
+        assert_eq!(emitted.name, DEFAULT_BREW_BUNDLE_NAME);
+        match &emitted.task.os {
+            OsFilter::Multiple(oses) => assert_eq!(oses.as_slice(), &[Os::Macos]),
+            OsFilter::Single(Os::Macos) => {}
+            other => panic!("expected macos filter, got {other:?}"),
+        }
+        match &emitted.task.commands[0] {
+            CommandEntry::Run(a) => {
+                assert_eq!(a.install.as_slice(), &["brew bundle --file='./Brewfile'"]);
+                assert_eq!(a.update.as_slice(), &["brew bundle --file='./Brewfile'"]);
+            }
+            other => panic!("expected Run, got {other:?}"),
+        }
+    }
 
     #[test]
     fn dotfiles_parses_as_clone_and_symlink() {

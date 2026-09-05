@@ -1,20 +1,21 @@
 //! Structural Config document edits (serde rewrite).
 //!
-//! Append-only authoring stays in `document`. Upsert is still deferred (ADR-0008).
+//! Append-only authoring stays in `document`. Upsert via `replace_task`.
 
 use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
 
-use dialoguer::Select;
+use dialoguer::{Confirm, Select};
 
 use crate::error::{Error, Result};
 use crate::utils::path::expand_path;
 
+use super::document;
 use super::graph::TaskGraph;
 use super::history::History;
 use super::load_config;
-use super::types::AppConfig;
+use super::types::{AppConfig, TaskConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixDepsMode {
@@ -56,17 +57,76 @@ pub fn apply_remove(config: &mut AppConfig, name: &str, strip_deps: bool) -> Res
     Ok(())
 }
 
+const YAML_ONLY_STRUCTURAL_EDITS: &str =
+    "structural edits currently support YAML config documents only";
+
 fn ensure_yaml_document(path: &Path) -> Result<()> {
     if path
         .extension()
         .and_then(|e| e.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
     {
-        return Err(Error::PathError(
-            "remove currently supports YAML config documents only".to_string(),
-        ));
+        return Err(Error::PathError(YAML_ONLY_STRUCTURAL_EDITS.to_string()));
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ReplaceMode {
+    /// Create always; if exists: Confirm on TTY, else overwrite.
+    Auto,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplaceOutcome {
+    Created,
+    Replaced,
+}
+
+pub fn apply_replace(config: &mut AppConfig, name: &str, task: TaskConfig) -> ReplaceOutcome {
+    let outcome = if config.tasks.contains_key(name) {
+        ReplaceOutcome::Replaced
+    } else {
+        ReplaceOutcome::Created
+    };
+    config.tasks.insert(name.to_string(), Arc::new(task));
+    outcome
+}
+
+pub fn replace_task(
+    path: &Path,
+    emitted: &crate::config::recipes::EmittedTask,
+    mode: ReplaceMode,
+) -> Result<ReplaceOutcome> {
+    ensure_yaml_document(path)?;
+    if !path.is_file() {
+        return Err(Error::ConfigNotFound(path.to_path_buf()));
+    }
+    document::validate_task_name(&emitted.name)?;
+    let mut config = load_config(path.to_str().unwrap_or_default())?;
+    let exists = config.tasks.contains_key(&emitted.name);
+    if exists {
+        match mode {
+            ReplaceMode::Auto => {
+                if std::io::stdin().is_terminal() {
+                    let ok = Confirm::new()
+                        .with_prompt(format!(
+                            "Task `{}` already exists. Replace it?",
+                            emitted.name
+                        ))
+                        .default(false)
+                        .interact()
+                        .map_err(|e| Error::PromptFailed(e.to_string()))?;
+                    if !ok {
+                        return Err(Error::Aborted);
+                    }
+                }
+            }
+        }
+    }
+    let outcome = apply_replace(&mut config, &emitted.name, emitted.task.clone());
+    write_config(path, &config)?;
+    Ok(outcome)
 }
 
 pub fn write_config(path: &Path, config: &AppConfig) -> Result<()> {
@@ -305,5 +365,102 @@ tasks:
         let err = remove_task(&path, "gone", FixDepsMode::Force).unwrap_err();
         assert!(matches!(err, Error::PathError(_)));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn replace_creates_when_missing() {
+        use crate::config::recipes::{self, GitRepoParams};
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("machine_setup.yaml");
+        document::init(&path).unwrap();
+        let emitted = recipes::emit_git_repo(&GitRepoParams {
+            name: "repo",
+            url: "https://example.com/r.git",
+            target: "~/r",
+        })
+        .unwrap();
+        let outcome = replace_task(&path, &emitted, ReplaceMode::Auto).unwrap();
+        assert!(matches!(outcome, ReplaceOutcome::Created));
+        let cfg = load_after_write(&path).unwrap();
+        assert!(cfg.tasks.contains_key("repo"));
+    }
+
+    #[test]
+    fn replace_overwrites_in_place_preserving_order() {
+        use crate::config::recipes::{self, GitRepoParams};
+        use crate::config::types::CommandEntry;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("machine_setup.yaml");
+        document::init(&path).unwrap();
+        document::add_task(&path, "a").unwrap();
+        document::add_task(&path, "target").unwrap();
+        document::add_task(&path, "c").unwrap();
+        let emitted = recipes::emit_git_repo(&GitRepoParams {
+            name: "target",
+            url: "https://example.com/new.git",
+            target: "~/new",
+        })
+        .unwrap();
+        replace_task(&path, &emitted, ReplaceMode::Auto).unwrap();
+        let cfg = load_after_write(&path).unwrap();
+        let keys: Vec<_> = cfg.tasks.keys().cloned().collect();
+        assert_eq!(keys, vec!["a", "target", "c"]);
+        assert!(matches!(
+            cfg.tasks["target"].commands[0],
+            CommandEntry::Clone(_)
+        ));
+    }
+
+    #[test]
+    fn replace_refuses_json() {
+        use crate::config::recipes::{self, GitRepoParams};
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("machine_setup.json");
+        let json = r#"{"tasks":{"gone":{"commands":[]}}}"#;
+        std::fs::write(&path, json).unwrap();
+        let emitted = recipes::emit_git_repo(&GitRepoParams {
+            name: "gone",
+            url: "https://example.com/r.git",
+            target: "~/r",
+        })
+        .unwrap();
+        let before = std::fs::read_to_string(&path).unwrap();
+        let err = replace_task(&path, &emitted, ReplaceMode::Auto).unwrap_err();
+        assert!(matches!(err, Error::PathError(_)));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn replace_does_not_prune_history() {
+        use crate::config::recipes::{self, GitRepoParams};
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("machine_setup.yaml");
+        let hist_dir = dir.path().join("hist");
+        std::fs::create_dir_all(&hist_dir).unwrap();
+        write_yaml(
+            &path,
+            &format!(
+                "temp_dir: {}\ntasks:\n  target:\n    commands: []\n",
+                hist_dir.display()
+            ),
+        );
+        let mut h = History::default();
+        h.mark_installed("target");
+        h.save(&hist_dir).unwrap();
+
+        let emitted = recipes::emit_git_repo(&GitRepoParams {
+            name: "target",
+            url: "https://example.com/new.git",
+            target: "~/new",
+        })
+        .unwrap();
+        replace_task(&path, &emitted, ReplaceMode::Auto).unwrap();
+
+        let h = History::load(&hist_dir).unwrap();
+        assert!(h.tasks.contains_key("target"));
     }
 }

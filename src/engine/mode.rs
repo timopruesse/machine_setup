@@ -32,6 +32,7 @@ impl Mode {
             | Command::Wizard
             | Command::Add { .. }
             | Command::Remove { .. }
+            | Command::Replace { .. }
             | Command::Schedule { .. }
             | Command::Schema
             | Command::Completions { .. } => None,
