@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::config::graph::TaskGraph;
 use crate::config::history::History;
@@ -22,6 +23,8 @@ pub struct TaskRunner {
     gate: Arc<ConcurrencyGate>,
     config_dir: Arc<PathBuf>,
     depth: usize,
+    /// Lazily built executors per task name — one `Arc<Executor>` per Command entry.
+    executor_cache: Mutex<HashMap<String, Arc<[Arc<Executor>]>>>,
 }
 
 /// Running counts of task outcomes across all layers of a run.
@@ -42,6 +45,7 @@ impl TaskRunner {
             gate,
             config_dir: Arc::new(std::env::current_dir().unwrap_or_default()),
             depth: 0,
+            executor_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -171,8 +175,9 @@ impl TaskRunner {
 
             let ctx = self.create_context(name, Arc::clone(&temp_dir));
             let name = Arc::clone(&ctx.task_name);
+            let executors = self.executors_for_task(name.as_ref(), task_config.as_ref());
             handles.push(tokio::spawn(async move {
-                let result = run_task_with_retry(&task_config, &ctx).await;
+                let result = run_task_with_retry(&task_config, &ctx, executors).await;
                 (name, result)
             }));
         }
@@ -233,14 +238,53 @@ impl TaskRunner {
     fn send(&self, event: TaskEvent) {
         TaskEventSink::emit(self.events.as_ref(), event);
     }
+
+    /// Return cached executors for `task_name`, building them on first access.
+    fn executors_for_task(&self, task_name: &str, task: &TaskConfig) -> Arc<[Arc<Executor>]> {
+        #[expect(
+            clippy::expect_used,
+            reason = "executor cache mutex is never poisoned in normal operation"
+        )]
+        let mut cache = self
+            .executor_cache
+            .lock()
+            .expect("executor cache mutex is never poisoned in normal operation");
+        if let Some(cached) = cache.get(task_name) {
+            return Arc::clone(cached);
+        }
+        let executors: Arc<[Arc<Executor>]> = task
+            .commands
+            .iter()
+            .map(|entry| Arc::new(create_executor(entry)))
+            .collect::<Vec<_>>()
+            .into();
+        cache.insert(task_name.to_string(), Arc::clone(&executors));
+        executors
+    }
+
+    #[cfg(test)]
+    fn executor_cache_len(&self) -> usize {
+        #[expect(
+            clippy::expect_used,
+            reason = "executor cache mutex is never poisoned in normal operation"
+        )]
+        self.executor_cache
+            .lock()
+            .expect("executor cache mutex is never poisoned in normal operation")
+            .len()
+    }
 }
 
 /// Run a task with retry support.
-async fn run_task_with_retry(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
+async fn run_task_with_retry(
+    task: &TaskConfig,
+    ctx: &CommandContext,
+    executors: Arc<[Arc<Executor>]>,
+) -> Result<()> {
     let max_attempts = task.retry + 1;
 
     for attempt in 1..=max_attempts {
-        match run_task(task, ctx).await {
+        match run_task(task, ctx, Arc::clone(&executors)).await {
             Ok(()) => return Ok(()),
             Err(e) if attempt < max_attempts => {
                 ctx.emit(TaskEvent::TaskRetry {
@@ -258,7 +302,11 @@ async fn run_task_with_retry(task: &TaskConfig, ctx: &CommandContext) -> Result<
     unreachable!()
 }
 
-async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
+async fn run_task(
+    task: &TaskConfig,
+    ctx: &CommandContext,
+    executors: Arc<[Arc<Executor>]>,
+) -> Result<()> {
     ctx.emit(TaskEvent::TaskStarted {
         task_name: Arc::clone(&ctx.task_name),
         command_count: task.commands.len(),
@@ -272,7 +320,7 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
 
         for (i, entry) in task.commands.iter().enumerate() {
             let command_index = i + 1;
-            let executor = create_executor(entry);
+            let executor = Arc::clone(&executors[i]);
             let desc = catalog::description(entry);
             let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
@@ -317,7 +365,7 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
     } else {
         for (i, entry) in task.commands.iter().enumerate() {
             let command_index = i + 1;
-            let executor = create_executor(entry);
+            let executor = &executors[i];
             let desc = catalog::description(entry);
             let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
@@ -327,7 +375,7 @@ async fn run_task(task: &TaskConfig, ctx: &CommandContext) -> Result<()> {
                 command_total,
             });
 
-            match execute_with_gate(lane, &executor, ctx, &desc, command_index, command_total).await
+            match execute_with_gate(lane, executor, ctx, &desc, command_index, command_total).await
             {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
@@ -390,5 +438,96 @@ async fn execute_with_gate(
         executor.execute(ctx).await
     } else {
         executor.execute(ctx).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::types::{CommandEntry, RunArgs, Shell, StringOrVec, TaskConfig};
+    use crate::engine::sink::NullSink;
+    use indexmap::IndexMap;
+    use std::collections::HashMap;
+    use tempfile::tempdir;
+
+    fn run_entry(cmd: &str) -> CommandEntry {
+        CommandEntry::Run(RunArgs {
+            commands: cmd.into(),
+            install: StringOrVec::default(),
+            update: StringOrVec::default(),
+            uninstall: StringOrVec::default(),
+            shell: None,
+            env: HashMap::new(),
+            quiet: false,
+        })
+    }
+
+    fn task_with(commands: Vec<CommandEntry>, parallel: bool) -> TaskConfig {
+        TaskConfig {
+            commands,
+            os: Default::default(),
+            parallel,
+            only_if: Default::default(),
+            skip_if: Default::default(),
+            depends_on: Default::default(),
+            retry: 0,
+            retry_delay_secs: 1,
+            auto_update: None,
+        }
+    }
+
+    fn make_config(tasks: IndexMap<String, TaskConfig>) -> AppConfig {
+        AppConfig {
+            tasks: tasks
+                .into_iter()
+                .map(|(name, task)| (name, Arc::new(task)))
+                .collect(),
+            temp_dir: "~/.machine_setup".to_string(),
+            default_shell: Shell::Bash,
+            parallel: false,
+            num_threads: None,
+            check_for_updates: true,
+        }
+    }
+
+    #[test]
+    fn executors_for_task_caches_same_arc_pointers() {
+        let mut tasks = IndexMap::new();
+        tasks.insert(
+            "demo".to_string(),
+            task_with(vec![run_entry("echo one"), run_entry("echo two")], false),
+        );
+        let runner = TaskRunner::new(make_config(tasks), Mode::Install, NullSink::shared());
+
+        let first = runner.executors_for_task("demo", runner.config.tasks["demo"].as_ref());
+        let second = runner.executors_for_task("demo", runner.config.tasks["demo"].as_ref());
+
+        assert_eq!(first.len(), 2);
+        assert!(Arc::ptr_eq(&first[0], &second[0]));
+        assert!(Arc::ptr_eq(&first[1], &second[1]));
+        assert_eq!(runner.executor_cache_len(), 1);
+    }
+
+    #[tokio::test]
+    async fn run_populates_executor_cache_and_runs_parallel_and_sequential() {
+        let dir = tempdir().unwrap();
+        let mut tasks = IndexMap::new();
+        tasks.insert(
+            "sequential".to_string(),
+            task_with(vec![run_entry("echo seq")], false),
+        );
+        tasks.insert(
+            "parallel".to_string(),
+            task_with(vec![run_entry("echo one"), run_entry("echo two")], true),
+        );
+        let mut config = make_config(tasks);
+        config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
+
+        let runner = TaskRunner::new(config, Mode::Install, NullSink::shared())
+            .with_config_dir(dir.path().to_path_buf());
+
+        runner.run_all(true).await.unwrap();
+
+        assert_eq!(runner.executor_cache_len(), 2);
     }
 }
