@@ -8,7 +8,11 @@ remains in `config::document` (`init`, `add task`, recipes, wizard). Recipe and 
 stub emitters now build typed `TaskConfig` (`EmittedTask { name, task }`); `add`
 serializes a YAML fragment and appends (still refuses duplicate names).
 
-**Still deferred:** comment-preserving YAML surgery.
+**Still deferred:** comment-preserving YAML surgery. A dedicated comment-aware
+YAML crate was considered (2026-09-05 architecture review) and **parked**: it
+would not simplify the serde load path the Runner already uses, and would add
+either comment wrappers on domain types or a second YAML stack for authoring
+only. Serde rewrite remains the accepted tradeoff for `document_edit`.
 
 ## Decision
 

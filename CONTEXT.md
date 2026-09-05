@@ -11,9 +11,11 @@ aliases) in code, comments, and reviews.
 
 **Config document**:
 The user-authored YAML/JSON file that declares root settings and Tasks. Distinct
-from the loaded in-memory config and from History. Authoring mutates it only by
-creating a new file or appending a new Task — not by rewriting existing Tasks
-(ADR-0008).
+from the loaded in-memory config and from History. Authoring creates (`init`),
+appends (`add`), or structurally rewrites via serde (`remove`, `replace` in
+`document_edit` — comments/formatting may change; ADR-0008). Comment-preserving
+YAML edit stays deferred (a dedicated crate would not simplify the serde load
+path used by the Runner).
 _Avoid_: setup file, machine file, config source.
 
 **Config schema**:
@@ -75,7 +77,10 @@ _Avoid_: engine (too broad), executor (means something narrower here).
 The thing that runs one command entry for the current mode — one per command
 entry type. Concrete kinds implement the `CommandExecutor` interface; the
 catalog's `create_executor` returns the closed `Executor` enum (static
-dispatch — ADR-0006, no plugin `dyn` until a second adapter exists).
+dispatch — ADR-0006, no plugin `dyn` until a second adapter exists). The
+Runner may **lazy-cache** `Arc<Executor>` lists per Task on first run
+(`TaskRunner`-local; Config document types stay pure data) so parallel
+Command entries share refcounts instead of re-cloning args each time.
 _Avoid_: handler, command (see Flagged ambiguities).
 
 **Command kind catalog**:
@@ -139,7 +144,10 @@ concurrency — see **Concurrency gate**).
 **Task event sink**:
 The seam for emitting **Task events**. Adapters: **ChannelSink** (mpsc →
 TUI/plain) and **NullSink** (benches). The Runner and `CommandContext` both
-emit through this interface — not a raw sender.
+emit through this interface — not a raw sender. Subprocess line readers may
+coalesce stdout/stderr into a **`CommandOutputBatch`** Task event before
+emit (single-line `CommandOutput` remains for sparse progress); batching is
+an engine policy, not a third sink adapter.
 _Avoid_: logger, event bus, observer.
 
 **Concurrency gate**:
@@ -148,10 +156,10 @@ The Runner's global cap on in-flight leaf Command executor work, driven by
 `machine_setup` does not hold a permit so nested Sub-configs can share the
 gate. Sync File ops work runs via `spawn_blocking` so it does not block Tokio
 workers. Owns a shared Rayon FS apply pool (same size as the permit limit),
-created lazily on first tree-apply use. Does **not** order Tasks by
-dependency — that remains the **Task graph**. Also owns **Exclusive lanes**
-for intra-run serialization of Command entries that share an exclusive OS
-resource (e.g. apt); it does not wait on locks held outside this process.
+created lazily on first tree-apply use. Also owns **Exclusive lanes** (package
+managers) and a separate **tree-apply** K=1 semaphore so only one
+`pool.install` runs at a time (tree-apply does not reuse Exclusive lanes).
+Does **not** order Tasks by dependency — that remains the **Task graph**.
 _Avoid_: scheduler (do not call the FS pool the "scheduler").
 
 **Exclusive lane**:
@@ -181,7 +189,9 @@ The privilege seam for filesystem primitives (`mkdir`, copy, symlink, removal),
 with two adapters — **DirectFs** (`std::fs`) and **SudoFs** (`sudo`) — chosen
 once per command from its `sudo` flag (`FileOps`). SudoFs may script-batch
 per-file ops and flush once; eligible directory `copy` installs may use a bulk
-privileged path. Symlink sudo stays script-batched.
+privileged path. Symlink sudo stays script-batched. Tree-shaped work also
+exposes a shared **`apply_tree`** entry (walk/chunk/apply) that takes an
+already-selected File ops adapter — privilege policy stays with the executor.
 _Avoid_: fs helper, file utils.
 
 **Tree materialization**:
@@ -191,7 +201,11 @@ a per-file operation. Ignore patterns (exact component names, `foo/bar` path
 sequences, glob-lite `*`/`?` within a component — not substring-anywhere) skip
 matching files and do not descend into matching directories (the walk root is
 never ignored). Directory installs mkdir sequentially, then apply files on the
-Concurrency gate's shared Rayon pool (ADR-0004).
+Concurrency gate's shared Rayon pool (ADR-0004). Peak PathBuf memory is capped
+by **chunked apply**: a single walk accumulates paths until the PathBuf list
+estimate would exceed the `tree_measure` gate, then flushes/applies and
+continues (whole trees under the gate stay one chunk). Applies to all
+list-collecting Tree materialization paths (DirectFs and SudoFs).
 _Avoid_: file walker, copier.
 
 **Tree-op driver**:

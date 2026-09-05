@@ -1,8 +1,8 @@
 # One Concurrency gate for Command entries (shared with nested Sub-configs)
 
 Amended by ADR-0010: the gate also owns **Exclusive lanes** (intra-run
-package-manager families). That is exclusivity, not a second width knob;
-tree-apply admission stays deferred below.
+package-manager families). That is exclusivity for OS package tools, not
+tree-apply admission.
 
 `num_threads` caps in-flight leaf Command executor work under one semaphore
 (default: physical CPUs − 1). Permits are acquired per Command entry — not per
@@ -17,10 +17,11 @@ owns a shared Rayon pool of the same size for in-tree DirectFs file apply
 (ADR-0004) so sibling commands do not each spawn a private worker set. The
 pool is created lazily on first tree-apply use, not when the gate is built.
 
-## Deferred: separate tree-apply admission
+## Tree-apply admission (accepted 2026-09-05 — not yet implemented)
 
-Leaf permits and the shared Rayon pool stay one width today. A second admission
-knob (or exclusive tree-apply slot) so multiple `pool.install` callers cannot
-oversubscribe the same workers is **deferred** until Command bench
-(`parallel_two_copy_tasks_1k` or a successor) shows contention or unfairness
-worth the complexity. Do not split the knobs preemptively.
+A second semaphore on the Concurrency gate admits **at most one** concurrent
+tree `pool.install` (K=1). Leaf Command permits and Exclusive lanes are
+unchanged. This prevents sibling tree Command entries from oversubscribing the
+shared Rayon pool. Splitting pool width or reusing package-manager Exclusive
+lanes for trees was rejected. K>1 remains a possible later knob; default is
+exclusive tree-apply.
