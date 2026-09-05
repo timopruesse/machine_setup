@@ -98,6 +98,7 @@ fn install(src: &Path, target: &Path, kind: &dyn TreeOpKind, ctx: &CommandContex
     let ops = fs_ops::select(kind.sudo());
     let progress = FileProgress::new(ctx, kind.progress_install());
     let pool = kind.install_pool(ctx);
+    let _tree_apply = ctx.gate.acquire_tree_apply();
     fs_ops::apply_tree_install(
         ops.as_ref(),
         src,
@@ -115,6 +116,7 @@ fn uninstall(src: &Path, target: &Path, kind: &dyn TreeOpKind, ctx: &CommandCont
     let ops = fs_ops::select(kind.sudo());
     let progress = FileProgress::new(ctx, kind.progress_uninstall());
     let pool = kind.uninstall_pool(ctx);
+    let _tree_apply = ctx.gate.acquire_tree_apply();
     fs_ops::apply_tree_uninstall(ops.as_ref(), src, target, kind.ignore(), pool, |dest| {
         kind.on_uninstall_file(ops.as_ref(), dest, &progress)
     })?;

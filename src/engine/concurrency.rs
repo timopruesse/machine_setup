@@ -3,9 +3,15 @@
 //! See ADR-0003. Does not order Tasks by dependency (that is the Task graph).
 //! Also owns the shared Rayon pool used for in-tree file apply (ADR-0004);
 //! the pool is created lazily on first [`ConcurrencyGate::pool`] call.
+//!
+//! A separate **tree-apply** admission lock (K=1) serializes concurrent
+//! [`crate::engine::commands::fs_ops::apply_tree_install`] /
+//! [`crate::engine::commands::fs_ops::apply_tree_uninstall`] walks so sibling
+//! tree Command entries do not oversubscribe the shared pool. Leaf Command
+//! permits and Exclusive lanes are unchanged; tree-apply does not reuse lanes.
 
 use std::fmt;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use rayon::ThreadPool;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -62,6 +68,8 @@ pub struct ConcurrencyGate {
     pool: Arc<OnceLock<ThreadPool>>,
     /// One permit per Exclusive lane family (intra-run serialization).
     lanes: [Arc<Semaphore>; ExclusiveLane::COUNT],
+    /// At most one in-tree walk + flush (`pool.install`) at a time (K=1).
+    tree_apply: Arc<Mutex<()>>,
 }
 
 impl ConcurrencyGate {
@@ -75,6 +83,7 @@ impl ConcurrencyGate {
             limit,
             pool: Arc::new(OnceLock::new()),
             lanes: lane_semaphores(),
+            tree_apply: Arc::new(Mutex::new(())),
         }
     }
 
@@ -114,6 +123,19 @@ impl ConcurrencyGate {
             .acquire_owned()
             .await
             .expect("Exclusive lane semaphore is never closed")
+    }
+
+    /// Acquire tree-apply admission (sync — callers run on `spawn_blocking`).
+    ///
+    /// Held for the whole walk + flush of one tree Command entry, not per chunk.
+    pub fn acquire_tree_apply(&self) -> std::sync::MutexGuard<'_, ()> {
+        #[expect(
+            clippy::expect_used,
+            reason = "tree_apply mutex is never poisoned in normal operation"
+        )]
+        self.tree_apply
+            .lock()
+            .expect("tree_apply mutex is never poisoned in normal operation")
     }
 }
 
@@ -210,5 +232,33 @@ mod tests {
         assert!(!waiter.is_finished());
         let _permit = gate.acquire().await;
         waiter.abort();
+    }
+
+    #[test]
+    fn tree_apply_serializes_concurrent_holders() {
+        // Two parallel tree Command entries (e.g. `parallel_two_copy` in
+        // command_bench) serialize `pool.install` — only one walk+flush at a time.
+        let gate = Arc::new(ConcurrencyGate::from_num_threads(Some(2)));
+        let gate2 = Arc::clone(&gate);
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let _held = gate.acquire_tree_apply();
+        let handle = std::thread::spawn(move || {
+            let _guard = gate2.acquire_tree_apply();
+            tx.send(()).unwrap();
+        });
+
+        assert!(rx.try_recv().is_err());
+        drop(_held);
+        rx.recv_timeout(std::time::Duration::from_secs(1))
+            .expect("second thread should acquire after first drops");
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn tree_apply_sequential_acquire_succeeds() {
+        let gate = ConcurrencyGate::from_num_threads(Some(2));
+        drop(gate.acquire_tree_apply());
+        drop(gate.acquire_tree_apply());
     }
 }
