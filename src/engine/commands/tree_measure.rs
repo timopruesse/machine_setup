@@ -7,6 +7,8 @@ pub const CRITERION_LARGE_FILES: usize = 10_000;
 pub const MEMORY_HARNESS_FILES: usize = 100_000;
 pub const PEAK_RSS_GATE_MIB: f64 = 256.0;
 pub const PATHBUF_ESTIMATE_GATE_MIB: f64 = 64.0;
+/// Default per-PathBuf byte length when the chunk buffer is empty (harness docs).
+pub const DEFAULT_AVG_PATH_BYTES: f64 = 100.0;
 
 pub fn parse_bench_tree_size(raw: Option<&str>) -> Result<usize, String> {
     match raw.map(str::trim).filter(|s| !s.is_empty()) {
@@ -23,6 +25,30 @@ pub fn parse_bench_tree_size(raw: Option<&str>) -> Result<usize, String> {
 pub fn pathbuf_list_estimate_mib(n_files: usize, avg_path_bytes: f64) -> f64 {
     let bytes = (n_files as f64) * 2.0 * avg_path_bytes;
     bytes / (1024.0 * 1024.0)
+}
+
+/// Estimate MiB for `n_paths` single-PathBuf payloads (uninstall dest list).
+pub fn pathbuf_vec_estimate_mib(n_paths: usize, avg_path_bytes: f64) -> f64 {
+    let bytes = (n_paths as f64) * avg_path_bytes;
+    bytes / (1024.0 * 1024.0)
+}
+
+/// True when adding one more install file pair would reach or exceed `gate_mib`.
+pub fn install_chunk_would_exceed_gate(
+    n_files_after_add: usize,
+    avg_path_bytes: f64,
+    gate_mib: f64,
+) -> bool {
+    pathbuf_list_estimate_mib(n_files_after_add, avg_path_bytes) >= gate_mib
+}
+
+/// True when adding one more uninstall dest would reach or exceed `gate_mib`.
+pub fn uninstall_chunk_would_exceed_gate(
+    n_dests_after_add: usize,
+    avg_path_bytes: f64,
+    gate_mib: f64,
+) -> bool {
+    pathbuf_vec_estimate_mib(n_dests_after_add, avg_path_bytes) >= gate_mib
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,7 +108,11 @@ pub fn peak_rss_mib() -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{gate_verdict, parse_bench_tree_size, pathbuf_list_estimate_mib, GateVerdict};
+    use super::{
+        gate_verdict, install_chunk_would_exceed_gate, parse_bench_tree_size,
+        pathbuf_list_estimate_mib, pathbuf_vec_estimate_mib, uninstall_chunk_would_exceed_gate,
+        GateVerdict, DEFAULT_AVG_PATH_BYTES, PATHBUF_ESTIMATE_GATE_MIB,
+    };
 
     #[test]
     fn parse_default_and_allowed() {
@@ -103,6 +133,54 @@ mod tests {
         // 100_000 files * 2 paths * 100 bytes = 20_000_000 bytes ≈ 19.07 MiB
         let mib = pathbuf_list_estimate_mib(100_000, 100.0);
         assert!((mib - 20_000_000.0 / (1024.0 * 1024.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn pathbuf_vec_estimate_scales() {
+        let mib = pathbuf_vec_estimate_mib(100_000, 100.0);
+        assert!((mib - 10_000_000.0 / (1024.0 * 1024.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn install_flush_predicate_uses_gate() {
+        let avg = DEFAULT_AVG_PATH_BYTES;
+        assert!(!install_chunk_would_exceed_gate(
+            1,
+            avg,
+            PATHBUF_ESTIMATE_GATE_MIB
+        ));
+        // 100k files * 2 * 100 bytes ≈ 19 MiB — under 64 MiB gate
+        assert!(!install_chunk_would_exceed_gate(
+            100_000,
+            avg,
+            PATHBUF_ESTIMATE_GATE_MIB
+        ));
+        // 400k files would exceed 64 MiB at avg 100
+        assert!(install_chunk_would_exceed_gate(
+            400_000,
+            avg,
+            PATHBUF_ESTIMATE_GATE_MIB
+        ));
+    }
+
+    #[test]
+    fn uninstall_flush_predicate_uses_gate() {
+        let avg = DEFAULT_AVG_PATH_BYTES;
+        assert!(!uninstall_chunk_would_exceed_gate(
+            1,
+            avg,
+            PATHBUF_ESTIMATE_GATE_MIB
+        ));
+        assert!(!uninstall_chunk_would_exceed_gate(
+            200_000,
+            avg,
+            PATHBUF_ESTIMATE_GATE_MIB
+        ));
+        assert!(uninstall_chunk_would_exceed_gate(
+            700_000,
+            avg,
+            PATHBUF_ESTIMATE_GATE_MIB
+        ));
     }
 
     #[test]

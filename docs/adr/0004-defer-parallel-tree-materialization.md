@@ -10,7 +10,7 @@ batch on flush). Symlink stays sequential (metadata-cheap) — remeasured 2026-0
 (DirectFs 1k-file install: parallel ~2.5× slower than sequential). No second
 concurrency knob.
 
-## Chunked file lists (accepted 2026-09-05 — not yet implemented)
+## Chunked file lists (accepted 2026-09-05 — implemented)
 
 **Decision:** land **hybrid single-pass capped collect** inside Tree
 materialization for **all** list-collecting paths (DirectFs/SudoFs copy and

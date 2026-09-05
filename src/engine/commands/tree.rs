@@ -15,6 +15,10 @@
 //! Directory installs create parents sequentially (WalkDir order), then apply
 //! files on the shared ConcurrencyGate Rayon pool (ADR-0004). Small trees and
 //! single-threaded pools stay sequential. No second concurrency knob.
+//!
+//! Large trees use **chunked apply**: during the walk, file paths accumulate
+//! until the PathBuf list estimate would reach [`PATHBUF_ESTIMATE_GATE_MIB`],
+//! then that chunk is applied and cleared; trees under the gate stay one chunk.
 
 use std::path::{Path, PathBuf};
 
@@ -26,9 +30,72 @@ use crate::utils::path::walk_relative;
 
 use super::fs_ops::FileOps;
 use super::ignore;
+use super::tree_measure::{
+    install_chunk_would_exceed_gate, uninstall_chunk_would_exceed_gate, DEFAULT_AVG_PATH_BYTES,
+    PATHBUF_ESTIMATE_GATE_MIB,
+};
 
 /// Below this many files, thread-pool apply costs more than it saves.
 const PARALLEL_FILE_THRESHOLD: usize = 32;
+
+/// Running average of PathBuf byte lengths for chunk-size estimates.
+struct PathByteAvg {
+    total_bytes: usize,
+    count: usize,
+}
+
+impl PathByteAvg {
+    fn new() -> Self {
+        Self {
+            total_bytes: 0,
+            count: 0,
+        }
+    }
+
+    fn avg(&self) -> f64 {
+        if self.count == 0 {
+            DEFAULT_AVG_PATH_BYTES
+        } else {
+            self.total_bytes as f64 / self.count as f64
+        }
+    }
+
+    fn record(&mut self, path: &Path) {
+        self.total_bytes += path.as_os_str().len();
+        self.count += 1;
+    }
+
+    fn record_pair(&mut self, src: &Path, dest: &Path) {
+        self.record(src);
+        self.record(dest);
+    }
+
+    fn clear(&mut self) {
+        self.total_bytes = 0;
+        self.count = 0;
+    }
+}
+
+/// PathBuf estimate gate and optional flush counter (test instrumentation).
+pub(crate) struct ChunkApplyConfig<'a> {
+    gate_mib: f64,
+    flush_count: Option<&'a std::sync::atomic::AtomicUsize>,
+}
+
+impl ChunkApplyConfig<'_> {
+    fn production() -> ChunkApplyConfig<'static> {
+        ChunkApplyConfig {
+            gate_mib: PATHBUF_ESTIMATE_GATE_MIB,
+            flush_count: None,
+        }
+    }
+
+    fn note_flush(&self) {
+        if let Some(counter) = self.flush_count {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
 
 /// Where a single source file lands, and which directory (if any) must exist
 /// before it is placed there.
@@ -99,8 +166,34 @@ pub fn install_tree_with_pool<F, E>(
     target: &Path,
     ignore: &[String],
     pool: Option<&ThreadPool>,
+    ensure_dir: E,
+    on_file: F,
+) -> Result<()>
+where
+    E: FnMut(&Path) -> Result<()>,
+    F: Fn(&Path, &Path) -> Result<()> + Sync,
+{
+    install_tree_with_pool_gated(
+        src,
+        target,
+        ignore,
+        pool,
+        ensure_dir,
+        on_file,
+        ChunkApplyConfig::production(),
+    )
+}
+
+/// Like [`install_tree_with_pool`], with a configurable PathBuf estimate gate
+/// (MiB) for chunked apply.
+pub(crate) fn install_tree_with_pool_gated<F, E>(
+    src: &Path,
+    target: &Path,
+    ignore: &[String],
+    pool: Option<&ThreadPool>,
     mut ensure_dir: E,
     on_file: F,
+    chunk: ChunkApplyConfig<'_>,
 ) -> Result<()>
 where
     E: FnMut(&Path) -> Result<()>,
@@ -116,6 +209,7 @@ where
 
     ensure_dir(target)?;
     let mut files = Vec::new();
+    let mut path_avg = PathByteAvg::new();
     walk_relative(
         src,
         target,
@@ -124,13 +218,30 @@ where
             if entry.file_type().is_dir() {
                 ensure_dir(dest)
             } else {
-                files.push((entry.path().to_path_buf(), dest.to_path_buf()));
+                let src_path = entry.path();
+                if !files.is_empty()
+                    && install_chunk_would_exceed_gate(
+                        files.len() + 1,
+                        path_avg.avg(),
+                        chunk.gate_mib,
+                    )
+                {
+                    apply_files(pool, &files, &on_file)?;
+                    chunk.note_flush();
+                    files.clear();
+                    path_avg.clear();
+                }
+                path_avg.record_pair(src_path, dest);
+                files.push((src_path.to_path_buf(), dest.to_path_buf()));
                 Ok(())
             }
         },
     )?;
 
-    apply_files(pool, &files, &on_file)
+    if !files.is_empty() {
+        apply_files(pool, &files, &on_file)?;
+    }
+    Ok(())
 }
 
 /// Ensure `path` is a real directory — never leave a directory symlink in place.
@@ -174,25 +285,65 @@ pub fn uninstall_tree_with_pool<F>(
 where
     F: Fn(&Path) -> Result<()> + Sync,
 {
+    uninstall_tree_with_pool_gated(
+        src,
+        target,
+        ignore,
+        pool,
+        on_dest,
+        ChunkApplyConfig::production(),
+    )
+}
+
+/// Like [`uninstall_tree_with_pool`], with a configurable PathBuf estimate gate
+/// (MiB) for chunked apply.
+pub(crate) fn uninstall_tree_with_pool_gated<F>(
+    src: &Path,
+    target: &Path,
+    ignore: &[String],
+    pool: Option<&ThreadPool>,
+    on_dest: F,
+    chunk: ChunkApplyConfig<'_>,
+) -> Result<()>
+where
+    F: Fn(&Path) -> Result<()> + Sync,
+{
     if src.is_file() {
         let dest = resolve_single_file_dest(src, target).dest;
         return on_dest(&dest);
     }
 
     let mut dests = Vec::new();
+    let mut path_avg = PathByteAvg::new();
     walk_relative(
         src,
         target,
         |relative| ignore::should_ignore(relative, ignore),
         |entry, dest| {
             if entry.file_type().is_file() {
+                if !dests.is_empty()
+                    && uninstall_chunk_would_exceed_gate(
+                        dests.len() + 1,
+                        path_avg.avg(),
+                        chunk.gate_mib,
+                    )
+                {
+                    apply_dests(pool, &dests, &on_dest)?;
+                    chunk.note_flush();
+                    dests.clear();
+                    path_avg.clear();
+                }
+                path_avg.record(dest);
                 dests.push(dest.to_path_buf());
             }
             Ok(())
         },
     )?;
 
-    apply_dests(pool, &dests, &on_dest)
+    if !dests.is_empty() {
+        apply_dests(pool, &dests, &on_dest)?;
+    }
+    Ok(())
 }
 
 fn apply_files<F>(
@@ -237,6 +388,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::commands::fs_ops::{DirectFs, RecordingFs};
+    use std::sync::atomic::AtomicUsize;
     use std::sync::Mutex;
     use tempfile::tempdir;
 
@@ -446,6 +598,115 @@ mod tests {
         let mut got = removed.into_inner().unwrap();
         got.sort();
         assert_eq!(got, vec!["a.txt", "b.txt"]);
+    }
+
+    #[test]
+    fn test_install_tree_chunked_with_tiny_gate() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        for i in 0..8 {
+            std::fs::write(src.join(format!("f{i}.txt")), b"x").unwrap();
+        }
+        let target = dir.path().join("dst");
+        let flush_count = AtomicUsize::new(0);
+        let applied = Mutex::new(Vec::new());
+
+        // gate 0 forces a flush before every file after the first in-buffer entry
+        install_tree_with_pool_gated(
+            &src,
+            &target,
+            &[],
+            None,
+            |d| {
+                std::fs::create_dir_all(d)?;
+                Ok(())
+            },
+            |s, d| {
+                std::fs::write(d, b"y")?;
+                applied
+                    .lock()
+                    .unwrap()
+                    .push(s.file_name().unwrap().to_string_lossy().into_owned());
+                Ok(())
+            },
+            ChunkApplyConfig {
+                gate_mib: 0.0,
+                flush_count: Some(&flush_count),
+            },
+        )
+        .unwrap();
+
+        let mut names = applied.into_inner().unwrap();
+        names.sort();
+        assert_eq!(
+            names,
+            (0..8).map(|i| format!("f{i}.txt")).collect::<Vec<_>>()
+        );
+        assert!(
+            flush_count.load(std::sync::atomic::Ordering::Relaxed) >= 2,
+            "expected multiple chunk flushes, got {}",
+            flush_count.load(std::sync::atomic::Ordering::Relaxed)
+        );
+        for i in 0..8 {
+            assert_eq!(
+                std::fs::read(target.join(format!("f{i}.txt"))).unwrap(),
+                b"y"
+            );
+        }
+    }
+
+    #[test]
+    fn test_uninstall_tree_chunked_with_tiny_gate() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        for i in 0..8 {
+            std::fs::write(src.join(format!("f{i}.txt")), b"x").unwrap();
+        }
+        let target = dir.path().join("dst");
+        std::fs::create_dir_all(&target).unwrap();
+        for i in 0..8 {
+            std::fs::write(target.join(format!("f{i}.txt")), b"y").unwrap();
+        }
+
+        let flush_count = AtomicUsize::new(0);
+        let removed = Mutex::new(Vec::new());
+
+        uninstall_tree_with_pool_gated(
+            &src,
+            &target,
+            &[],
+            None,
+            |d| {
+                removed
+                    .lock()
+                    .unwrap()
+                    .push(d.file_name().unwrap().to_string_lossy().into_owned());
+                std::fs::remove_file(d)?;
+                Ok(())
+            },
+            ChunkApplyConfig {
+                gate_mib: 0.0,
+                flush_count: Some(&flush_count),
+            },
+        )
+        .unwrap();
+
+        let mut names = removed.into_inner().unwrap();
+        names.sort();
+        assert_eq!(
+            names,
+            (0..8).map(|i| format!("f{i}.txt")).collect::<Vec<_>>()
+        );
+        assert!(
+            flush_count.load(std::sync::atomic::Ordering::Relaxed) >= 2,
+            "expected multiple chunk flushes, got {}",
+            flush_count.load(std::sync::atomic::Ordering::Relaxed)
+        );
+        for i in 0..8 {
+            assert!(!target.join(format!("f{i}.txt")).exists());
+        }
     }
 
     #[cfg(unix)]
