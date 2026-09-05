@@ -2,6 +2,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
+
 use crate::config::graph::TaskGraph;
 use crate::config::history::History;
 use crate::config::types::{AppConfig, TaskConfig};
@@ -23,6 +27,7 @@ pub struct TaskRunner {
     gate: Arc<ConcurrencyGate>,
     config_dir: Arc<PathBuf>,
     depth: usize,
+    cancel: CancellationToken,
     /// Lazily built executors per task name — one `Arc<Executor>` per Command entry.
     executor_cache: Mutex<HashMap<String, Arc<[Arc<Executor>]>>>,
 }
@@ -45,6 +50,7 @@ impl TaskRunner {
             gate,
             config_dir: Arc::new(std::env::current_dir().unwrap_or_default()),
             depth: 0,
+            cancel: CancellationToken::new(),
             executor_cache: Mutex::new(HashMap::new()),
         }
     }
@@ -65,6 +71,11 @@ impl TaskRunner {
         self
     }
 
+    pub fn with_cancel(mut self, cancel: CancellationToken) -> Self {
+        self.cancel = cancel;
+        self
+    }
+
     /// Run all tasks (respecting parallel config).
     pub async fn run_all(&self, force: bool) -> Result<()> {
         let task_names: Vec<String> = self.config.tasks.keys().cloned().collect();
@@ -81,6 +92,10 @@ impl TaskRunner {
 
     /// Run specific tasks by name.
     pub async fn run_tasks(&self, task_names: &[String], force: bool) -> Result<()> {
+        if self.cancel.is_cancelled() {
+            return Err(Error::Aborted);
+        }
+
         // Resolve dependency order via the task graph. When no task has
         // dependencies, this borrows `task_names` instead of cloning it.
         let graph = TaskGraph::new(&self.config.tasks);
@@ -107,6 +122,9 @@ impl TaskRunner {
 
         let mut tally = Tally::default();
         for layer in &layers {
+            if self.cancel.is_cancelled() {
+                break;
+            }
             self.run_layer(
                 layer,
                 force,
@@ -115,6 +133,9 @@ impl TaskRunner {
                 &mut tally,
             )
             .await;
+            if self.cancel.is_cancelled() {
+                break;
+            }
         }
 
         // Save history
@@ -127,6 +148,10 @@ impl TaskRunner {
             failed: tally.failed,
             skipped: tally.skipped,
         });
+
+        if self.cancel.is_cancelled() {
+            return Err(Error::Aborted);
+        }
 
         if tally.failed > 0 {
             Err(Error::TasksFailed(tally.failed))
@@ -151,9 +176,13 @@ impl TaskRunner {
         history: &mut History,
         tally: &mut Tally,
     ) {
-        let mut handles = Vec::new();
+        let mut join_set = JoinSet::new();
 
         for name in layer {
+            if self.cancel.is_cancelled() {
+                break;
+            }
+
             let task_config = Arc::clone(&self.config.tasks[name]);
 
             if let Some(reason) = evaluate_skip(
@@ -164,7 +193,9 @@ impl TaskRunner {
                 history,
                 self.config_dir.as_path(),
                 &self.config.default_shell,
-            ) {
+            )
+            .await
+            {
                 self.send(TaskEvent::TaskSkipped {
                     task_name: Arc::<str>::from(name.as_str()),
                     reason,
@@ -174,24 +205,38 @@ impl TaskRunner {
             }
 
             let ctx = self.create_context(name, Arc::clone(&temp_dir));
-            let name = Arc::clone(&ctx.task_name);
-            let executors = self.executors_for_task(name.as_ref(), task_config.as_ref());
-            handles.push(tokio::spawn(async move {
-                let result = run_task_with_retry(&task_config, &ctx, executors).await;
-                (name, result)
-            }));
+            let name_arc = Arc::clone(&ctx.task_name);
+            let executors = self.executors_for_task(name, task_config.as_ref());
+            let cancel = self.cancel.clone();
+            join_set.spawn(async move {
+                tokio::select! {
+                    result = run_task_with_retry(&task_config, &ctx, executors) => {
+                        (name_arc, result)
+                    }
+                    _ = cancel.cancelled() => {
+                        (name_arc, Err(Error::Aborted))
+                    }
+                }
+            });
         }
 
-        for handle in handles {
-            match handle.await {
+        while let Some(result) = join_set.join_next().await {
+            if self.cancel.is_cancelled() {
+                join_set.abort_all();
+                while join_set.join_next().await.is_some() {}
+                break;
+            }
+
+            match result {
                 Ok((name, Ok(()))) => {
-                    self.update_history(history, &name);
+                    self.update_history(history, name.as_ref());
                     tally.succeeded += 1;
                 }
                 Ok((name, Err(e))) => {
+                    let error = e.to_string();
                     self.send(TaskEvent::TaskFailed {
                         task_name: name,
-                        error: e.to_string(),
+                        error,
                     });
                     tally.failed += 1;
                 }
@@ -224,6 +269,7 @@ impl TaskRunner {
             default_shell: self.config.default_shell.clone(),
             task_name: Arc::<str>::from(task_name),
             depth: self.depth,
+            cancel: self.cancel.clone(),
         }
     }
 
@@ -284,6 +330,10 @@ async fn run_task_with_retry(
     let max_attempts = task.retry + 1;
 
     for attempt in 1..=max_attempts {
+        if ctx.cancel.is_cancelled() {
+            return Err(Error::Aborted);
+        }
+
         match run_task(task, ctx, Arc::clone(&executors)).await {
             Ok(()) => return Ok(()),
             Err(e) if attempt < max_attempts => {
@@ -293,7 +343,10 @@ async fn run_task_with_retry(
                     max_attempts,
                     error: e.to_string(),
                 });
-                tokio::time::sleep(std::time::Duration::from_secs(task.retry_delay_secs)).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(task.retry_delay_secs)) => {}
+                    _ = ctx.cancel.cancelled() => return Err(Error::Aborted),
+                }
             }
             Err(e) => return Err(e),
         }
@@ -307,6 +360,10 @@ async fn run_task(
     ctx: &CommandContext,
     executors: Arc<[Arc<Executor>]>,
 ) -> Result<()> {
+    if ctx.cancel.is_cancelled() {
+        return Err(Error::Aborted);
+    }
+
     ctx.emit(TaskEvent::TaskStarted {
         task_name: Arc::clone(&ctx.task_name),
         command_count: task.commands.len(),
@@ -314,34 +371,55 @@ async fn run_task(
     });
 
     let command_total = task.commands.len();
+    let task_quota = task
+        .parallel
+        .then(|| Arc::new(Semaphore::new(ctx.gate.task_quota_limit())));
 
     if task.parallel {
-        let mut handles = Vec::new();
+        let mut join_set = JoinSet::new();
 
         for (i, entry) in task.commands.iter().enumerate() {
+            if ctx.cancel.is_cancelled() {
+                break;
+            }
+
             let command_index = i + 1;
             let executor = Arc::clone(&executors[i]);
             let desc = catalog::description(entry);
             let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: Arc::clone(&ctx.task_name),
-                command_desc: desc.clone(),
+                command_desc: Arc::clone(&desc),
                 command_index,
                 command_total,
             });
             let ctx = ctx.clone();
-            handles.push(tokio::spawn(async move {
-                let result =
-                    execute_with_gate(lane, &executor, &ctx, &desc, command_index, command_total)
-                        .await;
+            let quota = task_quota.as_ref().map(Arc::clone);
+            join_set.spawn(async move {
+                let result = execute_with_gate(
+                    lane,
+                    &executor,
+                    &ctx,
+                    desc.clone(),
+                    command_index,
+                    command_total,
+                    quota.as_ref(),
+                )
+                .await;
                 (desc, command_index, result)
-            }));
+            });
         }
 
-        for handle in handles {
-            let (desc, command_index, result) =
-                handle.await.map_err(|e| Error::TaskJoin(e.to_string()))?;
-            match result {
+        while let Some(result) = join_set.join_next().await {
+            if ctx.cancel.is_cancelled() {
+                join_set.abort_all();
+                while join_set.join_next().await.is_some() {}
+                return Err(Error::Aborted);
+            }
+
+            let (desc, command_index, cmd_result) =
+                result.map_err(|e| Error::TaskJoin(e.to_string()))?;
+            match cmd_result {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
                         task_name: Arc::clone(&ctx.task_name),
@@ -358,24 +436,39 @@ async fn run_task(
                         command_total,
                         error: e.to_string(),
                     });
+                    join_set.abort_all();
+                    while join_set.join_next().await.is_some() {}
                     return Err(e);
                 }
             }
         }
     } else {
         for (i, entry) in task.commands.iter().enumerate() {
+            if ctx.cancel.is_cancelled() {
+                return Err(Error::Aborted);
+            }
+
             let command_index = i + 1;
             let executor = &executors[i];
             let desc = catalog::description(entry);
             let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: Arc::clone(&ctx.task_name),
-                command_desc: desc.clone(),
+                command_desc: Arc::clone(&desc),
                 command_index,
                 command_total,
             });
 
-            match execute_with_gate(lane, executor, ctx, &desc, command_index, command_total).await
+            match execute_with_gate(
+                lane,
+                executor,
+                ctx,
+                desc.clone(),
+                command_index,
+                command_total,
+                None,
+            )
+            .await
             {
                 Ok(()) => {
                     ctx.emit(TaskEvent::CommandCompleted {
@@ -406,39 +499,46 @@ async fn run_task(
     Ok(())
 }
 
-/// Admit a Command entry: Exclusive lane (if any) first, then work permit.
+/// Admit a Command entry via the Concurrency gate, then execute.
 async fn execute_with_gate(
     lane: Option<ExclusiveLane>,
     executor: &Executor,
     ctx: &CommandContext,
-    command_desc: &str,
+    command_desc: Arc<str>,
     command_index: usize,
     command_total: usize,
+    task_quota: Option<&Arc<Semaphore>>,
 ) -> Result<()> {
-    let _lane_permit = if let Some(lane) = lane {
-        match ctx.gate.try_acquire_lane(lane) {
-            Some(permit) => Some(permit),
-            None => {
-                ctx.emit(TaskEvent::CommandWaiting {
-                    task_name: ctx.task_name.clone(),
-                    command_desc: command_desc.to_string(),
+    if ctx.cancel.is_cancelled() {
+        return Err(Error::Aborted);
+    }
+
+    let occupies = executor.occupies_concurrency_slot();
+    let events = Arc::clone(&ctx.events);
+    let task_name = Arc::clone(&ctx.task_name);
+    let desc_for_wait = Arc::clone(&command_desc);
+
+    let _permits = ctx
+        .gate
+        .admit(lane, occupies, task_quota, |lane| {
+            TaskEventSink::emit(
+                events.as_ref(),
+                TaskEvent::CommandWaiting {
+                    task_name: Arc::clone(&task_name),
+                    command_desc: desc_for_wait,
                     command_index,
                     command_total,
                     lane,
-                });
-                Some(ctx.gate.acquire_lane(lane).await)
-            }
-        }
-    } else {
-        None
-    };
+                },
+            );
+        })
+        .await;
 
-    if executor.occupies_concurrency_slot() {
-        let _permit = ctx.gate.acquire().await;
-        executor.execute(ctx).await
-    } else {
-        executor.execute(ctx).await
+    if ctx.cancel.is_cancelled() {
+        return Err(Error::Aborted);
     }
+
+    executor.execute(ctx).await
 }
 
 #[cfg(test)]

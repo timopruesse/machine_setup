@@ -323,7 +323,9 @@ async fn run_execution(
     let mode = Mode::from_command(&cli.command)
         .expect("non-execution verbs are handled before this point");
 
-    let runner = TaskRunner::new(app_config, mode, events).with_config_dir(config_dir);
+    let runner = TaskRunner::new(app_config, mode, events)
+        .with_config_dir(config_dir)
+        .with_cancel(cancel.clone());
     let force = cli.force;
     let task_names_clone = task_names.clone();
 

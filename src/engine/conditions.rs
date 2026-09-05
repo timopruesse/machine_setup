@@ -2,13 +2,14 @@ use std::path::Path;
 
 use crate::config::history::History;
 use crate::config::types::{Condition, Shell, TaskConfig};
+use crate::engine::host_blocking;
 use crate::engine::mode::Mode;
 use crate::utils::path::expand_path;
 use crate::utils::shell::shell_binary;
 
 /// Decide whether a task should be skipped. Returns `Some(reason)` when the
 /// task must not run (OS filter, conditions, or install History).
-pub fn evaluate_skip(
+pub async fn evaluate_skip(
     task: &TaskConfig,
     name: &str,
     mode: Mode,
@@ -22,13 +23,13 @@ pub fn evaluate_skip(
     }
 
     for cond in task.only_if.iter() {
-        if let Some(reason) = evaluate_only_if(cond, mode, config_dir, default_shell) {
+        if let Some(reason) = evaluate_only_if(cond, mode, config_dir, default_shell).await {
             return Some(reason);
         }
     }
 
     for cond in task.skip_if.iter() {
-        if let Some(reason) = evaluate_skip_if(cond, mode, config_dir, default_shell) {
+        if let Some(reason) = evaluate_skip_if(cond, mode, config_dir, default_shell).await {
             return Some(reason);
         }
     }
@@ -40,7 +41,7 @@ pub fn evaluate_skip(
     None
 }
 
-fn evaluate_only_if(
+async fn evaluate_only_if(
     cond: &Condition,
     mode: Mode,
     config_dir: &Path,
@@ -60,10 +61,16 @@ fn evaluate_only_if(
             _ => Some(format!("Condition not met: env '{var}' is unset or empty")),
         },
         Condition::Command(command) => {
-            if command_succeeds(command, default_shell) {
+            let display = command.clone();
+            let shell = default_shell.clone();
+            let cmd = display.clone();
+            let ok = host_blocking::run(move || command_succeeds(&cmd, &shell))
+                .await
+                .unwrap_or(false);
+            if ok {
                 None
             } else {
-                Some(format!("Condition not met: command failed: '{command}'"))
+                Some(format!("Condition not met: command failed: '{display}'"))
             }
         }
         Condition::Mode(modes) => {
@@ -83,7 +90,7 @@ fn evaluate_only_if(
     }
 }
 
-fn evaluate_skip_if(
+async fn evaluate_skip_if(
     cond: &Condition,
     mode: Mode,
     config_dir: &Path,
@@ -103,8 +110,14 @@ fn evaluate_skip_if(
             _ => None,
         },
         Condition::Command(command) => {
-            if command_succeeds(command, default_shell) {
-                Some(format!("Skipped: command succeeded: '{command}'"))
+            let display = command.clone();
+            let shell = default_shell.clone();
+            let cmd = display.clone();
+            let ok = host_blocking::run(move || command_succeeds(&cmd, &shell))
+                .await
+                .unwrap_or(false);
+            if ok {
+                Some(format!("Skipped: command succeeded: '{display}'"))
             } else {
                 None
             }
@@ -167,8 +180,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn only_if_path_missing_skips() {
+    #[tokio::test]
+    async fn only_if_path_missing_skips() {
         let dir = tempdir().unwrap();
         let task = task_with(
             vec![Condition::Path("/nonexistent/path".into())].into(),
@@ -183,11 +196,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_some());
     }
 
-    #[test]
-    fn only_if_path_exists_runs() {
+    #[tokio::test]
+    async fn only_if_path_exists_runs() {
         let dir = tempdir().unwrap();
         let marker = dir.path().join("marker");
         std::fs::write(&marker, "").unwrap();
@@ -204,11 +218,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_none());
     }
 
-    #[test]
-    fn skip_if_path_exists_skips() {
+    #[tokio::test]
+    async fn skip_if_path_exists_skips() {
         let dir = tempdir().unwrap();
         let marker = dir.path().join("marker");
         std::fs::write(&marker, "").unwrap();
@@ -225,11 +240,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_some());
     }
 
-    #[test]
-    fn only_if_env_set_runs() {
+    #[tokio::test]
+    async fn only_if_env_set_runs() {
         let dir = tempdir().unwrap();
         env::set_var("MACHINE_SETUP_TEST_COND_VAR", "yes");
         let task = task_with(
@@ -245,12 +261,13 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_none());
         env::remove_var("MACHINE_SETUP_TEST_COND_VAR");
     }
 
-    #[test]
-    fn only_if_env_unset_skips() {
+    #[tokio::test]
+    async fn only_if_env_unset_skips() {
         let dir = tempdir().unwrap();
         env::remove_var("MACHINE_SETUP_TEST_COND_UNSET");
         let task = task_with(
@@ -266,11 +283,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_some());
     }
 
-    #[test]
-    fn only_if_mode_matches_runs() {
+    #[tokio::test]
+    async fn only_if_mode_matches_runs() {
         let dir = tempdir().unwrap();
         let task = task_with(
             vec![Condition::Mode(vec![Mode::Install, Mode::Update])].into(),
@@ -285,11 +303,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_none());
     }
 
-    #[test]
-    fn only_if_mode_mismatch_skips() {
+    #[tokio::test]
+    async fn only_if_mode_mismatch_skips() {
         let dir = tempdir().unwrap();
         let task = task_with(
             vec![Condition::Mode(vec![Mode::Update])].into(),
@@ -304,11 +323,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_some());
     }
 
-    #[test]
-    fn skip_if_mode_matches_skips() {
+    #[tokio::test]
+    async fn skip_if_mode_matches_skips() {
         let dir = tempdir().unwrap();
         let task = task_with(
             Conditions::default(),
@@ -323,11 +343,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_some());
     }
 
-    #[test]
-    fn only_if_command_true_runs() {
+    #[tokio::test]
+    async fn only_if_command_true_runs() {
         let dir = tempdir().unwrap();
         let task = task_with(
             vec![Condition::Command("true".into())].into(),
@@ -342,11 +363,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_none());
     }
 
-    #[test]
-    fn only_if_command_false_skips() {
+    #[tokio::test]
+    async fn only_if_command_false_skips() {
         let dir = tempdir().unwrap();
         let task = task_with(
             vec![Condition::Command("false".into())].into(),
@@ -361,11 +383,12 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_some());
     }
 
-    #[test]
-    fn skip_if_command_true_skips() {
+    #[tokio::test]
+    async fn skip_if_command_true_skips() {
         let dir = tempdir().unwrap();
         let task = task_with(
             Conditions::default(),
@@ -380,6 +403,7 @@ mod tests {
             dir.path(),
             &Shell::Bash,
         )
+        .await
         .is_some());
     }
 }

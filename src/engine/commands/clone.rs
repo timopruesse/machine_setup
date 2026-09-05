@@ -69,7 +69,8 @@ impl CloneCommand {
         ));
 
         if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
+            let parent = parent.to_path_buf();
+            crate::engine::host_blocking::run(move || std::fs::create_dir_all(&parent)).await??;
         }
 
         run_git_command(
@@ -95,7 +96,8 @@ impl CloneCommand {
 
         if target.exists() {
             ctx.log_progress(format!("remove {}", display_path(&target)));
-            std::fs::remove_dir_all(&target)?;
+            let target = target.to_path_buf();
+            crate::engine::host_blocking::run(move || std::fs::remove_dir_all(&target)).await??;
         }
 
         Ok(())

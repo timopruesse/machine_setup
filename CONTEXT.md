@@ -70,7 +70,10 @@ _Avoid_: action, command, operation.
 
 **Runner**:
 The component that orders tasks, applies skip rules, and drives each task's
-command entries to completion, emitting events as it goes (`TaskRunner`).
+command entries to completion, emitting events as it goes (`TaskRunner`). Holds
+a `CancellationToken` shared with nested Sub-config Runners; cancel aborts
+in-flight Tokio tasks (OS subprocess teardown is a follow-up). Uses
+`tokio::task::JoinSet` for parallel layer and parallel Command admission.
 _Avoid_: engine (too broad), executor (means something narrower here).
 
 **Command executor**:
@@ -99,10 +102,10 @@ justifies a real plugin seam — see ADR-0006).
 
 **Task event**:
 A message describing execution progress (`TaskEvent`) — lifecycle and
-per-line/per-file output alike. `task_name` is an `Arc<str>` interned once per
-Task so per-line output clones a refcount, not a new allocation. Emitted
-through the **Task event sink**; the TUI and plain logger consume events from
-the channel-backed adapter.
+per-line/per-file output alike. `task_name` and `command_desc` are `Arc<str>`
+interned once per Task / Command entry so per-line output clones refcounts,
+not new allocations. Emitted through the **Task event sink**; the TUI and
+plain logger consume events from the channel-backed adapter.
 _Avoid_: message, log, signal.
 
 **History**:
@@ -128,8 +131,8 @@ Declarative gate on whether a Task runs — `only_if` (all must pass) and
 `skip_if` (any triggers skip). Each field accepts a path string, a list of
 path strings (backward compatible), or rich objects: `{ path }`, `{ env }`,
 `{ command }`, `{ mode }`. Evaluated in `engine::conditions` together with OS
-filter and install History skip; the Runner calls `evaluate_skip` before
-spawning work.
+filter and install History skip; the Runner calls async `evaluate_skip` before
+spawning work. Shell `{ command }` conditions run via **Host blocking**.
 _Avoid_: when clause, if guard, predicate.
 
 **Task graph**:
@@ -142,24 +145,30 @@ _Avoid_: dependency resolver, DAG, scheduler (do not reuse "scheduler" for
 concurrency — see **Concurrency gate**).
 
 **Task event sink**:
-The seam for emitting **Task events**. Adapters: **ChannelSink** (mpsc →
-TUI/plain) and **NullSink** (benches). The Runner and `CommandContext` both
-emit through this interface — not a raw sender. Subprocess line readers may
-coalesce stdout/stderr into a **`CommandOutputBatch`** Task event before
-emit (single-line `CommandOutput` remains for sparse progress); batching is
-an engine policy, not a third sink adapter.
+The seam for emitting **Task events**. Adapters: **ChannelSink** (bounded
+mpsc, capacity 8192, backpressure via `block_in_place` + `blocking_send` on
+the multi-thread runtime → TUI/plain) and **NullSink**
+(benches). The Runner and `CommandContext` both emit through this interface —
+not a raw sender. Subprocess line readers may coalesce stdout/stderr into a
+**`CommandOutputBatch`** Task event before emit (single-line `CommandOutput`
+remains for sparse progress); batching is an engine policy, not a third sink
+adapter.
 _Avoid_: logger, event bus, observer.
 
 **Concurrency gate**:
 The Runner's global cap on in-flight leaf Command executor work, driven by
 `num_threads` (default: physical CPUs − 1). Permits are per Command entry;
 `machine_setup` does not hold a permit so nested Sub-configs can share the
-gate. Sync File ops work runs via `spawn_blocking` so it does not block Tokio
-workers. Owns a shared Rayon FS apply pool (same size as the permit limit),
-created lazily on first tree-apply use. Also owns **Exclusive lanes** (package
-managers) and a separate **tree-apply** K=1 semaphore so only one
-`pool.install` runs at a time (tree-apply does not reuse Exclusive lanes).
-Does **not** order Tasks by dependency — that remains the **Task graph**.
+gate. **`admit`** acquires an Exclusive lane (if any), an optional per-Task
+sub-quota for `parallel: true` Tasks (half the gate limit, ceil, minimum 1),
+then a work permit. Sync File ops work runs via `spawn_blocking` so it does
+not block Tokio workers; sync config load, shell conditions, and clone fs ops
+use **Host blocking** (`engine::host_blocking`). Owns a shared Rayon FS apply
+pool (same size as the permit limit), created lazily on first tree-apply use.
+Also owns **Exclusive lanes** (package managers) and a separate **tree-apply**
+K=1 semaphore so only one `pool.install` runs at a time (tree-apply does not
+reuse Exclusive lanes). Does **not** order Tasks by dependency — that remains
+the **Task graph**.
 _Avoid_: scheduler (do not call the FS pool the "scheduler").
 
 **Exclusive lane**:
@@ -215,6 +224,14 @@ progress, flush. Kind-specific policy (bulk sudo, `force`, pool choice) stays in
 thin per-kind Command executors that supply a per-file strategy. Does not move
 privilege planning into File ops (ADR-0002).
 _Avoid_: unified tree command, generic file command.
+
+**Host blocking**:
+The seam for running synchronous host work off Tokio worker threads via
+`tokio::task::spawn_blocking` — config load in Sub-config, shell condition
+evaluation, clone directory create/remove, and similar blocking I/O. Tree-op
+already uses its own `spawn_blocking` path; main-thread pre-runtime config load
+in `main.rs` stays synchronous.
+_Avoid_: blocking the async runtime, inline fs in async executors.
 
 **Command bench**:
 The measurement module for Command executor / Tree materialization / Runner

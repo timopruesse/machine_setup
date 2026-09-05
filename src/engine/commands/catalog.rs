@@ -48,13 +48,13 @@ pub fn create_executor(entry: &CommandEntry) -> Executor {
 }
 
 /// Display label for a Command entry (used by `Display` and Task events).
-pub fn description(entry: &CommandEntry) -> String {
+pub fn description(entry: &CommandEntry) -> std::sync::Arc<str> {
     match entry {
-        CommandEntry::Copy(args) => args.to_string(),
-        CommandEntry::Symlink(args) => args.to_string(),
-        CommandEntry::Clone(args) => args.to_string(),
-        CommandEntry::Run(args) => args.to_string(),
-        CommandEntry::MachineSetup(args) => args.to_string(),
+        CommandEntry::Copy(args) => std::sync::Arc::from(args.to_string()),
+        CommandEntry::Symlink(args) => std::sync::Arc::from(args.to_string()),
+        CommandEntry::Clone(args) => std::sync::Arc::from(args.to_string()),
+        CommandEntry::Run(args) => std::sync::Arc::from(args.to_string()),
+        CommandEntry::MachineSetup(args) => std::sync::Arc::from(args.to_string()),
     }
 }
 

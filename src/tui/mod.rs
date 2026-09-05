@@ -32,7 +32,7 @@ pub(crate) fn restore_terminal() {
 
 /// Run the TUI, consuming events from the engine until all tasks are done.
 pub async fn run(
-    event_rx: mpsc::UnboundedReceiver<TaskEvent>,
+    event_rx: mpsc::Receiver<TaskEvent>,
     task_names: Vec<String>,
     mode: crate::engine::mode::Mode,
     cancel: CancellationToken,
