@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Paragraph, Wrap};
 use ratatui::Frame;
 
 use super::{
@@ -11,21 +11,27 @@ use super::{
 use crate::tui::format::{format_duration, task_elapsed, task_palette_color};
 use crate::tui::log_display;
 use crate::tui::state::{TaskStatus, UiState};
+use crate::tui::theme::Theme;
+use crate::tui::widgets::chrome::rounded_block;
 
-pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
+pub fn render(f: &mut Frame, area: Rect, state: &UiState, theme: &Theme) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+
     match details_mode(state) {
-        DetailsMode::RunnerGrid => render_runner_grid(f, area, state),
-        DetailsMode::ExpandedTask => render_expanded(f, area, state),
-        DetailsMode::SingleTask => render_single(f, area, state),
+        DetailsMode::RunnerGrid => render_runner_grid(f, area, state, theme),
+        DetailsMode::ExpandedTask => render_expanded(f, area, state, theme),
+        DetailsMode::SingleTask => render_single(f, area, state, theme),
     }
 }
 
-fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
+fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState, theme: &Theme) {
     let mode = DetailsMode::RunnerGrid;
     let (visible, overflow) = visible_runner_indices(state);
     let n = visible.len();
     if n == 0 {
-        render_single(f, area, state);
+        render_single(f, area, state, theme);
         return;
     }
 
@@ -35,19 +41,15 @@ fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
         title.push_str(&format!("(+{overflow} more) "));
     }
 
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow))
+    let outer = rounded_block(theme, true)
         .title(Span::styled(
             title,
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Line::from(vec![
             Span::raw(" "),
-            Span::styled("Enter expand", Style::default().fg(Color::DarkGray)),
-            Span::styled(" · j/k band ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Enter expand", Style::default().fg(theme.muted)),
+            Span::styled(" · j/k band ", Style::default().fg(theme.muted)),
             Span::raw(" "),
         ]));
 
@@ -67,8 +69,8 @@ fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
         let is_selected = band_i == selected_band;
         let accent = task
             .color_idx
-            .map(task_palette_color)
-            .unwrap_or(Color::Yellow);
+            .map(|idx| task_palette_color(theme, idx))
+            .unwrap_or(theme.warning);
 
         let inner_h = band_area.height.saturating_sub(2) as usize;
         let body_h = inner_h.saturating_sub(1).max(1);
@@ -82,37 +84,32 @@ fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
         if let Some(label) = progress_label(task) {
             header.push(Span::styled(
                 format!(" {label}"),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ));
         }
         if let Some(d) = task_elapsed(task.started_at, task.duration) {
             header.push(Span::styled(
                 format!(" · {}", format_duration(d)),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ));
         }
         if let Some(cmd) = task.current_command.as_deref() {
             header.push(Span::styled(
                 format!(" · {}", truncate_cmd(cmd, 32)),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ));
         }
 
         let body: Vec<Line> = window
             .iter()
-            .map(|line| log_line_to_ratatui(line))
+            .map(|line| log_line_to_ratatui(line, theme))
             .collect();
 
-        let border = if is_selected {
-            Style::default().fg(accent).add_modifier(Modifier::BOLD)
+        let block = if is_selected {
+            rounded_block(theme, true).title(Line::from(header))
         } else {
-            Style::default().fg(Color::DarkGray)
+            rounded_block(theme, false).title(Line::from(header))
         };
-
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(border)
-            .title(Line::from(header));
 
         let paragraph = Paragraph::new(body).block(block).wrap(Wrap { trim: false });
 
@@ -120,12 +117,12 @@ fn render_runner_grid(f: &mut Frame, area: Rect, state: &UiState) {
     }
 }
 
-fn render_expanded(f: &mut Frame, area: Rect, state: &UiState) {
+fn render_expanded(f: &mut Frame, area: Rect, state: &UiState, theme: &Theme) {
     let others = state.running_count().saturating_sub(1);
     let task = match state.selected_task() {
         Some(t) => t,
         None => {
-            render_single(f, area, state);
+            render_single(f, area, state, theme);
             return;
         }
     };
@@ -142,25 +139,29 @@ fn render_expanded(f: &mut Frame, area: Rect, state: &UiState) {
             task,
             title: &title,
             log_scroll: state.log_scroll,
-            border_color: Color::Yellow,
+            border_focused: true,
             mode: DetailsMode::ExpandedTask,
+            theme,
         },
     );
 }
 
-fn render_single(f: &mut Frame, area: Rect, state: &UiState) {
+fn render_single(f: &mut Frame, area: Rect, state: &UiState, theme: &Theme) {
     let task = match state.selected_task() {
         Some(t) => t,
         None => {
-            let empty = Paragraph::new("No tasks")
-                .block(Block::default().borders(Borders::ALL).title(" Log "));
+            let empty =
+                Paragraph::new("No tasks").block(rounded_block(theme, false).title(Span::styled(
+                    " Log ",
+                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+                )));
             f.render_widget(empty, area);
             return;
         }
     };
 
     let title = format!(" {} ", task.name);
-    let border_color = status_border_color(&task.status);
+    let border_focused = matches!(task.status, TaskStatus::Running);
     render_task_log(
         f,
         area,
@@ -168,8 +169,9 @@ fn render_single(f: &mut Frame, area: Rect, state: &UiState) {
             task,
             title: &title,
             log_scroll: state.log_scroll,
-            border_color,
+            border_focused,
             mode: DetailsMode::SingleTask,
+            theme,
         },
     );
 }
@@ -178,8 +180,9 @@ struct TaskLogPane<'a> {
     task: &'a crate::tui::state::TaskState,
     title: &'a str,
     log_scroll: usize,
-    border_color: Color,
+    border_focused: bool,
     mode: DetailsMode,
+    theme: &'a Theme,
 }
 
 fn render_task_log(f: &mut Frame, area: Rect, pane: TaskLogPane<'_>) {
@@ -187,11 +190,12 @@ fn render_task_log(f: &mut Frame, area: Rect, pane: TaskLogPane<'_>) {
         task,
         title,
         log_scroll,
-        border_color,
+        border_focused,
         mode,
+        theme,
     } = pane;
     let expanded = matches!(mode, DetailsMode::ExpandedTask);
-    let mut status_spans = status_spans(task);
+    let mut status_spans = status_spans(task, theme);
 
     let inner_height = area.height.saturating_sub(2) as usize;
     let display = log_display::display_lines(task, mode, expanded);
@@ -208,26 +212,22 @@ fn render_task_log(f: &mut Frame, area: Rect, pane: TaskLogPane<'_>) {
         .into_iter()
         .skip(scroll)
         .take(inner_height)
-        .map(|line| log_line_to_ratatui(line))
+        .map(|line| log_line_to_ratatui(line, theme))
         .collect();
 
     if expanded {
         status_spans.push(Span::styled(
             " · Enter collapse",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ));
     }
 
     let paragraph = Paragraph::new(lines)
         .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color))
+            rounded_block(theme, border_focused)
                 .title(Span::styled(
                     title,
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
                 ))
                 .title_bottom(Line::from({
                     let mut bottom = vec![Span::raw(" ")];
@@ -241,53 +241,53 @@ fn render_task_log(f: &mut Frame, area: Rect, pane: TaskLogPane<'_>) {
     f.render_widget(paragraph, area);
 }
 
-fn log_line_to_ratatui(line: &crate::tui::state::LogLine) -> Line<'static> {
+fn log_line_to_ratatui(line: &crate::tui::state::LogLine, theme: &Theme) -> Line<'static> {
     use crate::engine::output::OutputKind;
-    let mut style = log_display::style_for_kind(line.kind);
+    let mut style = log_display::style_for_kind(line.kind, theme);
     if line.kind == OutputKind::TaskStatus {
         if line.text.starts_with("Failed") {
-            style = style.fg(Color::Red);
+            style = style.fg(theme.error);
         } else if line.text.starts_with("Completed") {
-            style = style.fg(Color::Green);
+            style = style.fg(theme.success);
         }
     }
     Line::from(Span::styled(line.text.clone(), style))
 }
 
-fn status_spans(task: &crate::tui::state::TaskState) -> Vec<Span<'static>> {
+fn status_spans(task: &crate::tui::state::TaskState, theme: &Theme) -> Vec<Span<'static>> {
     let mut spans = match &task.status {
-        TaskStatus::Pending => vec![Span::styled(
-            "pending",
-            Style::default().fg(Color::DarkGray),
-        )],
+        TaskStatus::Pending => vec![Span::styled("pending", Style::default().fg(theme.muted))],
         TaskStatus::Running => vec![Span::styled(
             "running",
             Style::default()
-                .fg(Color::Yellow)
+                .fg(theme.warning)
                 .add_modifier(Modifier::BOLD),
         )],
-        TaskStatus::Completed => vec![Span::styled("completed", Style::default().fg(Color::Green))],
+        TaskStatus::Completed => vec![Span::styled(
+            "completed",
+            Style::default().fg(theme.success),
+        )],
         TaskStatus::Failed(e) => vec![Span::styled(
             format!("failed: {e}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(theme.error),
         )],
         TaskStatus::Skipped(r) => vec![Span::styled(
             format!("skipped: {r}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         )],
     };
 
     if let Some(label) = progress_label(task) {
         spans.push(Span::styled(
             format!(" · {label}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ));
     }
 
     if let Some(d) = task_elapsed(task.started_at, task.duration) {
         spans.push(Span::styled(
             format!(" · {}", format_duration(d)),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ));
     }
 
@@ -295,21 +295,12 @@ fn status_spans(task: &crate::tui::state::TaskState) -> Vec<Span<'static>> {
         if let Some(cmd) = task.current_command.as_deref() {
             spans.push(Span::styled(
                 format!(" · {}", truncate_cmd(cmd, 40)),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             ));
         }
     }
 
     spans
-}
-
-fn status_border_color(status: &TaskStatus) -> Color {
-    match status {
-        TaskStatus::Running => Color::Yellow,
-        TaskStatus::Completed => Color::Green,
-        TaskStatus::Failed(_) => Color::Red,
-        _ => Color::DarkGray,
-    }
 }
 
 fn truncate_cmd(cmd: &str, max: usize) -> String {

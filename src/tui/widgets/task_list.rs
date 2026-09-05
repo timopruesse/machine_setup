@@ -1,13 +1,19 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use crate::tui::format::{format_duration, run_elapsed, task_elapsed, task_palette_color};
 use crate::tui::state::{TaskStatus, UiState};
+use crate::tui::theme::Theme;
+use crate::tui::widgets::chrome::rounded_block;
 
-pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
+pub fn render(f: &mut Frame, area: Rect, state: &UiState, theme: &Theme) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+
     let (list_area, search_area) = if state.filter_active() {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -30,21 +36,23 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
         .map(|(i, task)| {
             let accent = task
                 .color_idx
-                .map(task_palette_color)
-                .unwrap_or(Color::Yellow);
+                .map(|idx| task_palette_color(theme, idx))
+                .unwrap_or(theme.warning);
 
             let (symbol, style) = match &task.status {
-                TaskStatus::Pending => ("·", Style::default().fg(Color::DarkGray)),
+                TaskStatus::Pending => ("·", Style::default().fg(theme.muted)),
                 TaskStatus::Running => (
                     spinner,
                     Style::default().fg(accent).add_modifier(Modifier::BOLD),
                 ),
-                TaskStatus::Completed => ("✓", Style::default().fg(Color::Green)),
+                TaskStatus::Completed => ("✓", Style::default().fg(theme.success)),
                 TaskStatus::Failed(_) => (
                     "✗",
-                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.error)
+                        .add_modifier(Modifier::BOLD),
                 ),
-                TaskStatus::Skipped(_) => ("–", Style::default().fg(Color::DarkGray)),
+                TaskStatus::Skipped(_) => ("–", Style::default().fg(theme.muted)),
             };
 
             let indicator = if i == state.selected { ">" } else { " " };
@@ -55,7 +63,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
                     format!("{indicator} "),
                     if i == state.selected {
                         Style::default()
-                            .fg(Color::Cyan)
+                            .fg(theme.accent)
                             .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default()
@@ -76,7 +84,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
             if let Some(d) = task_elapsed(task.started_at, task.duration) {
                 spans.push(Span::styled(
                     format!("  {}", format_duration(d)),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.muted),
                 ));
             }
 
@@ -86,7 +94,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
                     if !hint.is_empty() {
                         spans.push(Span::styled(
                             format!("  › {hint}"),
-                            Style::default().fg(Color::DarkGray),
+                            Style::default().fg(theme.muted),
                         ));
                     }
                 }
@@ -103,18 +111,16 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
 
     let total_time = format_duration(run_elapsed(state.run_started, state.run_elapsed));
     let mut bottom_spans = vec![
-        Span::styled(" total ", Style::default().fg(Color::DarkGray)),
+        Span::styled(" total ", Style::default().fg(theme.muted)),
         Span::styled(
             total_time,
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ),
     ];
     if running >= 1 {
         bottom_spans.push(Span::styled(
             format!(" · {running} running "),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.warning),
         ));
     } else {
         bottom_spans.push(Span::raw(" "));
@@ -122,14 +128,10 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
     let total_title = Line::from(bottom_spans).right_aligned();
 
     let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
+        rounded_block(theme, false)
             .title(Span::styled(
                 " Tasks ",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
             ))
             .title_bottom(total_title),
     );
@@ -144,12 +146,12 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState) {
             Span::styled(
                 "/",
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.accent)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(&state.search_query, Style::default().fg(Color::White)),
+            Span::styled(&state.search_query, Style::default().fg(theme.text)),
             if state.search_mode {
-                Span::styled("_", Style::default().fg(Color::Cyan))
+                Span::styled("_", Style::default().fg(theme.accent))
             } else {
                 Span::raw("")
             },

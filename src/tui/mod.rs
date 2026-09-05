@@ -8,6 +8,7 @@ pub mod parallel_burst;
 pub mod plain;
 pub mod reduce;
 pub mod state;
+pub mod theme;
 pub mod widgets;
 
 use std::io;
@@ -16,12 +17,16 @@ use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::ExecutableCommand;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::prelude::CrosstermBackend;
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::engine::event::TaskEvent;
 use state::{TaskStatus, UiState};
+use theme::{Theme, DETAILS_MIN_WIDTH, MIN_USABLE_HEIGHT};
 
 /// Restore the terminal to its normal state.
 /// Safe to call multiple times.
@@ -68,7 +73,33 @@ pub async fn run(
     }
 }
 
-pub(crate) fn render(f: &mut ratatui::Frame, state: &UiState) {
+pub(crate) fn should_collapse_details(main_width: u16) -> bool {
+    main_width < DETAILS_MIN_WIDTH
+}
+
+pub(crate) fn render(f: &mut ratatui::Frame, state: &UiState, theme: &Theme) {
+    let area = f.area();
+
+    if area.height < MIN_USABLE_HEIGHT {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(area);
+
+        if chunks[0].width > 0 && chunks[0].height > 0 {
+            let msg = Paragraph::new(Line::from(Span::styled(
+                " terminal too small ",
+                Style::default()
+                    .fg(theme.warning)
+                    .add_modifier(Modifier::BOLD),
+            )));
+            f.render_widget(msg, chunks[0]);
+        }
+
+        widgets::help_bar::render(f, chunks[1], state, theme);
+        return;
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -76,18 +107,24 @@ pub(crate) fn render(f: &mut ratatui::Frame, state: &UiState) {
             Constraint::Min(5),    // Main content
             Constraint::Length(1), // Help bar
         ])
-        .split(f.area());
+        .split(area);
 
-    widgets::header::render(f, chunks[0], state);
+    widgets::header::render(f, chunks[0], state, theme);
 
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-        .split(chunks[1]);
+    let main_area = chunks[1];
+    if should_collapse_details(main_area.width) {
+        widgets::task_list::render(f, main_area, state, theme);
+    } else {
+        let main_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .split(main_area);
 
-    widgets::task_list::render(f, main_chunks[0], state);
-    widgets::log_view::render(f, main_chunks[1], state);
-    widgets::help_bar::render(f, chunks[2], state);
+        widgets::task_list::render(f, main_chunks[0], state, theme);
+        widgets::log_view::render(f, main_chunks[1], state, theme);
+    }
+
+    widgets::help_bar::render(f, chunks[2], state, theme);
 }
 
 fn print_summary(state: &UiState) {
@@ -106,5 +143,14 @@ fn print_summary(state: &UiState) {
         if let TaskStatus::Failed(ref error) = task.status {
             println!("  FAILED: {} - {}", task.name, error);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn collapse_details_when_main_narrow() {
+        assert!(crate::tui::should_collapse_details(67));
+        assert!(!crate::tui::should_collapse_details(68));
     }
 }

@@ -12,7 +12,7 @@ Real-world example: [.dotfiles `machine_setup.yaml`](https://github.com/timoprue
 
 ## What's New in v2
 
-- **TUI Dashboard**: Real-time progress with task list, per-task logs, elapsed times, and a parallel log stream when multiple tasks run. Powered by [ratatui](https://ratatui.rs/). Use `--no-tui` (or a non-TTY) for CI.
+- **TUI Dashboard**: Real-time progress with task list, per-task logs, elapsed times, and a runner grid (up to four bands) during parallel runs. Powered by [ratatui](https://ratatui.rs/). Use `--no-tui` (or a non-TTY) for CI.
 - **Async Engine**: Task execution powered by [tokio](https://tokio.rs/) for concurrent I/O (file ops, git, shell commands with streaming output).
 - **Task History**: Tracks install/update/uninstall timestamps in `~/.machine_setup/history.json`. Already-installed tasks are skipped unless `--force` is used.
 - **PowerShell Support**: Use `powershell` as a shell option alongside `bash` and `zsh`.
@@ -116,13 +116,14 @@ machine_setup install -c https://github.com/timopruesse/.dotfiles/blob/main/mach
 
 When running in an interactive terminal, a TUI dashboard is shown with:
 - Task list with status indicators (pending, running, completed, failed, skipped)
-- Per-task scrollable log output (and a tagged parallel stream when multiple tasks run)
+- Details pane: per-task scrollable log output; during parallel runs, a **runner grid** shows up to four running tasks as fixed bands (`Enter` expands/collapses the selected band to full log)
 - Progress bar with completion stats and elapsed times
+- SilkCircuit Neon theme (electric purple + neon cyan); set `NO_COLOR` for ANSI-only output
 - Keyboard navigation:
-  - `j`/`k` or `Up`/`Down` — navigate tasks
-  - `/` — filter tasks by name (`Enter` to apply, `Esc` to cancel or clear)
-  - `PgUp`/`PgDn` — scroll logs; `Home`/`End` — jump ( `End` re-enables follow)
-  - `q` or `Ctrl+C` — cancel and quit; `Esc` — clear filter, or quit if none
+  - `j`/`k` or `Up`/`Down` — navigate tasks (or bands in the runner grid)
+  - `/` — filter tasks by name (`Enter` to apply, `Esc` to cancel search or clear filter)
+  - `PgUp`/`PgDn` — scroll logs; `Home`/`End` — jump to top/bottom of log (`End` also re-enables follow when auto-follow is off)
+  - While running: `q` or `Ctrl+C` — cancel; when done: `Esc` or `q` — quit
 
 The TUI is automatically disabled in non-interactive environments (piped output, CI). You can also explicitly disable it with `--no-tui`.
 

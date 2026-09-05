@@ -13,6 +13,7 @@ use super::message::{Effect, Input, Message};
 use super::reduce::reduce;
 use super::render;
 use super::state::UiState;
+use super::theme::Theme;
 
 /// Async UI loop: engine events + keyboard + spinner ticks.
 /// Returns the final [`UiState`] for the post-run summary.
@@ -45,7 +46,8 @@ pub async fn run_loop(
     // First tick completes immediately; skip it so we don't double-draw on entry.
     ticker.tick().await;
 
-    terminal.draw(|f| render(f, &state))?;
+    let theme = Theme::resolve();
+    terminal.draw(|f| render(f, &state, &theme))?;
 
     // Once the engine drops its sender, `recv()` stays Ready(None) forever. With
     // `biased` select that starves keyboard input — fuse the arm off after close.
@@ -102,7 +104,7 @@ pub async fn run_loop(
         }
 
         if dirty {
-            terminal.draw(|f| render(f, &state))?;
+            terminal.draw(|f| render(f, &state, &theme))?;
         }
     }
 

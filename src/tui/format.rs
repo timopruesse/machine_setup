@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ratatui::style::Color;
 
-use crate::tui::state::TASK_PALETTE_LEN;
+use crate::tui::theme::Theme;
 
 /// Strip ANSI escape sequences from command output before TUI display.
 ///
@@ -52,18 +52,8 @@ pub fn strip_ansi(input: &str) -> String {
 }
 
 /// Accent color for a task's list row / merge prefix.
-pub fn task_palette_color(color_idx: usize) -> Color {
-    const COLORS: [Color; TASK_PALETTE_LEN] = [
-        Color::Cyan,
-        Color::Magenta,
-        Color::Blue,
-        Color::Green,
-        Color::LightYellow,
-        Color::LightBlue,
-        Color::LightMagenta,
-        Color::LightCyan,
-    ];
-    COLORS[color_idx % TASK_PALETTE_LEN]
+pub fn task_palette_color(theme: &Theme, color_idx: usize) -> Color {
+    theme.task_color(color_idx)
 }
 
 /// Format a duration for the TUI (compact, fixed-ish width feel).

@@ -3,6 +3,7 @@
 use crate::engine::output::OutputKind;
 use crate::tui::details::DetailsMode;
 use crate::tui::state::{LogLine, TaskState};
+use crate::tui::theme::Theme;
 
 /// Lines to render in the details pane (may omit redundant lifecycle rows).
 pub fn display_lines(
@@ -35,19 +36,17 @@ fn should_show_line(
     }
 }
 
-pub fn style_for_kind(kind: OutputKind) -> ratatui::style::Style {
-    use ratatui::style::{Color, Modifier, Style};
+pub fn style_for_kind(kind: OutputKind, theme: &Theme) -> ratatui::style::Style {
+    use ratatui::style::{Modifier, Style};
     match kind {
-        OutputKind::CommandStart => Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-        OutputKind::CommandDone => Style::default().fg(Color::Green),
-        OutputKind::CommandFailed => Style::default().fg(Color::Red),
-        OutputKind::Progress => Style::default().fg(Color::White),
-        OutputKind::Subprocess => Style::default().fg(Color::DarkGray),
-        OutputKind::SubprocessErr => Style::default().fg(Color::Yellow),
-        OutputKind::Info => Style::default().fg(Color::Cyan),
-        OutputKind::TaskStatus => Style::default().fg(Color::DarkGray),
+        OutputKind::CommandStart => Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        OutputKind::CommandDone => Style::default().fg(theme.success),
+        OutputKind::CommandFailed => Style::default().fg(theme.error),
+        OutputKind::Progress => Style::default().fg(theme.text),
+        OutputKind::Subprocess => Style::default().fg(theme.muted),
+        OutputKind::SubprocessErr => Style::default().fg(theme.warning),
+        OutputKind::Info => Style::default().fg(theme.info),
+        OutputKind::TaskStatus => Style::default().fg(theme.muted),
     }
 }
 

@@ -5,6 +5,8 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 
+use crate::tui::theme::Theme;
+
 use super::message::{CatalogEffect, CatalogInput, CatalogMessage};
 use super::model::CatalogMode;
 use super::reduce::reduce;
@@ -22,7 +24,8 @@ pub fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     mut state: CatalogState,
 ) -> anyhow::Result<LoopOutcome> {
-    terminal.draw(|f| view::render(f, &state))?;
+    let theme = Theme::resolve();
+    terminal.draw(|f| view::render(f, &state, &theme))?;
 
     loop {
         if event::poll(Duration::from_millis(100))? {
@@ -30,7 +33,7 @@ pub fn run(
                 if let Some(input) = map_key(&state, key) {
                     let (next, effect) = reduce(state, CatalogMessage::Input(input));
                     state = next;
-                    terminal.draw(|f| view::render(f, &state))?;
+                    terminal.draw(|f| view::render(f, &state, &theme))?;
                     match effect {
                         CatalogEffect::None => {}
                         CatalogEffect::Quit => return Ok(LoopOutcome::Quit),

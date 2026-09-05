@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- TUI run dashboard and catalog viewer: SilkCircuit Neon theme, rounded borders, help-bar key hints (Esc quit when done, `q` cancel while running, `End` follow), narrow-terminal Details collapse, and completion strip in the header gauge
+
 ### Added
 - `replace task <name>` and `replace recipe …` — upsert a Task via Config rewrite (YAML-only); create path warns when the name was missing; overwrite prompts on a TTY or proceeds non-interactively; History unchanged
 - Authoring recipes and blank stubs emit typed `TaskConfig` (`EmittedTask { name, task }`); `add` still appends a serialized fragment and refuses duplicates

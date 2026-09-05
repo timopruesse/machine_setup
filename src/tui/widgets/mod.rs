@@ -1,3 +1,4 @@
+pub mod chrome;
 pub mod header;
 pub mod help_bar;
 pub mod log_view;

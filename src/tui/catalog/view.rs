@@ -1,13 +1,16 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
+
+use crate::tui::theme::Theme;
+use crate::tui::widgets::chrome::{hint_separator, key_hint, rounded_block};
 
 use super::model::{CatalogItem, CatalogMode, CatalogStatus};
 use super::state::CatalogState;
 
-pub fn render(f: &mut Frame, state: &CatalogState) {
+pub fn render(f: &mut Frame, state: &CatalogState, theme: &Theme) {
     let banner_height = state
         .banner
         .as_ref()
@@ -31,7 +34,7 @@ pub fn render(f: &mut Frame, state: &CatalogState) {
     };
 
     let (main_area, help_area) = if banner_height > 0 {
-        render_banner(f, outer[0], state);
+        render_banner(f, outer[0], state, theme);
         (outer[1], outer[2])
     } else {
         (outer[0], outer[1])
@@ -42,43 +45,31 @@ pub fn render(f: &mut Frame, state: &CatalogState) {
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(main_area);
 
-    render_list(f, main[0], state);
-    render_detail(f, main[1], state);
-    render_help(f, help_area, state);
+    render_list(f, main[0], state, theme);
+    render_detail(f, main[1], state, theme);
+    render_help(f, help_area, state, theme);
 }
 
-fn render_banner(f: &mut Frame, area: Rect, state: &CatalogState) {
+fn render_banner(f: &mut Frame, area: Rect, state: &CatalogState, theme: &Theme) {
     let Some(lines) = state.banner.as_ref() else {
         return;
     };
     let text: Vec<Line> = lines
         .iter()
         .take(6)
-        .map(|line| {
-            Line::from(Span::styled(
-                line.clone(),
-                Style::default().fg(Color::White),
-            ))
-        })
+        .map(|line| Line::from(Span::styled(line.clone(), Style::default().fg(theme.text))))
         .collect();
 
     let paragraph = Paragraph::new(text)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
-                .title(Span::styled(
-                    " Summary ",
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                )),
-        )
+        .block(rounded_block(theme, false).title(Span::styled(
+            " Summary ",
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        )))
         .wrap(Wrap { trim: false });
     f.render_widget(paragraph, area);
 }
 
-fn render_list(f: &mut Frame, area: Rect, state: &CatalogState) {
+fn render_list(f: &mut Frame, area: Rect, state: &CatalogState, theme: &Theme) {
     let (list_area, search_area) = if state.filter_active() {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -93,7 +84,7 @@ fn render_list(f: &mut Frame, area: Rect, state: &CatalogState) {
         .filtered_indices
         .iter()
         .filter_map(|&i| state.items.get(i).map(|item| (i, item)))
-        .map(|(i, item)| ListItem::new(Line::from(list_row_spans(state, i, item))))
+        .map(|(i, item)| ListItem::new(Line::from(list_row_spans(state, i, item, theme))))
         .collect();
 
     let selected_pos = state
@@ -102,24 +93,17 @@ fn render_list(f: &mut Frame, area: Rect, state: &CatalogState) {
         .position(|&i| i == state.selected);
 
     let title = list_title(state);
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray))
-            .title(Span::styled(
-                title,
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-    );
+    let list = List::new(items).block(rounded_block(theme, true).title(Span::styled(
+        title,
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+    )));
 
     let mut list_state = ListState::default();
     list_state.select(selected_pos);
     f.render_stateful_widget(list, list_area, &mut list_state);
 
     if let Some(search_area) = search_area {
-        render_search_line(f, search_area, state);
+        render_search_line(f, search_area, state, theme);
     }
 }
 
@@ -132,7 +116,12 @@ fn list_title(state: &CatalogState) -> String {
     }
 }
 
-fn list_row_spans(state: &CatalogState, index: usize, item: &CatalogItem) -> Vec<Span<'static>> {
+fn list_row_spans(
+    state: &CatalogState,
+    index: usize,
+    item: &CatalogItem,
+    theme: &Theme,
+) -> Vec<Span<'static>> {
     let selected = index == state.selected;
     let indicator = if selected { ">" } else { " " };
 
@@ -140,7 +129,7 @@ fn list_row_spans(state: &CatalogState, index: usize, item: &CatalogItem) -> Vec
         format!("{indicator} "),
         if selected {
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.accent)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
@@ -154,15 +143,15 @@ fn list_row_spans(state: &CatalogState, index: usize, item: &CatalogItem) -> Vec
             format!("[{mark}] "),
             if checked {
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.accent)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme.muted)
             },
         ));
     }
 
-    let (glyph, glyph_style) = status_glyph(&item.status);
+    let (glyph, glyph_style) = status_glyph(item, theme);
     spans.push(Span::styled(
         format!("[{glyph}] "),
         glyph_style.add_modifier(if selected {
@@ -175,103 +164,120 @@ fn list_row_spans(state: &CatalogState, index: usize, item: &CatalogItem) -> Vec
     spans.push(Span::styled(
         item.title.clone(),
         if selected {
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::White)
+            Style::default().fg(theme.text)
         },
     ));
 
     if !item.badges.is_empty() {
-        spans.push(Span::styled(
-            format!("  {}", item.badges.join(" ")),
-            Style::default().fg(Color::DarkGray),
-        ));
+        spans.push(Span::raw("  "));
+        for (i, badge) in item.badges.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::raw(" "));
+            }
+            spans.push(Span::styled(badge.clone(), badge_style(badge, theme)));
+        }
     }
 
     spans
 }
 
-fn status_glyph(status: &CatalogStatus) -> (&'static str, Style) {
-    match status {
-        CatalogStatus::Installed => ("✓", Style::default().fg(Color::Green)),
-        CatalogStatus::NotInstalled | CatalogStatus::Neutral => {
-            ("·", Style::default().fg(Color::DarkGray))
-        }
-        CatalogStatus::SkippedOs => ("–", Style::default().fg(Color::Yellow)),
+fn badge_style(badge: &str, theme: &Theme) -> Style {
+    match badge {
+        "error" => Style::default().fg(theme.error),
+        "warn" => Style::default().fg(theme.warning),
+        _ => Style::default().fg(theme.muted),
     }
 }
 
-fn render_detail(f: &mut Frame, area: Rect, state: &CatalogState) {
+fn status_glyph(item: &CatalogItem, theme: &Theme) -> (&'static str, Style) {
+    if item.badges.iter().any(|b| b == "error") {
+        return ("!", Style::default().fg(theme.error));
+    }
+    match &item.status {
+        CatalogStatus::Installed => ("✓", Style::default().fg(theme.success)),
+        CatalogStatus::NotInstalled | CatalogStatus::Neutral => {
+            ("·", Style::default().fg(theme.muted))
+        }
+        CatalogStatus::SkippedOs => ("–", Style::default().fg(theme.warning)),
+    }
+}
+
+fn render_detail(f: &mut Frame, area: Rect, state: &CatalogState, theme: &Theme) {
     let lines = if state.filtered_indices.is_empty() {
         vec![Line::from(Span::styled(
             "No matches",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ))]
     } else if let Some(item) = state.items.get(state.selected) {
-        detail_lines(item)
+        detail_lines(item, theme)
     } else {
         vec![Line::from(Span::styled(
             "(no selection)",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ))]
     };
 
     let paragraph = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
-                .title(Span::styled(
-                    " Detail ",
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                )),
-        )
+        .block(rounded_block(theme, false).title(Span::styled(
+            " Detail ",
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        )))
         .wrap(Wrap { trim: false });
 
     f.render_widget(paragraph, area);
 }
 
-fn detail_lines(item: &CatalogItem) -> Vec<Line<'static>> {
+fn detail_lines(item: &CatalogItem, theme: &Theme) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     for section in &item.detail {
         lines.push(Line::from(Span::styled(
             section.title.clone(),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.accent_alt)
                 .add_modifier(Modifier::BOLD),
         )));
         for line in &section.lines {
-            lines.push(Line::from(Span::styled(
-                line.clone(),
-                Style::default().fg(Color::White),
-            )));
+            let style = if section.title == "Validation" {
+                validation_line_style(line, theme)
+            } else {
+                Style::default().fg(theme.text)
+            };
+            lines.push(Line::from(Span::styled(line.clone(), style)));
         }
         lines.push(Line::from(""));
     }
     if lines.is_empty() {
         lines.push(Line::from(Span::styled(
             "(no detail)",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         )));
     }
     lines
 }
 
-fn render_search_line(f: &mut Frame, area: Rect, state: &CatalogState) {
+fn validation_line_style(line: &str, theme: &Theme) -> Style {
+    if line.starts_with("[Error]") {
+        Style::default().fg(theme.error)
+    } else if line.starts_with("[Warning]") {
+        Style::default().fg(theme.warning)
+    } else {
+        Style::default().fg(theme.text)
+    }
+}
+
+fn render_search_line(f: &mut Frame, area: Rect, state: &CatalogState, theme: &Theme) {
     let search_line = Line::from(vec![
         Span::styled(
             "/",
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(&state.search_query, Style::default().fg(Color::White)),
+        Span::styled(&state.search_query, Style::default().fg(theme.text)),
         if state.search_mode {
-            Span::styled("_", Style::default().fg(Color::Cyan))
+            Span::styled("_", Style::default().fg(theme.accent))
         } else {
             Span::raw("")
         },
@@ -279,17 +285,18 @@ fn render_search_line(f: &mut Frame, area: Rect, state: &CatalogState) {
     f.render_widget(Paragraph::new(search_line), area);
 }
 
-fn render_help(f: &mut Frame, area: Rect, state: &CatalogState) {
+fn render_help(f: &mut Frame, area: Rect, state: &CatalogState, theme: &Theme) {
     let keys = if state.search_mode {
         vec![
-            key_hint("Esc", "cancel"),
-            key_hint("Enter", "apply"),
-            key_hint("j/k", "navigate"),
+            key_hint(theme, "Esc", "cancel"),
+            key_hint(theme, "Enter", "apply"),
+            key_hint(theme, "j/k", "navigate"),
         ]
     } else if state.filter_active() {
         let mut hints = vec![
-            key_hint("Esc", "clear filter"),
+            key_hint(theme, "Esc", "clear filter"),
             key_hint(
+                theme,
                 "q",
                 if matches!(state.mode, CatalogMode::Browse) {
                     "quit"
@@ -297,51 +304,39 @@ fn render_help(f: &mut Frame, area: Rect, state: &CatalogState) {
                     "abort"
                 },
             ),
-            key_hint("j/k", "navigate"),
-            key_hint("/", "search"),
+            key_hint(theme, "j/k", "navigate"),
+            key_hint(theme, "/", "search"),
         ];
         if matches!(state.mode, CatalogMode::Select) {
-            hints.push(key_hint("Space", "toggle"));
-            hints.push(key_hint("a", "all visible"));
-            hints.push(key_hint("Enter", "confirm"));
+            hints.push(key_hint(theme, "Space", "toggle"));
+            hints.push(key_hint(theme, "a", "all visible"));
+            hints.push(key_hint(theme, "Enter", "confirm"));
         }
         hints
     } else if matches!(state.mode, CatalogMode::Select) {
         vec![
-            key_hint("q", "abort"),
-            key_hint("j/k", "navigate"),
-            key_hint("Space", "toggle"),
-            key_hint("a", "all visible"),
-            key_hint("Enter", "confirm"),
-            key_hint("/", "search"),
+            key_hint(theme, "q", "abort"),
+            key_hint(theme, "j/k", "navigate"),
+            key_hint(theme, "Space", "toggle"),
+            key_hint(theme, "a", "all visible"),
+            key_hint(theme, "Enter", "confirm"),
+            key_hint(theme, "/", "search"),
         ]
     } else {
         vec![
-            key_hint("q", "quit"),
-            key_hint("j/k", "navigate"),
-            key_hint("/", "search"),
+            key_hint(theme, "q", "quit"),
+            key_hint(theme, "j/k", "navigate"),
+            key_hint(theme, "/", "search"),
         ]
     };
 
     let mut spans = Vec::new();
     for (i, group) in keys.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled(" · ", Style::default().fg(Color::DarkGray)));
+            spans.push(hint_separator(theme));
         }
         spans.extend(group.clone());
     }
 
     f.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-fn key_hint(key: &str, action: &str) -> Vec<Span<'static>> {
-    vec![
-        Span::styled(
-            key.to_string(),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(format!(" {action}"), Style::default().fg(Color::DarkGray)),
-    ]
 }
