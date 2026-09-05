@@ -8,6 +8,13 @@
 //! executor picks an adapter, and every primitive call goes through the
 //! [`FileOps`] interface.
 //!
+//! Tree-shaped installs/uninstalls share [`apply_tree_install`] /
+//! [`apply_tree_uninstall`]: one walk/apply loop parameterized by an
+//! already-chosen `&dyn FileOps`, pool, and per-kind callbacks. Walk logic lives
+//! in [`super::tree`]; flush localizes here so SudoFs script-batches complete
+//! after the walk. Executors still select DirectFs vs SudoFs and may
+//! short-circuit bulk sudo *before* calling apply_tree (ADR-0002).
+//!
 //! Two adapters means a real seam: [`DirectFs`] and [`SudoFs`] both exist and
 //! are selected at runtime by [`select`].
 
@@ -46,6 +53,46 @@ pub trait FileOps: Send + Sync {
     fn flush(&self) -> Result<()> {
         Ok(())
     }
+}
+
+/// Walk a source tree onto `target` (install), then flush buffered ops.
+///
+/// Delegates the walk to [`super::tree::install_tree_with_pool`]; callers supply
+/// `ensure_dir` and `on_file` for kind-specific directory and per-file work.
+pub fn apply_tree_install<E, F>(
+    ops: &dyn FileOps,
+    src: &Path,
+    target: &Path,
+    ignore: &[String],
+    pool: Option<&rayon::ThreadPool>,
+    ensure_dir: E,
+    on_file: F,
+) -> Result<()>
+where
+    E: FnMut(&Path) -> Result<()>,
+    F: Fn(&Path, &Path) -> Result<()> + Sync,
+{
+    super::tree::install_tree_with_pool(src, target, ignore, pool, ensure_dir, on_file)?;
+    ops.flush()
+}
+
+/// Walk a source tree on `target` (uninstall), then flush buffered ops.
+///
+/// Delegates the walk to [`super::tree::uninstall_tree_with_pool`]; callers
+/// supply `on_dest` for kind-specific per-file removal.
+pub fn apply_tree_uninstall<F>(
+    ops: &dyn FileOps,
+    src: &Path,
+    target: &Path,
+    ignore: &[String],
+    pool: Option<&rayon::ThreadPool>,
+    on_dest: F,
+) -> Result<()>
+where
+    F: Fn(&Path) -> Result<()> + Sync,
+{
+    super::tree::uninstall_tree_with_pool(src, target, ignore, pool, on_dest)?;
+    ops.flush()
 }
 
 /// Pick the adapter for a command based on whether it requested `sudo`.

@@ -1,7 +1,8 @@
 //! Tree-op driver — shared Command-executor shell for tree-shaped kinds.
 //!
 //! Owns path expand, source existence checks, `spawn_blocking`, File ops
-//! selection, progress, Tree materialization walk, and flush. Kind-specific
+//! selection, progress, and shared apply_tree (walk + flush via
+//! [`fs_ops::apply_tree_install`] / [`fs_ops::apply_tree_uninstall`]). Kind-specific
 //! policy (bulk sudo, `force`, pool choice, per-file apply) stays behind
 //! [`TreeOpKind`] (CONTEXT.md **Tree-op driver**, ADR-0002).
 
@@ -14,7 +15,6 @@ use crate::utils::path::expand_path;
 
 use super::fs_ops::{self, FileOps};
 use super::progress_log::FileProgress;
-use super::tree;
 
 /// Per-kind policy for a tree-shaped Command executor.
 pub trait TreeOpKind: Send + Sync {
@@ -98,7 +98,8 @@ fn install(src: &Path, target: &Path, kind: &dyn TreeOpKind, ctx: &CommandContex
     let ops = fs_ops::select(kind.sudo());
     let progress = FileProgress::new(ctx, kind.progress_install());
     let pool = kind.install_pool(ctx);
-    tree::install_tree_with_pool(
+    fs_ops::apply_tree_install(
+        ops.as_ref(),
         src,
         target,
         kind.ignore(),
@@ -107,16 +108,16 @@ fn install(src: &Path, target: &Path, kind: &dyn TreeOpKind, ctx: &CommandContex
         |file, dest| kind.on_install_file(ops.as_ref(), file, dest, &progress),
     )?;
     progress.finish();
-    ops.flush()
+    Ok(())
 }
 
 fn uninstall(src: &Path, target: &Path, kind: &dyn TreeOpKind, ctx: &CommandContext) -> Result<()> {
     let ops = fs_ops::select(kind.sudo());
     let progress = FileProgress::new(ctx, kind.progress_uninstall());
     let pool = kind.uninstall_pool(ctx);
-    tree::uninstall_tree_with_pool(src, target, kind.ignore(), pool, |dest| {
+    fs_ops::apply_tree_uninstall(ops.as_ref(), src, target, kind.ignore(), pool, |dest| {
         kind.on_uninstall_file(ops.as_ref(), dest, &progress)
     })?;
     progress.finish();
-    ops.flush()
+    Ok(())
 }
