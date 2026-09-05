@@ -4,6 +4,44 @@ use tokio::process::Child;
 use crate::engine::context::CommandContext;
 use crate::engine::output::{sanitize_subprocess_line, OutputKind};
 
+/// Max sanitized lines per [`TaskEvent::CommandOutputBatch`] flush.
+pub const OUTPUT_BATCH_SIZE: usize = 32;
+
+/// Buffers sanitized lines until capacity or EOF flush.
+#[derive(Debug, Default)]
+pub struct OutputLineBuffer {
+    lines: Vec<String>,
+    capacity: usize,
+}
+
+impl OutputLineBuffer {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            lines: Vec::new(),
+            capacity,
+        }
+    }
+
+    /// Push a line; returns a full batch when capacity is reached.
+    pub fn push(&mut self, line: String) -> Option<Vec<String>> {
+        self.lines.push(line);
+        if self.lines.len() >= self.capacity {
+            Some(std::mem::take(&mut self.lines))
+        } else {
+            None
+        }
+    }
+
+    /// Flush any remaining lines (e.g. at EOF).
+    pub fn flush(&mut self) -> Option<Vec<String>> {
+        if self.lines.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.lines))
+        }
+    }
+}
+
 /// Whether to tag stderr lines when forwarding them to the log.
 #[derive(Copy, Clone, Default)]
 pub enum StderrLabel {
@@ -91,6 +129,7 @@ where
 {
     let mut lines = BufReader::new(reader).lines();
     let mut last_was_blank = false;
+    let mut buffer = OutputLineBuffer::new(OUTPUT_BATCH_SIZE);
     while let Ok(Some(line)) = lines.next_line().await {
         let Some(line) = sanitize_subprocess_line(line) else {
             if !last_was_blank {
@@ -99,6 +138,35 @@ where
             continue;
         };
         last_was_blank = false;
-        ctx.log_kind(kind, line);
+        if let Some(batch) = buffer.push(line) {
+            ctx.log_batch_kind(kind, batch);
+        }
+    }
+    if let Some(batch) = buffer.flush() {
+        ctx.log_batch_kind(kind, batch);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_line_buffer_flushes_at_capacity() {
+        let mut buf = OutputLineBuffer::new(3);
+        assert!(buf.push("a".into()).is_none());
+        assert!(buf.push("b".into()).is_none());
+        let batch = buf.push("c".into()).expect("full batch");
+        assert_eq!(batch, vec!["a", "b", "c"]);
+        assert!(buf.flush().is_none());
+    }
+
+    #[test]
+    fn output_line_buffer_flush_partial() {
+        let mut buf = OutputLineBuffer::new(32);
+        assert!(buf.push("only".into()).is_none());
+        let batch = buf.flush().expect("partial flush");
+        assert_eq!(batch, vec!["only"]);
+        assert!(buf.flush().is_none());
     }
 }

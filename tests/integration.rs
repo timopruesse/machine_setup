@@ -63,9 +63,18 @@ fn has_event(events: &[TaskEvent], predicate: impl Fn(&TaskEvent) -> bool) -> bo
 }
 
 fn find_output(events: &[TaskEvent], task: &str, needle: &str) -> bool {
-    events.iter().any(|e| {
-        matches!(e, TaskEvent::CommandOutput { task_name, line, kind: _ }
-            if task_name.as_ref() == task && line.contains(needle))
+    events.iter().any(|e| match e {
+        TaskEvent::CommandOutput {
+            task_name,
+            line,
+            kind: _,
+        } if task_name.as_ref() == task && line.contains(needle) => true,
+        TaskEvent::CommandOutputBatch {
+            task_name,
+            lines,
+            kind: _,
+        } if task_name.as_ref() == task && lines.iter().any(|l| l.contains(needle)) => true,
+        _ => false,
     })
 }
 

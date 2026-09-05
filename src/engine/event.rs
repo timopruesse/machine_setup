@@ -20,10 +20,17 @@ pub enum TaskEvent {
     /// A task was skipped (OS mismatch or already installed).
     TaskSkipped { task_name: Arc<str>, reason: String },
 
-    /// A command within a task produced output.
+    /// A command within a task produced output (sparse progress, one line).
     CommandOutput {
         task_name: Arc<str>,
         line: String,
+        kind: crate::engine::output::OutputKind,
+    },
+
+    /// Coalesced subprocess output (multiple lines per flush from stream reader).
+    CommandOutputBatch {
+        task_name: Arc<str>,
+        lines: Vec<String>,
         kind: crate::engine::output::OutputKind,
     },
 

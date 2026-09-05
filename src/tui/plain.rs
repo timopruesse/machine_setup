@@ -43,6 +43,16 @@ pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
                 let prefix = log_display::plain_prefix(*kind);
                 println!("   [{task_name}]{prefix}{line}");
             }
+            TaskEvent::CommandOutputBatch {
+                task_name,
+                lines,
+                kind,
+            } => {
+                let prefix = log_display::plain_prefix(*kind);
+                for line in lines {
+                    println!("   [{task_name}]{prefix}{line}");
+                }
+            }
             TaskEvent::CommandCompleted {
                 task_name,
                 command_desc,

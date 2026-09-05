@@ -65,6 +65,18 @@ impl CommandContext {
         });
     }
 
+    /// Emit a batch of already-sanitized subprocess lines (from stream reader).
+    pub fn log_batch_kind(&self, kind: OutputKind, lines: Vec<String>) {
+        if lines.is_empty() {
+            return;
+        }
+        self.emit(TaskEvent::CommandOutputBatch {
+            task_name: Arc::clone(&self.task_name),
+            lines,
+            kind,
+        });
+    }
+
     pub fn log_progress(&self, line: impl Into<String>) {
         self.log_kind(OutputKind::Progress, line);
     }

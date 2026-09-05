@@ -84,6 +84,17 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             task.push_log(kind, line);
             (name, SoftSelect::None, false)
         }
+        TaskEvent::CommandOutputBatch {
+            task_name: name,
+            lines,
+            kind,
+        } => {
+            let task = find_or_create_task(state, &name);
+            for line in lines {
+                task.push_log(kind, line);
+            }
+            (name, SoftSelect::None, false)
+        }
         TaskEvent::CommandCompleted {
             task_name: name,
             command_desc,
@@ -435,6 +446,22 @@ mod tests {
         );
         assert!(state.done);
         assert!(state.run_elapsed.is_some());
+    }
+
+    #[test]
+    fn command_output_batch_expands_to_log_lines() {
+        let state = state_with(&["a"]);
+        let (state, _) = reduce(
+            state,
+            Message::Engine(TaskEvent::CommandOutputBatch {
+                task_name: "a".into(),
+                lines: vec!["one".into(), "two".into()],
+                kind: OutputKind::Subprocess,
+            }),
+        );
+        assert_eq!(state.tasks[0].log_lines.len(), 2);
+        assert_eq!(state.tasks[0].log_lines[0].text, "one");
+        assert_eq!(state.tasks[0].log_lines[1].text, "two");
     }
 
     #[test]
