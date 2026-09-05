@@ -3,6 +3,7 @@ pub mod concurrency;
 pub mod conditions;
 pub mod context;
 pub mod event;
+pub mod host_blocking;
 pub mod mode;
 pub mod output;
 pub mod runner;

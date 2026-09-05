@@ -107,6 +107,62 @@ impl ConcurrencyGate {
             .expect("ConcurrencyGate semaphore is never closed")
     }
 
+    /// Per-Task sub-quota for `parallel: true` Tasks — half the gate limit (ceil), at least 1.
+    pub fn task_quota_limit(&self) -> usize {
+        std::cmp::max(1, self.limit.div_ceil(2))
+    }
+
+    /// Lane first, then optional per-Task quota, then work permit (ADR-0010 + sub-quotas).
+    ///
+    /// Calls `on_lane_wait(lane)` only when the lane is already held (contended path).
+    pub async fn admit(
+        self: &Arc<Self>,
+        lane: Option<ExclusiveLane>,
+        occupies_slot: bool,
+        task_quota: Option<&Arc<Semaphore>>,
+        on_lane_wait: impl FnOnce(ExclusiveLane),
+    ) -> AdmitPermits {
+        let lane_permit = if let Some(lane) = lane {
+            match self.try_acquire_lane(lane) {
+                Some(permit) => Some(permit),
+                None => {
+                    on_lane_wait(lane);
+                    Some(self.acquire_lane(lane).await)
+                }
+            }
+        } else {
+            None
+        };
+
+        let task_permit = if let Some(quota) = task_quota {
+            #[expect(
+                clippy::expect_used,
+                reason = "per-Task quota semaphore is never closed"
+            )]
+            Some(
+                quota
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .expect("per-Task quota semaphore is never closed"),
+            )
+        } else {
+            None
+        };
+
+        let work_permit = if occupies_slot {
+            Some(self.acquire().await)
+        } else {
+            None
+        };
+
+        AdmitPermits {
+            _lane: lane_permit,
+            _task: task_permit,
+            _work: work_permit,
+        }
+    }
+
     /// Try to take an Exclusive lane without waiting.
     pub fn try_acquire_lane(&self, lane: ExclusiveLane) -> Option<OwnedSemaphorePermit> {
         self.lanes[lane.index()].clone().try_acquire_owned().ok()
@@ -139,6 +195,13 @@ impl ConcurrencyGate {
     }
 }
 
+/// Permits held for one Command entry admission (lane, optional Task quota, work).
+pub struct AdmitPermits {
+    _lane: Option<OwnedSemaphorePermit>,
+    _task: Option<OwnedSemaphorePermit>,
+    _work: Option<OwnedSemaphorePermit>,
+}
+
 fn build_fs_pool(limit: usize) -> ThreadPool {
     #[expect(
         clippy::expect_used,
@@ -167,6 +230,39 @@ pub fn resolve_limit(num_threads: Option<usize>) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn task_quota_limit_is_half_ceil_min_one() {
+        let gate = ConcurrencyGate::from_num_threads(Some(2));
+        assert_eq!(gate.task_quota_limit(), 1);
+        let gate = ConcurrencyGate::from_num_threads(Some(5));
+        assert_eq!(gate.task_quota_limit(), 3);
+        let gate = ConcurrencyGate::from_num_threads(Some(1));
+        assert_eq!(gate.task_quota_limit(), 1);
+    }
+
+    #[tokio::test]
+    async fn task_quota_serializes_parallel_commands_when_one() {
+        let gate = Arc::new(ConcurrencyGate::from_num_threads(Some(2)));
+        assert_eq!(gate.task_quota_limit(), 1);
+        let quota = Arc::new(Semaphore::new(gate.task_quota_limit()));
+        let gate2 = Arc::clone(&gate);
+        let quota2 = Arc::clone(&quota);
+        let first = tokio::spawn(async move {
+            let _p = gate2.admit(None, true, Some(&quota2), |_| {}).await;
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        });
+        tokio::task::yield_now().await;
+        let gate3 = Arc::clone(&gate);
+        let quota3 = Arc::clone(&quota);
+        let second = tokio::spawn(async move {
+            gate3.admit(None, true, Some(&quota3), |_| {}).await;
+        });
+        tokio::task::yield_now().await;
+        assert!(!second.is_finished());
+        first.await.unwrap();
+        second.await.unwrap();
+    }
 
     #[test]
     fn resolve_limit_respects_explicit() {

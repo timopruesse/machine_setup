@@ -4,7 +4,7 @@ use crate::engine::event::TaskEvent;
 use crate::tui::log_display;
 
 /// Plain text event consumer for --no-tui / CI environments.
-pub async fn run(mut event_rx: mpsc::UnboundedReceiver<TaskEvent>) {
+pub async fn run(mut event_rx: mpsc::Receiver<TaskEvent>) {
     while let Some(event) = event_rx.recv().await {
         match &event {
             TaskEvent::TaskStarted {

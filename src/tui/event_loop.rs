@@ -19,7 +19,7 @@ use super::state::UiState;
 pub async fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     mut state: UiState,
-    mut event_rx: mpsc::UnboundedReceiver<TaskEvent>,
+    mut event_rx: mpsc::Receiver<TaskEvent>,
     cancel: CancellationToken,
 ) -> anyhow::Result<UiState> {
     let (key_tx, mut key_rx) = mpsc::unbounded_channel::<KeyEvent>();
@@ -110,7 +110,7 @@ pub async fn run_loop(
 }
 
 fn apply_engine_batch(
-    event_rx: &mut mpsc::UnboundedReceiver<TaskEvent>,
+    event_rx: &mut mpsc::Receiver<TaskEvent>,
     mut state: UiState,
     first: TaskEvent,
 ) -> UiState {

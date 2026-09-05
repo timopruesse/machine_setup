@@ -35,6 +35,9 @@ pub struct CommandContext {
 
     /// Nesting depth (0 = top-level, 1 = sub-config, etc.)
     pub depth: usize,
+
+    /// Shared cancellation token (parent and nested Sub-config runs).
+    pub cancel: tokio_util::sync::CancellationToken,
 }
 
 impl CommandContext {

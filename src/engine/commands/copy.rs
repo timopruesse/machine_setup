@@ -206,6 +206,7 @@ mod tests {
             default_shell: crate::config::types::Shell::Bash,
             task_name: Arc::<str>::from("t"),
             depth: 0,
+            cancel: tokio_util::sync::CancellationToken::new(),
         }
     }
 

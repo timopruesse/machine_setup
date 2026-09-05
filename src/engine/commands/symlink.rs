@@ -164,7 +164,7 @@ mod tests {
         dir: &Path,
     ) -> (
         CommandContext,
-        tokio::sync::mpsc::UnboundedReceiver<crate::engine::event::TaskEvent>,
+        tokio::sync::mpsc::Receiver<crate::engine::event::TaskEvent>,
     ) {
         let (events, rx) = crate::engine::sink::ChannelSink::channel();
         let ctx = CommandContext {
@@ -178,6 +178,7 @@ mod tests {
             default_shell: crate::config::types::Shell::Bash,
             task_name: std::sync::Arc::<str>::from("t"),
             depth: 0,
+            cancel: tokio_util::sync::CancellationToken::new(),
         };
         (ctx, rx)
     }

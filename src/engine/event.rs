@@ -37,7 +37,7 @@ pub enum TaskEvent {
     /// A command within a task started.
     CommandStarted {
         task_name: Arc<str>,
-        command_desc: String,
+        command_desc: Arc<str>,
         /// 1-based index within the task's command list.
         command_index: usize,
         command_total: usize,
@@ -46,7 +46,7 @@ pub enum TaskEvent {
     /// A command is waiting on an Exclusive lane already held in this run.
     CommandWaiting {
         task_name: Arc<str>,
-        command_desc: String,
+        command_desc: Arc<str>,
         command_index: usize,
         command_total: usize,
         lane: ExclusiveLane,
@@ -55,7 +55,7 @@ pub enum TaskEvent {
     /// A command within a task completed successfully.
     CommandCompleted {
         task_name: Arc<str>,
-        command_desc: String,
+        command_desc: Arc<str>,
         command_index: usize,
         command_total: usize,
     },
@@ -63,7 +63,7 @@ pub enum TaskEvent {
     /// A command within a task failed.
     CommandFailed {
         task_name: Arc<str>,
-        command_desc: String,
+        command_desc: Arc<str>,
         command_index: usize,
         command_total: usize,
         error: String,
