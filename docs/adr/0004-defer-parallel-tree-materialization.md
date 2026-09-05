@@ -33,6 +33,7 @@ symlink install/uninstall).
 | --- | --- |
 | 1k wall-clock | `cargo bench --bench command_bench` (default) |
 | 10k wall-clock | `MACHINE_SETUP_BENCH_TREE_SIZE=10000 cargo bench --bench command_bench` |
+| 25k wall-clock (opt-in) | `MACHINE_SETUP_BENCH_TREE_SIZE=25000 cargo bench --bench command_bench` |
 | 100k memory | `cargo run --example tree_memory_harness --release` |
 
 Gate constants (source of truth: `src/engine/commands/tree_measure.rs`):

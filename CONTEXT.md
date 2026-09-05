@@ -229,7 +229,7 @@ soft regression thresholds are a human call, not CI. Memory harness
 (`examples/tree_memory_harness.rs`) is separate from Criterion: 100k DirectFs
 install, peak RSS + PathBuf estimate, `PASS`/`RECOMMEND_CHUNK` against ADR-0004
 thresholds; also report-only. Opt-in Criterion size via
-`MACHINE_SETUP_BENCH_TREE_SIZE=10000`.
+`MACHINE_SETUP_BENCH_TREE_SIZE=10000` or `25000` (heavier Criterion load).
 _Avoid_: performance test (ambiguous with correctness tests), profiling.
 
 ## Relationships

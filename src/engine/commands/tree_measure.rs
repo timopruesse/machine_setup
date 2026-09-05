@@ -4,6 +4,8 @@ use std::fmt;
 
 pub const CRITERION_DEFAULT_FILES: usize = 1_000;
 pub const CRITERION_LARGE_FILES: usize = 10_000;
+/// Opt-in Criterion ladder size (wall-clock); memory harness stays at 100k.
+pub const CRITERION_HUGE_FILES: usize = 25_000;
 pub const MEMORY_HARNESS_FILES: usize = 100_000;
 pub const PEAK_RSS_GATE_MIB: f64 = 256.0;
 pub const PATHBUF_ESTIMATE_GATE_MIB: f64 = 64.0;
@@ -15,8 +17,9 @@ pub fn parse_bench_tree_size(raw: Option<&str>) -> Result<usize, String> {
         None => Ok(CRITERION_DEFAULT_FILES),
         Some("1000") => Ok(CRITERION_DEFAULT_FILES),
         Some("10000") => Ok(CRITERION_LARGE_FILES),
+        Some("25000") => Ok(CRITERION_HUGE_FILES),
         Some(other) => Err(format!(
-            "MACHINE_SETUP_BENCH_TREE_SIZE={other:?} invalid; allowed: 1000, 10000"
+            "MACHINE_SETUP_BENCH_TREE_SIZE={other:?} invalid; allowed: 1000, 10000, 25000"
         )),
     }
 }
@@ -120,12 +123,13 @@ mod tests {
         assert_eq!(parse_bench_tree_size(Some("")).unwrap(), 1_000);
         assert_eq!(parse_bench_tree_size(Some("1000")).unwrap(), 1_000);
         assert_eq!(parse_bench_tree_size(Some("10000")).unwrap(), 10_000);
+        assert_eq!(parse_bench_tree_size(Some("25000")).unwrap(), 25_000);
     }
 
     #[test]
     fn parse_rejects_unknown() {
-        assert!(parse_bench_tree_size(Some("100000")).is_err());
         assert!(parse_bench_tree_size(Some("5000")).is_err());
+        assert!(parse_bench_tree_size(Some("100000")).is_err());
     }
 
     #[test]

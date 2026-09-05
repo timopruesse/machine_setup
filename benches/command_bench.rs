@@ -3,7 +3,7 @@
 //! Generate-once fixtures per process; SudoFs cases require
 //! `MACHINE_SETUP_BENCH_SUDO=1`.
 //!
-//! Tree ladder size: `MACHINE_SETUP_BENCH_TREE_SIZE=1000|10000` (default 1000).
+//! Tree ladder size: `MACHINE_SETUP_BENCH_TREE_SIZE=1000|10000|25000` (default 1000).
 //! Runner smoke always uses the 1k fixture regardless of that env var.
 //!
 //! Fixed bring-up: `startup/task_runner_new` and `runner_smoke/empty_task`.
@@ -61,6 +61,7 @@ fn size_label(n: usize) -> &'static str {
     match n {
         1_000 => "1k_files",
         10_000 => "10k_files",
+        25_000 => "25k_files",
         _ => panic!("unexpected criterion tree size {n}"),
     }
 }
@@ -105,7 +106,21 @@ fn fixture_for(n: usize) -> &'static TreeFixture {
             static F: OnceLock<TreeFixture> = OnceLock::new();
             F.get_or_init(|| TreeFixture::generate(10_000))
         }
+        25_000 => {
+            static F: OnceLock<TreeFixture> = OnceLock::new();
+            F.get_or_init(|| TreeFixture::generate(25_000))
+        }
         _ => panic!("unexpected criterion tree size {n}"),
+    }
+}
+
+fn configure_tree_group(group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>, n: usize) {
+    group.warm_up_time(Duration::from_secs(1));
+    if n == 25_000 {
+        group.sample_size(10);
+        group.measurement_time(Duration::from_secs(10));
+    } else {
+        group.measurement_time(Duration::from_secs(3));
     }
 }
 
@@ -153,8 +168,7 @@ fn bench_tree_install_direct(c: &mut Criterion) {
     let fixture = fixture_for(n);
     let ops = DirectFs;
     let mut group = c.benchmark_group("tree_install_direct");
-    group.warm_up_time(Duration::from_secs(1));
-    group.measurement_time(Duration::from_secs(3));
+    configure_tree_group(&mut group, n);
     group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || tempfile::tempdir().expect("dest"),
@@ -177,7 +191,11 @@ fn bench_tree_install_sudo(c: &mut Criterion) {
     let mut group = c.benchmark_group("tree_install_sudo");
     group.sample_size(10);
     group.warm_up_time(Duration::from_secs(1));
-    group.measurement_time(Duration::from_secs(5));
+    group.measurement_time(if n == 25_000 {
+        Duration::from_secs(10)
+    } else {
+        Duration::from_secs(5)
+    });
     group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || tempfile::tempdir().expect("dest"),
@@ -198,8 +216,7 @@ fn bench_mtime_skip(c: &mut Criterion) {
     copy_tree(&ops, fixture.src(), synced.path());
 
     let mut group = c.benchmark_group("mtime_skip");
-    group.warm_up_time(Duration::from_secs(1));
-    group.measurement_time(Duration::from_secs(3));
+    configure_tree_group(&mut group, n);
     group.bench_function(size_label(n), |b| {
         b.iter(|| {
             install_tree_with_pool(
@@ -226,8 +243,7 @@ fn bench_symlink_tree(c: &mut Criterion) {
     let fixture = fixture_for(n);
     let ops = DirectFs;
     let mut group = c.benchmark_group("tree_symlink_direct");
-    group.warm_up_time(Duration::from_secs(1));
-    group.measurement_time(Duration::from_secs(3));
+    configure_tree_group(&mut group, n);
     group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || tempfile::tempdir().expect("dest"),
@@ -245,8 +261,7 @@ fn bench_uninstall_tree(c: &mut Criterion) {
     let fixture = fixture_for(n);
     let ops = DirectFs;
     let mut group = c.benchmark_group("tree_uninstall_direct");
-    group.warm_up_time(Duration::from_secs(1));
-    group.measurement_time(Duration::from_secs(3));
+    configure_tree_group(&mut group, n);
     group.bench_function(size_label(n), |b| {
         b.iter_batched(
             || {
