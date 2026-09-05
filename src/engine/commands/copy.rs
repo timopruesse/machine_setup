@@ -21,14 +21,23 @@ impl CopyCommand {
         Self { args }
     }
 
-    /// Directory Install with empty ignore → one `sudo cp -a` (ADR-0002).
-    /// Update keeps mtime-skip via per-file + script batch.
+    /// Directory Install with empty ignore → bulk short-circuit when eligible:
+    /// - `sudo` → one `sudo cp -a` (ADR-0002)
+    /// - macOS non-sudo → one `cp -cR` (APFS clone; `utils::fast_copy::clone_copy_tree`)
     ///
-    /// Non-sudo Install uses parallel DirectFs apply (ADR-0004) instead of a
-    /// bulk `cp -a`: Command bench on WSL showed process-spawned `cp` slower
-    /// than in-process parallel `std::fs::copy` for typical tree sizes.
+    /// Update keeps mtime-skip via per-file apply. On Linux/Windows non-sudo,
+    /// Install uses parallel DirectFs (ADR-0004) — process-spawned plain `cp`
+    /// was slower than in-process parallel copy on WSL.
     fn eligible_for_bulk_sudo(src: &Path, args: &CopyArgs, mode: Mode) -> bool {
         args.sudo && matches!(mode, Mode::Install) && src.is_dir() && args.ignore.is_empty()
+    }
+
+    fn eligible_for_bulk_macos_clone(src: &Path, args: &CopyArgs, mode: Mode) -> bool {
+        cfg!(target_os = "macos")
+            && !args.sudo
+            && matches!(mode, Mode::Install)
+            && src.is_dir()
+            && args.ignore.is_empty()
     }
 }
 
@@ -91,6 +100,14 @@ impl TreeOpKind for CopyCommand {
             ));
             return Some(crate::utils::sudo::sudo_copy_tree(src, target));
         }
+        if Self::eligible_for_bulk_macos_clone(src, &self.args, ctx.mode) {
+            ctx.log_progress(format!(
+                "bulk clone {} → {}",
+                crate::engine::context::display_path(src),
+                crate::engine::context::display_path(target),
+            ));
+            return Some(crate::utils::fast_copy::clone_copy_tree(src, target).map_err(Into::into));
+        }
         None
     }
 
@@ -114,12 +131,16 @@ impl TreeOpKind for CopyCommand {
         dest: &Path,
         progress: &FileProgress<'_>,
     ) -> Result<()> {
-        if dest.exists() {
-            progress
-                .note_apply(|| format!("remove {}", crate::engine::context::display_path(dest)));
-            ops.remove_file(dest)
-        } else {
-            Ok(())
+        // Avoid a separate `exists()` syscall — try remove and treat missing as ok.
+        match ops.remove_file(dest) {
+            Ok(()) => {
+                progress.note_apply(|| {
+                    format!("remove {}", crate::engine::context::display_path(dest))
+                });
+                Ok(())
+            }
+            Err(crate::error::Error::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
         }
     }
 }
@@ -304,6 +325,45 @@ mod tests {
                 target: "/t".into(),
                 ignore: vec![],
                 sudo: true,
+            },
+            Mode::Install
+        ));
+    }
+
+    #[test]
+    fn test_eligible_for_bulk_macos_clone() {
+        let dir = tempdir().unwrap();
+        let src_dir = dir.path().join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+
+        let args = CopyArgs {
+            src: src_dir.to_string_lossy().into(),
+            target: "/t".into(),
+            ignore: vec![],
+            sudo: false,
+        };
+        assert_eq!(
+            CopyCommand::eligible_for_bulk_macos_clone(&src_dir, &args, Mode::Install),
+            cfg!(target_os = "macos")
+        );
+        assert!(!CopyCommand::eligible_for_bulk_macos_clone(
+            &src_dir,
+            &args,
+            Mode::Update
+        ));
+        assert!(!CopyCommand::eligible_for_bulk_macos_clone(
+            &src_dir,
+            &CopyArgs {
+                sudo: true,
+                ..args.clone()
+            },
+            Mode::Install
+        ));
+        assert!(!CopyCommand::eligible_for_bulk_macos_clone(
+            &src_dir,
+            &CopyArgs {
+                ignore: vec!["x".into()],
+                ..args
             },
             Mode::Install
         ));

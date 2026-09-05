@@ -51,7 +51,8 @@ impl TreeOpKind for SymlinkCommand {
     }
 
     fn install_pool<'a>(&self, _ctx: &'a CommandContext) -> Option<&'a rayon::ThreadPool> {
-        // Symlink create is metadata-cheap; keep sequential (Command bench).
+        // Symlink create is metadata-cheap; parallel collect+apply is slower
+        // than sequential stream apply (Command bench).
         None
     }
 
@@ -92,7 +93,9 @@ fn symlink_one(
     force: bool,
     progress: &FileProgress<'_>,
 ) -> Result<()> {
-    if dest.exists() || dest.symlink_metadata().is_ok() {
+    // One metadata syscall covers files, dirs, and broken symlinks (avoid
+    // `exists()` + `symlink_metadata()` on the common "absent" create path).
+    if dest.symlink_metadata().is_ok() {
         if force {
             progress
                 .note_apply(|| format!("remove {}", crate::engine::context::display_path(dest)));

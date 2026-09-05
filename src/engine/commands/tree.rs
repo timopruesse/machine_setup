@@ -16,9 +16,14 @@
 //! files on the shared ConcurrencyGate Rayon pool (ADR-0004). Small trees and
 //! single-threaded pools stay sequential. No second concurrency knob.
 //!
-//! Large trees use **chunked apply**: during the walk, file paths accumulate
-//! until the PathBuf list estimate would reach [`PATHBUF_ESTIMATE_GATE_MIB`],
-//! then that chunk is applied and cleared; trees under the gate stay one chunk.
+//! When the pool cannot parallelize (no pool or a single thread), file ops
+//! **stream during the walk** — no PathBuf list — which cuts alloc pressure on
+//! symlink installs and other sequential trees.
+//!
+//! Large parallel trees use **chunked apply**: during the walk, file paths
+//! accumulate until the PathBuf list estimate would reach
+//! [`PATHBUF_ESTIMATE_GATE_MIB`], then that chunk is applied and cleared;
+//! trees under the gate stay one chunk.
 
 use std::path::{Path, PathBuf};
 
@@ -95,6 +100,17 @@ impl ChunkApplyConfig<'_> {
             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
+}
+
+/// True when Rayon apply would actually run work on multiple threads.
+fn pool_can_parallelize(pool: Option<&ThreadPool>) -> bool {
+    pool.is_some_and(|p| p.current_num_threads() > 1)
+}
+
+/// Stream file ops during the walk when we would not parallelize and are not
+/// instrumenting chunk flushes (tests force collect via `flush_count`).
+fn should_stream_apply(pool: Option<&ThreadPool>, chunk: &ChunkApplyConfig<'_>) -> bool {
+    chunk.flush_count.is_none() && !pool_can_parallelize(pool)
 }
 
 /// Where a single source file lands, and which directory (if any) must exist
@@ -208,6 +224,22 @@ where
     }
 
     ensure_dir(target)?;
+
+    if should_stream_apply(pool, &chunk) {
+        return walk_relative(
+            src,
+            target,
+            |relative| ignore::should_ignore(relative, ignore),
+            |entry, dest| {
+                if entry.file_type().is_dir() {
+                    ensure_dir(dest)
+                } else {
+                    on_file(entry.path(), dest)
+                }
+            },
+        );
+    }
+
     let mut files = Vec::new();
     let mut path_avg = PathByteAvg::new();
     walk_relative(
@@ -313,6 +345,21 @@ where
         return on_dest(&dest);
     }
 
+    if should_stream_apply(pool, &chunk) {
+        return walk_relative(
+            src,
+            target,
+            |relative| ignore::should_ignore(relative, ignore),
+            |entry, dest| {
+                if entry.file_type().is_file() {
+                    on_dest(dest)
+                } else {
+                    Ok(())
+                }
+            },
+        );
+    }
+
     let mut dests = Vec::new();
     let mut path_avg = PathByteAvg::new();
     walk_relative(
@@ -359,6 +406,9 @@ where
             return pool.install(|| {
                 files
                     .par_iter()
+                    // Larger chunks cut Rayon scheduling overhead on cheap
+                    // per-file work (mtime skip / tiny clones).
+                    .with_min_len(64)
                     .try_for_each(|(src, dest)| on_file(src, dest))
             });
         }
@@ -375,7 +425,12 @@ where
 {
     if let Some(pool) = pool {
         if pool.current_num_threads() > 1 && dests.len() >= PARALLEL_FILE_THRESHOLD {
-            return pool.install(|| dests.par_iter().try_for_each(|dest| on_dest(dest)));
+            return pool.install(|| {
+                dests
+                    .par_iter()
+                    .with_min_len(64)
+                    .try_for_each(|dest| on_dest(dest))
+            });
         }
     }
     for dest in dests {

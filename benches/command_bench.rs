@@ -114,7 +114,10 @@ fn fixture_for(n: usize) -> &'static TreeFixture {
     }
 }
 
-fn configure_tree_group(group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>, n: usize) {
+fn configure_tree_group(
+    group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+    n: usize,
+) {
     group.warm_up_time(Duration::from_secs(1));
     if n == 25_000 {
         group.sample_size(10);
@@ -139,6 +142,13 @@ fn sudo_enabled() -> bool {
 }
 
 fn copy_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
+    // Match production Install short-circuit (macOS APFS `cp -cR`).
+    #[cfg(target_os = "macos")]
+    {
+        if machine_setup::utils::fast_copy::clone_copy_tree(src, dest).is_ok() {
+            return;
+        }
+    }
     install_tree_with_pool(
         src,
         dest,
@@ -151,7 +161,7 @@ fn copy_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
 }
 
 fn link_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
-    // Symlink create is cheap; keep sequential (matches production SymlinkCommand).
+    // Symlink create is cheap; keep sequential stream apply (matches production).
     install_tree_with_pool(
         src,
         dest,
@@ -275,11 +285,12 @@ fn bench_uninstall_tree(c: &mut Criterion) {
                     dest.path(),
                     &[],
                     Some(bench_pool()),
-                    |path| {
-                        if path.exists() {
-                            ops.remove_file(path)?;
+                    |path| match ops.remove_file(path) {
+                        Ok(()) => Ok(()),
+                        Err(e) if matches!(&e, machine_setup::error::Error::Io(io) if io.kind() == std::io::ErrorKind::NotFound) => {
+                            Ok(())
                         }
-                        Ok(())
+                        Err(e) => Err(e),
                     },
                 )
                 .expect("uninstall_tree");

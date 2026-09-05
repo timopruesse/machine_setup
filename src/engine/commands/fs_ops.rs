@@ -114,6 +114,10 @@ impl FileOps for DirectFs {
     }
 
     fn copy_file(&self, src: &Path, dest: &Path) -> Result<()> {
+        // APFS CoW clone when available; otherwise a normal data copy.
+        if crate::utils::fast_copy::try_fast_copy(src, dest)? {
+            return Ok(());
+        }
         std::fs::copy(src, dest)?;
         Ok(())
     }
