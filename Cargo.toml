@@ -51,7 +51,9 @@ ureq = "3"
 rayon = "1"
 libc = "0.2"
 
-[build-dependencies]
+# Host-gated: build.rs only embeds the Windows application manifest when
+# compiling on Windows (CI uses windows-latest, not cross-compile).
+[target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 
 [dev-dependencies]
@@ -70,6 +72,11 @@ strip = true
 [lints.rust]
 future_incompatible = "warn"
 nonstandard_style = "warn"
+
+# Published crate/binary name is snake_case (`machine_setup`); renaming would
+# break `cargo install` and existing scripts. Keep the historical name.
+[lints.cargo]
+non_kebab_case_bins = "allow"
 
 [lints.clippy]
 # Handbook-priority lints (Apollo Ch. 2). Default clippy groups stay at
