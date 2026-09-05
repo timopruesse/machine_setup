@@ -1,4 +1,5 @@
 pub mod document;
+pub mod document_edit;
 pub mod graph;
 pub mod history;
 pub mod locator;

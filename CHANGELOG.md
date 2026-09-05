@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- `remove task <name> [--fix-deps]` — delete a Task via Config rewrite; prompts (or `--fix-deps`) when dependents exist; prunes History
 - Command-bench tree size ladder (1k default / 10k via `MACHINE_SETUP_BENCH_TREE_SIZE`) and a report-only 100k tree memory harness for the ADR-0004 chunking gate
 
 ## [2.9.0]

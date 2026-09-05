@@ -71,6 +71,11 @@ pub enum Command {
         #[command(subcommand)]
         target: AddTarget,
     },
+    /// Remove from the Config document (rewrites the file; comments/formatting may change)
+    Remove {
+        #[command(subcommand)]
+        target: RemoveTarget,
+    },
     /// Manage OS-timer auto-update schedules
     Schedule {
         #[command(subcommand)]
@@ -113,6 +118,18 @@ pub enum ScheduleAction {
         /// Temp dir with schedule_notices.json (hook embeds this; default ~/.machine_setup)
         #[arg(long = "temp-dir", value_name = "DIR")]
         temp_dir: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum RemoveTarget {
+    /// Delete a Task by name
+    Task {
+        /// Task name
+        name: String,
+        /// Strip this name from other Tasks' depends_on, then remove (required non-interactively when dependents exist)
+        #[arg(long)]
+        fix_deps: bool,
     },
 }
 
@@ -185,6 +202,7 @@ impl std::fmt::Display for Command {
             Command::Init => write!(f, "init"),
             Command::Wizard => write!(f, "wizard"),
             Command::Add { .. } => write!(f, "add"),
+            Command::Remove { .. } => write!(f, "remove"),
             Command::Schedule { .. } => write!(f, "schedule"),
             Command::Schema => write!(f, "schema"),
             Command::Completions { .. } => write!(f, "completions"),

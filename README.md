@@ -67,6 +67,7 @@ cargo install machine_setup
 | init         | create a new empty Config document       | `machine_setup init`                 |
 | wizard       | interactive Config document setup (TTY)  | `machine_setup wizard`               |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
+| remove task  | delete a Task (rewrites file; may drop comments) | `machine_setup remove task tools` |
 | add recipe   | append a Task from an Authoring recipe   | `machine_setup add recipe git-repo --url … --target ~` |
 | schema       | print the Config JSON Schema to stdout   | `machine_setup schema`               |
 | schedule     | apply/remove OS timers for auto_update   | `machine_setup schedule apply`       |
@@ -74,7 +75,7 @@ cargo install machine_setup
 
 By default (no `-c`), `machine_setup` looks for `machine_setup.yaml` / `.yml` / `.json` in the current directory, then at the git repository root. Explicit `-c` still accepts a path or URL. Supported formats are YAML and JSON.
 
-`init` always creates `./machine_setup.yaml` in the cwd when `-c` is omitted (it does not write into the git root). `add task` requires an existing file (`init` first) and refuses duplicate Task names. After `init` / `add`, the Config document is validated automatically.
+`init` always creates `./machine_setup.yaml` in the cwd when `-c` is omitted (it does not write into the git root). `add task` requires an existing file (`init` first) and refuses duplicate Task names. `remove task` rewrites the file via serde (comments may be lost); when other tasks depend on the target, the CLI prompts on a TTY or requires `--fix-deps` to strip those edges, and History for the removed Task is pruned. After `init` / `add` / `remove`, the Config document is validated automatically.
 
 ### Command line parameters
 

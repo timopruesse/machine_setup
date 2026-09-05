@@ -5,7 +5,7 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
-use cli::{AddTarget, Cli, Command, ScheduleAction};
+use cli::{AddTarget, Cli, Command, RemoveTarget, ScheduleAction};
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
 
@@ -106,6 +106,27 @@ fn main() -> anyhow::Result<()> {
                 let name = emitted.name.clone();
                 config::document::append_emitted(&path, &emitted)?;
                 println!("Added recipe task `{name}` to {}", path.display());
+            }
+        }
+        if config::document::validate_after_write(&path)? {
+            notice.emit(&cli.command);
+            std::process::exit(1);
+        }
+        notice.emit(&cli.command);
+        return Ok(());
+    }
+
+    if let Command::Remove { target } = &cli.command {
+        let path = resolve_existing_document(cli.config.as_deref(), &cwd)?;
+        match target {
+            RemoveTarget::Task { name, fix_deps } => {
+                let mode = if *fix_deps {
+                    config::document_edit::FixDepsMode::Force
+                } else {
+                    config::document_edit::FixDepsMode::Auto
+                };
+                config::document_edit::remove_task(&path, name, mode)?;
+                println!("Removed task `{name}` from {}", path.display());
             }
         }
         if config::document::validate_after_write(&path)? {
@@ -235,7 +256,7 @@ fn resolve_existing_document(
 ) -> anyhow::Result<std::path::PathBuf> {
     if let Some(raw) = config_arg {
         if config::is_url(raw) {
-            anyhow::bail!("`add` requires a local Config document path, not a URL");
+            anyhow::bail!("`add`/`remove` require a local Config document path, not a URL");
         }
         let path = config::resolve_config_path(Path::new(raw))?;
         return Ok(path);

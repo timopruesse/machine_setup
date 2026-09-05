@@ -7,10 +7,11 @@ use std::fmt;
 use std::sync::Arc;
 
 /// Root configuration structure.
+///
+/// Field order matters for YAML serialization: `tasks` must be last so
+/// append-only `add task` can extend the `tasks:` map at EOF.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    pub tasks: IndexMap<String, Arc<TaskConfig>>,
-
     /// Directory for temp files and history (default: ~/.machine_setup)
     #[serde(default = "default_temp_dir")]
     pub temp_dir: String,
@@ -29,6 +30,8 @@ pub struct AppConfig {
     /// When false, skip the post-command self update-check notice (default true).
     #[serde(default = "default_true")]
     pub check_for_updates: bool,
+
+    pub tasks: IndexMap<String, Arc<TaskConfig>>,
 }
 
 fn default_temp_dir() -> String {
@@ -124,7 +127,7 @@ pub struct TaskConfig {
 ///     src: "./files"
 ///     target: "~/.config"
 /// ```
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum CommandEntry {
     Copy(CopyArgs),
     Symlink(SymlinkArgs),
@@ -180,6 +183,24 @@ impl<'de> Deserialize<'de> for CommandEntry {
                 "Unknown command type: {other}"
             ))),
         }
+    }
+}
+
+impl Serialize for CommandEntry {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(1))?;
+        match self {
+            CommandEntry::Copy(a) => map.serialize_entry("copy", a)?,
+            CommandEntry::Symlink(a) => map.serialize_entry("symlink", a)?,
+            CommandEntry::Clone(a) => map.serialize_entry("clone", a)?,
+            CommandEntry::Run(a) => map.serialize_entry("run", a)?,
+            CommandEntry::MachineSetup(a) => map.serialize_entry("machine_setup", a)?,
+        }
+        map.end()
     }
 }
 
@@ -352,12 +373,43 @@ pub struct MachineSetupArgs {
 }
 
 /// A single task condition (path, env, command, or mode).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition {
     Path(String),
     Env(String),
     Command(String),
     Mode(Vec<Mode>),
+}
+
+impl Serialize for Condition {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Condition::Path(p) => serializer.serialize_str(p),
+            Condition::Env(e) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("env", e)?;
+                map.end()
+            }
+            Condition::Command(c) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("command", c)?;
+                map.end()
+            }
+            Condition::Mode(modes) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                if modes.len() == 1 {
+                    map.serialize_entry("mode", &modes[0])?;
+                } else {
+                    map.serialize_entry("mode", modes)?;
+                }
+                map.end()
+            }
+        }
+    }
 }
 
 /// Task conditions — backward compatible with plain path strings.
@@ -670,5 +722,51 @@ commands: "echo $MY_VAR"
             sudo: false,
         });
         assert_eq!(format!("{entry}"), "copy: ./src -> ~/dest");
+    }
+
+    #[test]
+    fn command_entry_yaml_roundtrip_copy() {
+        let yaml = r#"
+- copy:
+    src: ./a
+    target: ~/b
+"#;
+        let entries: Vec<CommandEntry> = serde_yaml::from_str(yaml).unwrap();
+        let out = serde_yaml::to_string(&entries).unwrap();
+        let again: Vec<CommandEntry> = serde_yaml::from_str(&out).unwrap();
+        assert!(matches!(again[0], CommandEntry::Copy(_)));
+    }
+
+    #[test]
+    fn command_entry_yaml_roundtrip_run_symlink_clone() {
+        let yaml = r#"
+- run:
+    commands: "echo hi"
+- symlink:
+    src: ./x
+    target: ~/x
+    force: true
+- clone:
+    url: https://example.com/r.git
+    target: ~/r
+"#;
+        let entries: Vec<CommandEntry> = serde_yaml::from_str(yaml).unwrap();
+        let out = serde_yaml::to_string(&entries).unwrap();
+        let again: Vec<CommandEntry> = serde_yaml::from_str(&out).unwrap();
+        assert_eq!(again.len(), 3);
+    }
+
+    #[test]
+    fn conditions_yaml_roundtrip() {
+        let yaml = r#"
+- ~/.ssh
+- env: HOME
+- command: "true"
+- mode: install
+"#;
+        let c: Conditions = serde_yaml::from_str(yaml).unwrap();
+        let out = serde_yaml::to_string(&c).unwrap();
+        let again: Conditions = serde_yaml::from_str(&out).unwrap();
+        assert_eq!(c, again);
     }
 }

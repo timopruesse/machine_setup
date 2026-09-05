@@ -88,6 +88,12 @@ pub enum Error {
 
     #[error("Unknown dependency: task '{0}' depends on '{1}' which does not exist")]
     MissingDependency(String, String),
+
+    #[error(
+        "Cannot remove task '{task}': still depended on by: {dependents}. \
+         Re-run with `--fix-deps` to strip those edges, or run interactively to choose."
+    )]
+    RemoveBlocked { task: String, dependents: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
