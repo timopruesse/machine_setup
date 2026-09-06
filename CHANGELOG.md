@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.11.0]
+
 ### Added
 - `--dry-run` preview mode across all commands (`copy`, `symlink`, `clone`, `run`, `machine_setup`): simulates execution with `DryRunFs` without modifying files, executing shell scripts, cloning repos, prompting for sudo, or updating history
 - Command-level OS filtering (`os: [linux, macos, windows]`) on individual command entries (`copy`, `symlink`, `clone`, `run`, `machine_setup`), allowing single unified cross-platform tasks
