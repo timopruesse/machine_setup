@@ -155,12 +155,19 @@ fn map_key(state: &UiState, key: KeyEvent) -> Option<Input> {
     }
 
     if state.search_mode {
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return match key.code {
+                KeyCode::Char('p') => Some(Input::SelectPrev),
+                KeyCode::Char('n') => Some(Input::SelectNext),
+                _ => None,
+            };
+        }
         return match key.code {
             KeyCode::Esc => Some(Input::ExitSearch),
             KeyCode::Enter => Some(Input::ConfirmSearch),
             KeyCode::Backspace => Some(Input::SearchBackspace),
-            KeyCode::Up | KeyCode::Char('k') => Some(Input::SelectPrev),
-            KeyCode::Down | KeyCode::Char('j') => Some(Input::SelectNext),
+            KeyCode::Up => Some(Input::SelectPrev),
+            KeyCode::Down => Some(Input::SelectNext),
             KeyCode::Char(c) => Some(Input::SearchChar(c)),
             _ => None,
         };
@@ -193,17 +200,19 @@ mod tests {
     }
 
     #[test]
-    fn search_mode_jk_navigate_not_insert() {
+    fn search_mode_jk_insert_chars() {
         let mut state = UiState::new(vec!["a".into(), "b".into()], Mode::Install);
         state.search_mode = true;
         assert_eq!(
             map_key(&state, key(KeyCode::Char('j'))),
-            Some(Input::SelectNext)
+            Some(Input::SearchChar('j'))
         );
         assert_eq!(
             map_key(&state, key(KeyCode::Char('k'))),
-            Some(Input::SelectPrev)
+            Some(Input::SearchChar('k'))
         );
+        assert_eq!(map_key(&state, key(KeyCode::Up)), Some(Input::SelectPrev));
+        assert_eq!(map_key(&state, key(KeyCode::Down)), Some(Input::SelectNext));
     }
 
     #[test]

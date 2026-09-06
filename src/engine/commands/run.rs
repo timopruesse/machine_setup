@@ -40,6 +40,18 @@ async fn run_for_mode(args: &RunArgs, mode: Mode, ctx: &CommandContext) -> Resul
     let active_shell = args.shell.as_ref().unwrap_or(&ctx.default_shell);
     let script = shell::build_shell_command(commands, active_shell, &args.env)?;
 
+    if ctx.dry_run {
+        ctx.log_info(format!(
+            "[dry-run] would run {} command(s) with {}",
+            commands.len(),
+            active_shell
+        ));
+        for cmd in commands {
+            ctx.log_info(format!("  [dry-run] > {cmd}"));
+        }
+        return Ok(());
+    }
+
     if !args.quiet {
         ctx.log_info(format!(
             "Running {} command(s) with {}",

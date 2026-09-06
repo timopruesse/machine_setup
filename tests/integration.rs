@@ -284,6 +284,44 @@ tasks:
     assert!(find_output(&events, "right_os", "correct_os"));
 }
 
+#[tokio::test]
+async fn test_command_level_os_filter() {
+    let wrong_os = if cfg!(target_os = "windows") {
+        "linux"
+    } else {
+        "windows"
+    };
+    let current_os = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    };
+
+    let events = run_config(
+        &format!(
+            r#"
+tasks:
+  mixed_os:
+    commands:
+      - run:
+          os: "{wrong_os}"
+          commands: "echo should_not_run_cmd"
+      - run:
+          os: "{current_os}"
+          commands: "echo should_run_cmd"
+"#
+        ),
+        Mode::Install,
+    )
+    .await;
+
+    assert!(task_completed(&events, "mixed_os"));
+    assert!(find_output(&events, "mixed_os", "should_run_cmd"));
+    assert!(!find_output(&events, "mixed_os", "should_not_run_cmd"));
+}
+
 // ─── Copy command tests ───
 
 #[tokio::test]
@@ -1707,6 +1745,100 @@ tasks:
     );
     // Reading through the link yields the source content.
     assert_eq!(fs::read_to_string(&link).unwrap(), "from-source");
+}
+
+#[tokio::test]
+async fn test_symlink_force_with_backup_creates_backup_file() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("source");
+    let target_dir = dir.path().join("target");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(src_dir.join("dotfile"), "from-source").unwrap();
+    fs::write(target_dir.join("dotfile"), "pre-existing").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  link_task:
+    commands:
+      - symlink:
+          src: "{}"
+          target: "{}"
+          force: true
+          backup: true
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    run_at(&config_path, dir.path(), Mode::Install).await;
+
+    let link = target_dir.join("dotfile");
+    let meta = link.symlink_metadata().unwrap();
+    assert!(
+        meta.file_type().is_symlink(),
+        "force should replace the file with a symlink"
+    );
+    assert_eq!(fs::read_to_string(&link).unwrap(), "from-source");
+
+    let backup = target_dir.join("dotfile.bak");
+    assert!(backup.exists(), "backup file dotfile.bak must exist");
+    assert_eq!(fs::read_to_string(&backup).unwrap(), "pre-existing");
+}
+
+#[tokio::test]
+async fn test_symlink_cli_backup_flag_creates_backup_file() {
+    let dir = tempdir().unwrap();
+    let src_dir = dir.path().join("source");
+    let target_dir = dir.path().join("target");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::create_dir_all(&target_dir).unwrap();
+    fs::write(src_dir.join("dotfile"), "from-source").unwrap();
+    fs::write(target_dir.join("dotfile"), "pre-existing").unwrap();
+
+    let config_path = dir.path().join("config.yaml");
+    fs::write(
+        &config_path,
+        format!(
+            r#"
+tasks:
+  link_task:
+    commands:
+      - symlink:
+          src: "{}"
+          target: "{}"
+          force: true
+"#,
+            src_dir.to_string_lossy().replace('\\', "/"),
+            target_dir.to_string_lossy().replace('\\', "/"),
+        ),
+    )
+    .unwrap();
+
+    let config = config::load_config(config_path.to_str().unwrap()).unwrap();
+    let (events, _rx) = machine_setup::engine::sink::ChannelSink::channel();
+    let runner = TaskRunner::new(config, Mode::Install, events)
+        .with_config_dir(dir.path().to_path_buf())
+        .with_backup(true);
+    let _ = runner.run_all(true).await;
+
+    let link = target_dir.join("dotfile");
+    let meta = link.symlink_metadata().unwrap();
+    assert!(
+        meta.file_type().is_symlink(),
+        "force should replace the file with a symlink"
+    );
+    assert_eq!(fs::read_to_string(&link).unwrap(), "from-source");
+
+    let backup = target_dir.join("dotfile.bak");
+    assert!(backup.exists(), "backup file dotfile.bak must exist");
+    assert_eq!(fs::read_to_string(&backup).unwrap(), "pre-existing");
 }
 
 #[tokio::test]

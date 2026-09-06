@@ -60,6 +60,9 @@ pub fn description(entry: &CommandEntry) -> std::sync::Arc<str> {
 
 /// Whether this Command entry needs elevated privileges for the selected tasks UI.
 pub fn entry_requires_sudo(entry: &CommandEntry) -> bool {
+    if !entry.os().matches_current() {
+        return false;
+    }
     match entry {
         CommandEntry::Run(args) => args.all_command_strings().any(|s| s.contains("sudo")),
         CommandEntry::Copy(args) => args.sudo,
@@ -289,7 +292,9 @@ fn script_has_token(script: &str, token: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::types::{CommandEntry, CopyArgs, RunArgs, StringOrVec, SymlinkArgs};
+    use crate::config::types::{
+        CommandEntry, CopyArgs, OsFilter, RunArgs, StringOrVec, SymlinkArgs,
+    };
     use std::collections::HashMap;
 
     fn parse_entry(yaml: &str) -> CommandEntry {
@@ -353,6 +358,7 @@ mod tests {
             target: "/b".into(),
             ignore: vec![],
             sudo: true,
+            os: OsFilter::All,
         });
         demote_entry_for_unattended("priv", &mut copy, &mut warnings);
         match &copy {
@@ -366,6 +372,8 @@ mod tests {
             ignore: vec![],
             force: false,
             sudo: true,
+            os: OsFilter::All,
+            backup: false,
         });
         demote_entry_for_unattended("priv", &mut symlink, &mut warnings);
         match &symlink {
@@ -381,6 +389,7 @@ mod tests {
             shell: None,
             env: HashMap::new(),
             quiet: false,
+            os: OsFilter::All,
         });
         demote_entry_for_unattended("priv", &mut run, &mut warnings);
         match &run {

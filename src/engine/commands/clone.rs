@@ -23,6 +23,32 @@ impl CloneCommand {
 #[async_trait]
 impl CommandExecutor for CloneCommand {
     async fn execute(&self, ctx: &CommandContext) -> Result<()> {
+        if ctx.dry_run {
+            let target = expand_path(&self.args.target, Some(&ctx.config_dir));
+            match ctx.mode {
+                Mode::Install => {
+                    ctx.log_info(format!(
+                        "[dry-run] would clone {} → {}",
+                        self.args.url,
+                        display_path(&target)
+                    ));
+                }
+                Mode::Update => {
+                    ctx.log_info(format!(
+                        "[dry-run] would pull git repo at {}",
+                        display_path(&target)
+                    ));
+                }
+                Mode::Uninstall => {
+                    ctx.log_info(format!(
+                        "[dry-run] would remove git repo at {}",
+                        display_path(&target)
+                    ));
+                }
+            }
+            return Ok(());
+        }
+
         match ctx.mode {
             Mode::Install => self.clone_repo(ctx).await,
             Mode::Update => self.pull_repo(ctx).await,

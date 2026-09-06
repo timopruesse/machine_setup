@@ -70,7 +70,9 @@ async fn run_sub_config(args: &MachineSetupArgs, ctx: &CommandContext) -> Result
         .with_gate(Arc::clone(&ctx.gate))
         .with_config_dir(sub_config_dir)
         .with_depth(ctx.depth + 1)
-        .with_cancel(ctx.cancel.clone());
+        .with_cancel(ctx.cancel.clone())
+        .with_dry_run(ctx.dry_run)
+        .with_backup(ctx.backup);
 
     match (run_set, &args.task) {
         (Some(tasks), _) => runner.run_tasks(&tasks, args.force).await,

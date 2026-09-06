@@ -119,3 +119,17 @@ tasks:
             - "echo 'Command C starting (5s)'"
             - "sleep 5"
             - "echo 'Command C done'"
+
+  unified_cross_platform:
+    commands:
+      - run:
+          os: "linux"
+          commands: "echo 'Linux-specific command executed'"
+      - run:
+          os: "macos"
+          commands: "echo 'macOS-specific command executed'"
+      - run:
+          os: "windows"
+          commands: "echo 'Windows-specific command executed'"
+      - run:
+          commands: "echo 'Common command for all platforms'"

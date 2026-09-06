@@ -1,4 +1,4 @@
-use super::os::OsFilter;
+pub use super::os::OsFilter;
 use crate::engine::mode::Mode;
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -166,6 +166,18 @@ pub enum CommandEntry {
     MachineSetup(MachineSetupArgs),
 }
 
+impl CommandEntry {
+    pub fn os(&self) -> &OsFilter {
+        match self {
+            CommandEntry::Copy(a) => &a.os,
+            CommandEntry::Symlink(a) => &a.os,
+            CommandEntry::Clone(a) => &a.os,
+            CommandEntry::Run(a) => &a.os,
+            CommandEntry::MachineSetup(a) => &a.os,
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for CommandEntry {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -294,6 +306,8 @@ pub struct CopyArgs {
     pub ignore: Vec<String>,
     #[serde(default)]
     pub sudo: bool,
+    #[serde(default, skip_serializing_if = "OsFilter::is_all")]
+    pub os: OsFilter,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -306,12 +320,18 @@ pub struct SymlinkArgs {
     pub force: bool,
     #[serde(default)]
     pub sudo: bool,
+    #[serde(default, skip_serializing_if = "OsFilter::is_all")]
+    pub os: OsFilter,
+    #[serde(default)]
+    pub backup: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloneArgs {
     pub url: String,
     pub target: String,
+    #[serde(default, skip_serializing_if = "OsFilter::is_all")]
+    pub os: OsFilter,
 }
 
 /// Run command arguments. Supports both simple and mode-specific commands.
@@ -343,6 +363,10 @@ pub struct RunArgs {
     /// When true, suppress subprocess stdout (stderr still logged; failures surface errors).
     #[serde(default)]
     pub quiet: bool,
+
+    /// OS filter — omit to run on all OSes
+    #[serde(default, skip_serializing_if = "OsFilter::is_all")]
+    pub os: OsFilter,
 }
 
 impl RunArgs {
@@ -400,6 +424,8 @@ pub struct MachineSetupArgs {
     /// (default false; no-op when `task` is omitted).
     #[serde(default)]
     pub with_deps: bool,
+    #[serde(default, skip_serializing_if = "OsFilter::is_all")]
+    pub os: OsFilter,
 }
 
 /// A single task condition (path, env, command, or mode).
@@ -762,6 +788,7 @@ commands: "echo $MY_VAR"
             target: "~/dest".to_string(),
             ignore: vec![],
             sudo: false,
+            os: OsFilter::All,
         });
         assert_eq!(format!("{entry}"), "copy: ./src -> ~/dest");
     }

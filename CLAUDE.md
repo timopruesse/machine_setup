@@ -43,7 +43,8 @@ cargo test <test_name>
 - **Async**: tokio drives everything; the runner spawns tasks on a thread pool; commands stream stdout/stderr via events
 - **Parallel execution**: controlled at config-level (`parallel: true`) globally or per-task; thread count defaults to `num_cpus - 1`
 - **Command modes**: `run` commands can have separate `install`/`update`/`uninstall` entries; other command types execute on all modes
-- **OS filtering**: tasks/commands filtered by `os: [linux, macos, windows]` field
+- **OS filtering**: tasks and individual command entries filtered by `os: [linux, macos, windows]`
+- **Preview & Safety**: `--dry-run` preview mode across all commands; `backup: true` / `--backup` for safe symlink overwrites
 - **Remote config**: URLs are fetched via `ureq`; GitHub blob URLs are auto-converted to raw URLs
 - **Nested configs**: `machine_setup` command type includes another config file recursively
 
@@ -58,15 +59,18 @@ tasks:
     parallel: false
     commands:
       - run:
-          install: echo "installing"
-          update: echo "updating"
-          uninstall: echo "removing"
+          os: linux
+          install: echo "installing linux package"
+      - run:
+          os: macos
+          install: echo "installing macos package"
       - symlink:
-          source: ~/dotfiles/.zshrc
+          src: ~/dotfiles/.zshrc
           target: ~/.zshrc
           force: true
+          backup: true
       - copy:
-          source: ./config/
+          src: ./config/
           target: ~/.config/mytool/
       - clone:
           url: https://github.com/user/repo

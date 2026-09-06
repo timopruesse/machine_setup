@@ -49,6 +49,9 @@ pub trait FileOps: Send + Sync {
     /// (Windows) that distinguish them from file symlinks.
     fn remove_symlink(&self, path: &Path) -> Result<()>;
 
+    /// Rename or move `src` to `dest`.
+    fn rename(&self, src: &Path, dest: &Path) -> Result<()>;
+
     /// Flush any buffered work (SudoFs script batch). DirectFs is a no-op.
     fn flush(&self) -> Result<()> {
         Ok(())
@@ -97,10 +100,54 @@ where
 
 /// Pick the adapter for a command based on whether it requested `sudo`.
 pub fn select(use_sudo: bool) -> Box<dyn FileOps> {
-    if use_sudo {
+    select_with_dry_run(use_sudo, false)
+}
+
+/// Pick the adapter for a command based on whether it requested `sudo` and whether `dry_run` is enabled.
+pub fn select_with_dry_run(use_sudo: bool, dry_run: bool) -> Box<dyn FileOps> {
+    if dry_run {
+        Box::new(DryRunFs)
+    } else if use_sudo {
         Box::new(SudoFs::default())
     } else {
         Box::new(DirectFs)
+    }
+}
+
+/// No-op filesystem operations for `--dry-run` preview mode.
+pub struct DryRunFs;
+
+impl FileOps for DryRunFs {
+    fn mkdir_p(&self, _path: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn copy_file(&self, _src: &Path, _dest: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn create_symlink(&self, _src: &Path, _dest: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn remove_file(&self, _path: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn remove_path(&self, _path: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn remove_symlink(&self, _path: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn rename(&self, _src: &Path, _dest: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -171,6 +218,11 @@ impl FileOps for DirectFs {
             }
         }
         std::fs::remove_file(path)?;
+        Ok(())
+    }
+
+    fn rename(&self, src: &Path, dest: &Path) -> Result<()> {
+        std::fs::rename(src, dest)?;
         Ok(())
     }
 }
@@ -248,6 +300,14 @@ impl FileOps for SudoFs {
         Ok(())
     }
 
+    fn rename(&self, src: &Path, dest: &Path) -> Result<()> {
+        self.push(sudo::SudoOp::Rename {
+            src: src.to_path_buf(),
+            dest: dest.to_path_buf(),
+        });
+        Ok(())
+    }
+
     fn flush(&self) -> Result<()> {
         #[expect(
             clippy::expect_used,
@@ -310,6 +370,10 @@ impl FileOps for RecordingFs {
     }
     fn remove_symlink(&self, path: &Path) -> Result<()> {
         self.record(format!("remove_symlink {}", path.display()));
+        Ok(())
+    }
+    fn rename(&self, src: &Path, dest: &Path) -> Result<()> {
+        self.record(format!("rename {} {}", src.display(), dest.display()));
         Ok(())
     }
 }
@@ -379,6 +443,18 @@ mod tests {
         assert!(link.symlink_metadata().is_err());
         // The link target is untouched.
         assert!(src.exists());
+    }
+
+    #[test]
+    fn test_direct_rename() {
+        let dir = tempdir().unwrap();
+        let ops = DirectFs;
+        let src = dir.path().join("old.txt");
+        let dest = dir.path().join("new.txt");
+        std::fs::write(&src, b"content").unwrap();
+        ops.rename(&src, &dest).unwrap();
+        assert!(!src.exists());
+        assert_eq!(std::fs::read(&dest).unwrap(), b"content");
     }
 
     #[cfg(unix)]

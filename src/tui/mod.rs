@@ -58,7 +58,7 @@ pub async fn run(
 
     let state = UiState::new(task_names, mode);
 
-    let result = event_loop::run_loop(&mut terminal, state, event_rx, cancel).await;
+    let result = event_loop::run_loop(&mut terminal, state, event_rx, cancel.clone()).await;
 
     // Always restore terminal
     restore_terminal();
@@ -67,6 +67,12 @@ pub async fn run(
     match result {
         Ok(final_state) => {
             print_summary(&final_state);
+            if cancel.is_cancelled() {
+                anyhow::bail!("execution was cancelled");
+            }
+            if final_state.failed > 0 {
+                anyhow::bail!("{} task(s) failed", final_state.failed);
+            }
             Ok(())
         }
         Err(e) => Err(e),

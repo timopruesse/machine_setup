@@ -64,12 +64,19 @@ fn map_key(state: &CatalogState, key: KeyEvent) -> Option<CatalogInput> {
     }
 
     if state.search_mode {
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return match key.code {
+                KeyCode::Char('p') => Some(CatalogInput::SelectPrev),
+                KeyCode::Char('n') => Some(CatalogInput::SelectNext),
+                _ => None,
+            };
+        }
         return match key.code {
             KeyCode::Esc => Some(CatalogInput::ExitSearch),
             KeyCode::Enter => Some(CatalogInput::ConfirmSearch),
             KeyCode::Backspace => Some(CatalogInput::SearchBackspace),
-            KeyCode::Up | KeyCode::Char('k') => Some(CatalogInput::SelectPrev),
-            KeyCode::Down | KeyCode::Char('j') => Some(CatalogInput::SelectNext),
+            KeyCode::Up => Some(CatalogInput::SelectPrev),
+            KeyCode::Down => Some(CatalogInput::SelectNext),
             KeyCode::Char(c) => Some(CatalogInput::SearchChar(c)),
             _ => None,
         };
@@ -120,16 +127,24 @@ mod tests {
     }
 
     #[test]
-    fn search_mode_jk_navigate_not_insert() {
+    fn search_mode_jk_insert_chars() {
         let mut state = browse_state();
         state.search_mode = true;
         assert_eq!(
             map_key(&state, key(KeyCode::Char('j'))),
-            Some(CatalogInput::SelectNext)
+            Some(CatalogInput::SearchChar('j'))
         );
         assert_eq!(
             map_key(&state, key(KeyCode::Char('k'))),
+            Some(CatalogInput::SearchChar('k'))
+        );
+        assert_eq!(
+            map_key(&state, key(KeyCode::Up)),
             Some(CatalogInput::SelectPrev)
+        );
+        assert_eq!(
+            map_key(&state, key(KeyCode::Down)),
+            Some(CatalogInput::SelectNext)
         );
     }
 

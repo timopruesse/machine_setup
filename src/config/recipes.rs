@@ -152,6 +152,7 @@ pub fn emit_dotfiles(p: &DotfilesParams<'_>) -> Result<EmittedTask> {
             CommandEntry::Clone(CloneArgs {
                 url: p.url.to_string(),
                 target: ".".to_string(),
+                os: OsFilter::All,
             }),
             CommandEntry::Symlink(SymlinkArgs {
                 src: p.src.to_string(),
@@ -159,6 +160,8 @@ pub fn emit_dotfiles(p: &DotfilesParams<'_>) -> Result<EmittedTask> {
                 ignore,
                 force: true,
                 sudo: false,
+                os: OsFilter::All,
+                backup: false,
             }),
         ],
         ..blank_task_config()
@@ -176,6 +179,7 @@ pub fn emit_git_repo(p: &GitRepoParams<'_>) -> Result<EmittedTask> {
         commands: vec![CommandEntry::Clone(CloneArgs {
             url: p.url.to_string(),
             target: p.target.to_string(),
+            os: OsFilter::All,
         })],
         ..blank_task_config()
     };
@@ -199,6 +203,7 @@ pub fn emit_brew_bundle(p: &BrewBundleParams<'_>) -> Result<EmittedTask> {
             shell: None,
             env: Default::default(),
             quiet: false,
+            os: OsFilter::All,
         })],
         ..blank_task_config()
     };

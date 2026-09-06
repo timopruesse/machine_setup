@@ -199,7 +199,8 @@ fn kind_args_schema(kind: &str) -> Value {
                 "src": { "type": "string" },
                 "target": { "type": "string" },
                 "ignore": { "type": "array", "items": { "type": "string" } },
-                "sudo": { "type": "boolean", "default": false }
+                "sudo": { "type": "boolean", "default": false },
+                "os": { "$ref": "#/$defs/osFilter" }
             }
         }),
         "symlink" => json!({
@@ -211,7 +212,9 @@ fn kind_args_schema(kind: &str) -> Value {
                 "target": { "type": "string" },
                 "ignore": { "type": "array", "items": { "type": "string" } },
                 "force": { "type": "boolean", "default": false },
-                "sudo": { "type": "boolean", "default": false }
+                "sudo": { "type": "boolean", "default": false },
+                "os": { "$ref": "#/$defs/osFilter" },
+                "backup": { "type": "boolean", "default": false }
             }
         }),
         "clone" => json!({
@@ -220,7 +223,8 @@ fn kind_args_schema(kind: &str) -> Value {
             "additionalProperties": false,
             "properties": {
                 "url": { "type": "string" },
-                "target": { "type": "string" }
+                "target": { "type": "string" },
+                "os": { "$ref": "#/$defs/osFilter" }
             }
         }),
         "run" => json!({
@@ -236,7 +240,8 @@ fn kind_args_schema(kind: &str) -> Value {
                     "type": "object",
                     "additionalProperties": { "type": "string" }
                 },
-                "quiet": { "type": "boolean", "default": false }
+                "quiet": { "type": "boolean", "default": false },
+                "os": { "$ref": "#/$defs/osFilter" }
             }
         }),
         "machine_setup" => json!({
@@ -255,7 +260,8 @@ fn kind_args_schema(kind: &str) -> Value {
                     "type": "boolean",
                     "default": false,
                     "description": "When task is set, also run transitive depends_on (like CLI --with-deps)"
-                }
+                },
+                "os": { "$ref": "#/$defs/osFilter" }
             }
         }),
         other => panic!("KIND_KEYS out of sync with kind_args_schema: {other}"),

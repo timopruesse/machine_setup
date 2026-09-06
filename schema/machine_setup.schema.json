@@ -30,6 +30,9 @@
                   },
                   "type": "array"
                 },
+                "os": {
+                  "$ref": "#/$defs/osFilter"
+                },
                 "src": {
                   "type": "string"
                 },
@@ -59,6 +62,10 @@
             "symlink": {
               "additionalProperties": false,
               "properties": {
+                "backup": {
+                  "default": false,
+                  "type": "boolean"
+                },
                 "force": {
                   "default": false,
                   "type": "boolean"
@@ -68,6 +75,9 @@
                     "type": "string"
                   },
                   "type": "array"
+                },
+                "os": {
+                  "$ref": "#/$defs/osFilter"
                 },
                 "src": {
                   "type": "string"
@@ -98,6 +108,9 @@
             "clone": {
               "additionalProperties": false,
               "properties": {
+                "os": {
+                  "$ref": "#/$defs/osFilter"
+                },
                 "target": {
                   "type": "string"
                 },
@@ -134,6 +147,9 @@
                 },
                 "install": {
                   "$ref": "#/$defs/stringOrVec"
+                },
+                "os": {
+                  "$ref": "#/$defs/osFilter"
                 },
                 "quiet": {
                   "default": false,
@@ -175,6 +191,9 @@
                   "default": false,
                   "description": "Bypass History skip in the nested Runner",
                   "type": "boolean"
+                },
+                "os": {
+                  "$ref": "#/$defs/osFilter"
                 },
                 "task": {
                   "type": "string"

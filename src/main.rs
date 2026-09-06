@@ -312,7 +312,7 @@ async fn run_execution(
 
     let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
 
-    if use_tui && app_config.requires_sudo(&task_names) {
+    if use_tui && !cli.dry_run && app_config.requires_sudo(&task_names) {
         pre_authenticate_sudo();
     }
 
@@ -325,7 +325,9 @@ async fn run_execution(
 
     let runner = TaskRunner::new(app_config, mode, events)
         .with_config_dir(config_dir)
-        .with_cancel(cancel.clone());
+        .with_cancel(cancel.clone())
+        .with_dry_run(cli.dry_run)
+        .with_backup(cli.backup);
     let force = cli.force;
     let task_names_clone = task_names.clone();
 
@@ -363,18 +365,22 @@ async fn run_execution(
             plain_cancel.cancel();
         });
 
+        if cli.dry_run {
+            println!("=== DRY-RUN MODE: No changes will be applied ===\n");
+        }
+
         let consumer = tokio::spawn(tui::plain::run(event_rx));
 
         let result = tokio::select! {
             result = run_engine(runner, &task_names, force) => result,
             _ = cancel.cancelled() => {
                 eprintln!("\nInterrupted.");
-                Ok(())
+                Err(machine_setup::error::Error::Aborted)
             }
         };
 
-        drop(result);
         let _ = consumer.await;
+        result?;
     }
 
     Ok(())

@@ -39,7 +39,8 @@ pub fn demote_config_for_schedule(
 mod tests {
     use super::*;
     use crate::config::types::{
-        AutoUpdateConfig, CommandEntry, CopyArgs, RunArgs, StringOrVec, SymlinkArgs, TaskConfig,
+        AutoUpdateConfig, CommandEntry, CopyArgs, OsFilter, RunArgs, StringOrVec, SymlinkArgs,
+        TaskConfig,
     };
     use indexmap::IndexMap;
     use std::collections::HashMap;
@@ -71,6 +72,7 @@ mod tests {
                         target: "/b".into(),
                         ignore: vec![],
                         sudo: true,
+                        os: OsFilter::All,
                     }),
                     CommandEntry::Symlink(SymlinkArgs {
                         src: "/a".into(),
@@ -78,6 +80,8 @@ mod tests {
                         ignore: vec![],
                         force: false,
                         sudo: true,
+                        os: OsFilter::All,
+                        backup: false,
                     }),
                     CommandEntry::Run(RunArgs {
                         commands: StringOrVec::default(),
@@ -87,6 +91,7 @@ mod tests {
                         shell: None,
                         env: HashMap::new(),
                         quiet: false,
+                        os: OsFilter::All,
                     }),
                 ],
                 os: Default::default(),
@@ -143,6 +148,7 @@ mod tests {
                     target: "/b".into(),
                     ignore: vec![],
                     sudo: true,
+                    os: OsFilter::All,
                 })],
                 os: Default::default(),
                 parallel: false,

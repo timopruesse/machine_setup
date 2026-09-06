@@ -98,6 +98,9 @@ impl TreeOpKind for CopyCommand {
                 crate::engine::context::display_path(src),
                 crate::engine::context::display_path(target),
             ));
+            if ctx.dry_run {
+                return Some(Ok(()));
+            }
             return Some(crate::utils::sudo::sudo_copy_tree(src, target));
         }
         if Self::eligible_for_bulk_macos_clone(src, &self.args, ctx.mode) {
@@ -106,6 +109,9 @@ impl TreeOpKind for CopyCommand {
                 crate::engine::context::display_path(src),
                 crate::engine::context::display_path(target),
             ));
+            if ctx.dry_run {
+                return Some(Ok(()));
+            }
             return Some(crate::utils::fast_copy::clone_copy_tree(src, target).map_err(Into::into));
         }
         None
@@ -188,6 +194,7 @@ fn copy_one(ops: &dyn FileOps, src: &Path, dest: &Path, progress: &FileProgress<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::types::OsFilter;
     use crate::engine::commands::fs_ops::RecordingFs;
     use crate::engine::mode::Mode;
     use std::sync::Arc;
@@ -207,6 +214,8 @@ mod tests {
             task_name: Arc::<str>::from("t"),
             depth: 0,
             cancel: tokio_util::sync::CancellationToken::new(),
+            dry_run: false,
+            backup: false,
         }
     }
 
@@ -288,6 +297,7 @@ mod tests {
             target: "/t".into(),
             ignore: vec![],
             sudo: true,
+            os: OsFilter::All,
         };
         assert!(CopyCommand::eligible_for_bulk_sudo(
             &src_dir,
@@ -326,6 +336,7 @@ mod tests {
                 target: "/t".into(),
                 ignore: vec![],
                 sudo: true,
+                os: OsFilter::All,
             },
             Mode::Install
         ));
@@ -342,6 +353,7 @@ mod tests {
             target: "/t".into(),
             ignore: vec![],
             sudo: false,
+            os: OsFilter::All,
         };
         assert_eq!(
             CopyCommand::eligible_for_bulk_macos_clone(&src_dir, &args, Mode::Install),

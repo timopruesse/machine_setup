@@ -14,18 +14,22 @@ use super::CommandExecutor;
 #[derive(Clone)]
 pub struct SymlinkCommand {
     args: SymlinkArgs,
+    backup: bool,
 }
 
 impl SymlinkCommand {
     pub fn new(args: SymlinkArgs) -> Self {
-        Self { args }
+        let backup = args.backup;
+        Self { args, backup }
     }
 }
 
 #[async_trait]
 impl CommandExecutor for SymlinkCommand {
     async fn execute(&self, ctx: &CommandContext) -> Result<()> {
-        tree_op::execute(&self.args.src, &self.args.target, self.clone(), ctx).await
+        let mut cmd = self.clone();
+        cmd.backup = self.args.backup || ctx.backup;
+        tree_op::execute(&self.args.src, &self.args.target, cmd, ctx).await
     }
 
     fn description(&self) -> String {
@@ -71,7 +75,7 @@ impl TreeOpKind for SymlinkCommand {
         dest: &Path,
         progress: &FileProgress<'_>,
     ) -> Result<()> {
-        symlink_one(ops, src, dest, self.args.force, progress)
+        symlink_one(ops, src, dest, self.args.force, self.backup, progress)
     }
 
     fn on_uninstall_file(
@@ -85,21 +89,36 @@ impl TreeOpKind for SymlinkCommand {
 }
 
 /// Create one symlink at `dest` pointing to `src`. When something already
-/// exists at `dest`, either replace it (`force`) or skip it.
+/// exists at `dest`, either replace it (`force`) or skip it. If `backup` is
+/// requested, any existing `dest` is backed up before creating the symlink.
 fn symlink_one(
     ops: &dyn FileOps,
     src: &Path,
     dest: &Path,
     force: bool,
+    backup: bool,
     progress: &FileProgress<'_>,
 ) -> Result<()> {
     // One metadata syscall covers files, dirs, and broken symlinks (avoid
     // `exists()` + `symlink_metadata()` on the common "absent" create path).
     if dest.symlink_metadata().is_ok() {
         if force {
-            progress
-                .note_apply(|| format!("remove {}", crate::engine::context::display_path(dest)));
-            ops.remove_path(dest)?;
+            if backup {
+                let backup_path = compute_backup_path(dest);
+                progress.note_apply(|| {
+                    format!(
+                        "backup {} → {}",
+                        crate::engine::context::display_path(dest),
+                        crate::engine::context::display_path(&backup_path)
+                    )
+                });
+                ops.rename(dest, &backup_path)?;
+            } else {
+                progress.note_apply(|| {
+                    format!("remove {}", crate::engine::context::display_path(dest))
+                });
+                ops.remove_path(dest)?;
+            }
         } else {
             progress.note_skip(|| {
                 format!(
@@ -129,13 +148,39 @@ fn symlink_one(
     ops.create_symlink(src, dest)
 }
 
-/// Cheap self-link check: path equality first; canonicalize only when both exist.
+/// Compute a backup destination path for `dest` (`<dest>.bak` or `<dest>.bak.<timestamp>`).
+fn compute_backup_path(dest: &Path) -> std::path::PathBuf {
+    let candidate = std::path::PathBuf::from(format!("{}.bak", dest.display()));
+    if candidate.symlink_metadata().is_err() {
+        return candidate;
+    }
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+    let ts_candidate = std::path::PathBuf::from(format!("{}.bak.{}", dest.display(), timestamp));
+    if ts_candidate.symlink_metadata().is_err() {
+        return ts_candidate;
+    }
+    for i in 1..10000 {
+        let numbered =
+            std::path::PathBuf::from(format!("{}.bak.{}.{}", dest.display(), timestamp, i));
+        if numbered.symlink_metadata().is_err() {
+            return numbered;
+        }
+    }
+    ts_candidate
+}
+
+/// Cheap self-link check: path equality first; canonicalize only when both exist
+/// and dest is not already a symlink.
 fn would_self_symlink(src: &Path, dest: &Path) -> bool {
     if src == dest {
         return true;
     }
-    // Dest usually does not exist yet — skip canonicalize syscalls in that case.
-    if dest.symlink_metadata().is_err() {
+    // Dest usually does not exist yet (or is already a symlink) — skip canonicalize syscalls.
+    if dest
+        .symlink_metadata()
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(true)
+    {
         return false;
     }
     match (src.canonicalize(), dest.canonicalize()) {
@@ -179,6 +224,8 @@ mod tests {
             task_name: std::sync::Arc::<str>::from("t"),
             depth: 0,
             cancel: tokio_util::sync::CancellationToken::new(),
+            dry_run: false,
+            backup: false,
         };
         (ctx, rx)
     }
@@ -193,7 +240,7 @@ mod tests {
         let progress = FileProgress::new(&ctx, "symlink");
 
         let ops = RecordingFs::default();
-        symlink_one(&ops, &src, &dest, false, &progress).unwrap();
+        symlink_one(&ops, &src, &dest, false, false, &progress).unwrap();
         assert_eq!(
             ops.calls(),
             vec![format!(
@@ -215,7 +262,7 @@ mod tests {
         let progress = FileProgress::new(&ctx, "symlink");
 
         let ops = RecordingFs::default();
-        symlink_one(&ops, &src, &dest, false, &progress).unwrap();
+        symlink_one(&ops, &src, &dest, false, false, &progress).unwrap();
         // Skipped: nothing touched.
         assert!(ops.calls().is_empty());
     }
@@ -231,7 +278,7 @@ mod tests {
         let progress = FileProgress::new(&ctx, "symlink");
 
         let ops = RecordingFs::default();
-        symlink_one(&ops, &src, &dest, true, &progress).unwrap();
+        symlink_one(&ops, &src, &dest, true, false, &progress).unwrap();
         assert_eq!(
             ops.calls(),
             vec![
@@ -239,6 +286,42 @@ mod tests {
                 format!("create_symlink {} {}", src.display(), dest.display()),
             ]
         );
+    }
+
+    #[test]
+    fn test_symlink_one_force_with_backup_renames_then_creates() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("s");
+        std::fs::write(&src, b"x").unwrap();
+        let dest = dir.path().join("existing");
+        std::fs::write(&dest, b"old").unwrap();
+        let (ctx, _rx) = ctx_for(dir.path());
+        let progress = FileProgress::new(&ctx, "symlink");
+
+        let ops = RecordingFs::default();
+        symlink_one(&ops, &src, &dest, true, true, &progress).unwrap();
+        assert_eq!(
+            ops.calls(),
+            vec![
+                format!("rename {} {}.bak", dest.display(), dest.display()),
+                format!("create_symlink {} {}", src.display(), dest.display()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_compute_backup_path_increments_when_target_exists() {
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("file.txt");
+        std::fs::write(&dest, b"1").unwrap();
+        let bak = dir.path().join("file.txt.bak");
+        std::fs::write(&bak, b"2").unwrap();
+
+        let backup_path = compute_backup_path(&dest);
+        assert_ne!(backup_path, bak);
+        assert!(backup_path
+            .to_string_lossy()
+            .starts_with(&format!("{}.bak.", dest.display())));
     }
 
     #[test]

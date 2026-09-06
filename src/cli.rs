@@ -35,6 +35,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_tui: bool,
 
+    /// Preview execution without making filesystem changes or running commands
+    #[arg(long, global = true)]
+    pub dry_run: bool,
+
+    /// Backup existing files before overwriting with symlinks
+    #[arg(long, global = true)]
+    pub backup: bool,
+
     /// Enable debug output
     #[arg(short, long, global = true)]
     pub debug: bool,

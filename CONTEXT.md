@@ -52,7 +52,8 @@ _Avoid_: job, step, action.
 
 **Command entry**:
 One declarative operation inside a task — `copy`, `symlink`, `clone`, `run`, or
-`machine_setup`. The `CommandEntry` enum in the config.
+`machine_setup`. The `CommandEntry` enum in the config. Supports command-level
+`os:` filtering to allow single unified tasks across multiple platforms.
 _Avoid_: step, instruction. (Do **not** shorten to "command" — see Flagged
 ambiguities.)
 
@@ -194,11 +195,13 @@ that Task's log. Overflow runners appear as a count in the title bar.
 _Avoid_: merge stream, multiplex log, parallel log.
 
 **File ops**:
-The privilege seam for filesystem primitives (`mkdir`, copy, symlink, removal),
-with two adapters — **DirectFs** (`std::fs`) and **SudoFs** (`sudo`) — chosen
-once per command from its `sudo` flag (`FileOps`). SudoFs may script-batch
-per-file ops and flush once; eligible directory `copy` installs may use a bulk
-privileged path. Symlink sudo stays script-batched. Tree-shaped work also
+The privilege seam for filesystem primitives (`mkdir`, copy, symlink, removal,
+rename), with three adapters — **DirectFs** (`std::fs`), **SudoFs** (`sudo`),
+and **DryRunFs** (zero-side-effect preview for `--dry-run`) — chosen
+per command from its `sudo` flag and dry-run mode (`FileOps`). SudoFs may
+script-batch per-file ops and flush once; eligible directory `copy` installs may
+use a bulk privileged path. Symlink sudo stays script-batched. Primitives include
+`rename` used for safe symlink backup before overwrite. Tree-shaped work also
 exposes a shared **`apply_tree`** entry (walk/chunk/apply) that takes an
 already-selected File ops adapter — privilege policy stays with the executor.
 _Avoid_: fs helper, file utils.

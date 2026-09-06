@@ -38,6 +38,12 @@ pub struct CommandContext {
 
     /// Shared cancellation token (parent and nested Sub-config runs).
     pub cancel: tokio_util::sync::CancellationToken,
+
+    /// Whether this is a dry-run execution (preview only).
+    pub dry_run: bool,
+
+    /// Whether to create backup before overwriting existing files on symlink.
+    pub backup: bool,
 }
 
 impl CommandContext {

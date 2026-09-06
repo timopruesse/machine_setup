@@ -35,6 +35,11 @@ pub fn sudo_mkdir(path: &Path) -> Result<()> {
     run_sudo(&["mkdir", "-p", &path.to_string_lossy()])
 }
 
+/// Rename/move a path using `sudo mv -f`.
+pub fn sudo_rename(src: &Path, dest: &Path) -> Result<()> {
+    run_sudo(&["mv", "-f", &src.to_string_lossy(), &dest.to_string_lossy()])
+}
+
 /// One buffered privileged filesystem operation (SudoFs script batch).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SudoOp {
@@ -43,6 +48,7 @@ pub enum SudoOp {
     Symlink { src: PathBuf, dest: PathBuf },
     Remove(PathBuf),
     RemoveDir(PathBuf),
+    Rename { src: PathBuf, dest: PathBuf },
 }
 
 /// Shell-escape a path for single-quoted use in a bash script.
@@ -70,6 +76,9 @@ pub fn build_sudo_script(ops: &[SudoOp]) -> String {
             }
             SudoOp::RemoveDir(path) => {
                 script.push_str(&format!("rm -rf {}\n", sh_quote(path)));
+            }
+            SudoOp::Rename { src, dest } => {
+                script.push_str(&format!("mv -f {} {}\n", sh_quote(src), sh_quote(dest)));
             }
         }
     }
@@ -147,12 +156,17 @@ mod tests {
             },
             SudoOp::Remove(PathBuf::from("/t/old")),
             SudoOp::RemoveDir(PathBuf::from("/t/dir")),
+            SudoOp::Rename {
+                src: PathBuf::from("/t/orig"),
+                dest: PathBuf::from("/t/orig.bak"),
+            },
         ]);
         assert!(script.contains("mkdir -p '/t'\n"));
         assert!(script.contains("cp -f '/s/f' '/t/f'\n"));
         assert!(script.contains("ln -sf '/s/l' '/t/l'\n"));
         assert!(script.contains("rm -f '/t/old'\n"));
         assert!(script.contains("rm -rf '/t/dir'\n"));
+        assert!(script.contains("mv -f '/t/orig' '/t/orig.bak'\n"));
         assert!(script.starts_with("set -euo pipefail\n"));
     }
 }

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- `--dry-run` preview mode across all commands (`copy`, `symlink`, `clone`, `run`, `machine_setup`): simulates execution with `DryRunFs` without modifying files, executing shell scripts, cloning repos, prompting for sudo, or updating history
+- Command-level OS filtering (`os: [linux, macos, windows]`) on individual command entries (`copy`, `symlink`, `clone`, `run`, `machine_setup`), allowing single unified cross-platform tasks
+- Safe backup before overwrite on symlinks via `backup: true` config option and `--backup` CLI flag: renames pre-existing files or directories to `<target>.bak` (with timestamp suffix on collisions) before symlink creation
+- `FileOps::rename` primitive across `DirectFs`, `SudoFs`, and `DryRunFs`
+
+### Fixed
+- TUI search mode typing: typing `j` or `k` while filtering tasks inserts characters into the search query instead of moving selection; selection while searching is navigated using `Up`/`Down` and `Ctrl+p`/`Ctrl+n`
+- Exit code integrity: non-zero exit codes are now correctly propagated when tasks fail in both interactive TUI mode and non-interactive (`--no-tui`) mode
+
 ## [2.10.0]
 
 ### Added

@@ -88,6 +88,8 @@ By default (no `-c`), `machine_setup` looks for `machine_setup.yaml` / `.yml` / 
 | -s<br> --select   | select a task to run                              | `machine_setup install -s`                         |
 | --with-deps       | also run transitive `depends_on` tasks            | `machine_setup update -t leaf --with-deps`         |
 | -f<br> --force    | force execution (bypass history checks)           | `machine_setup install --force`                    |
+| --dry-run         | preview execution without modifying filesystem or history | `machine_setup install --dry-run`          |
+| --backup          | backup existing files before overwriting with symlinks | `machine_setup install --backup`           |
 | --no-tui          | disable TUI; also auto-disabled on non-TTY / CI   | `machine_setup install --no-tui`                   |
 | -h<br> --help     | display help information                          | `machine_setup --help`                             |
 | -v<br> --version  | display version information                       | `machine_setup --version`                          |
@@ -120,7 +122,7 @@ When running in an interactive terminal, a TUI dashboard is shown with:
 - Progress bar with completion stats and elapsed times
 - SilkCircuit Neon theme (electric purple + neon cyan); set `NO_COLOR` for ANSI-only output
 - Keyboard navigation:
-  - `j`/`k` or `Up`/`Down` — navigate tasks (or bands in the runner grid)
+  - `j`/`k` or `Up`/`Down` — navigate tasks (or bands in the runner grid); inside search mode (`/`), `j` and `k` type normally, while `Up`/`Down` and `Ctrl+p`/`Ctrl+n` navigate
   - `/` — filter tasks by name (`Enter` to apply, `Esc` to cancel search or clear filter)
   - `PgUp`/`PgDn` — scroll logs; `Home`/`End` — jump to top/bottom of log (`End` also re-enables follow when auto-follow is off)
   - While running: `q` or `Ctrl+C` — cancel; when done: `Esc` or `q` — quit
@@ -260,6 +262,25 @@ However, it's possible to execute tasks from another configuration via the [mach
 
 ### Available config commands
 
+All command entries support an optional `os` filter (`"linux"`, `"macos"`, `"windows"`, or a list `["linux", "macos"]`), allowing you to collapse cross-platform tasks into a single unified task:
+
+```yaml
+tasks:
+  editor:
+    commands:
+      - run:
+          os: "linux"
+          commands: "sudo apt-get install -y neovim"
+      - run:
+          os: "macos"
+          commands: "brew install neovim"
+      - symlink:
+          src: "./nvim"
+          target: "~/.config/nvim"
+          force: true
+          backup: true
+```
+
 #### copy
 
 This command copies the contents of a directory to another directory.
@@ -270,6 +291,7 @@ This command copies the contents of a directory to another directory.
 | target   | target directory/file               |    Y     | "/tmp/target" or "/tmp/target/new.txt" |
 | ignore   | list of files/directories to ignore |    -     | ["dist", "package-lock.json"]          |
 | sudo     | run file operations with sudo       |    -     | true                                   |
+| os       | only run on specified os            |    -     | "linux" or ["linux", "macos"]          |
 
 ##### example
 
@@ -284,6 +306,7 @@ copy:
   src: "./etc/wsl.conf"
   target: "/etc/wsl.conf"
   sudo: true
+  os: "linux"
 ```
 
 #### clone
@@ -294,6 +317,7 @@ This command clones a git repository to the specified destination.
 | -------- | ----------------------- | :------: | ---------------------------------------------- |
 | url      | URL to a git repository |    Y     | "git@github.com:timopruesse/machine_setup.git" |
 | target   | target directory        |    Y     | "~/machine_setup"                              |
+| os       | only run on specified os|    -     | "linux" or ["linux", "macos"]                  |
 
 ##### example
 
@@ -312,10 +336,14 @@ This command symlinks all the files from the source directory to the target dire
 | src      | source directory/file               |    Y     | "./src/files" or "./src/test.txt" |
 | target   | target directory/file               |    Y     | "/tmp/target" or "/tmp/new.txt"   |
 | ignore   | list of files/directories to ignore |    -     | ["dist", "package-lock.json"]     |
-| force    | true/false                          |    -     |                                   |
+| force    | true/false                          |    -     | true                              |
+| backup   | backup existing target on overwrite |    -     | true                              |
 | sudo     | run file operations with sudo       |    -     | true                              |
+| os       | only run on specified os            |    -     | "linux" or ["linux", "macos"]     |
 
 > If `force` is set to `true`, existing files will be **removed** and replaced by the symlinks.
+>
+> When `backup: true` (or the `--backup` CLI flag) is used, any existing file or directory at the destination is safely renamed to `<target>.bak` (with a timestamp suffix `<target>.bak.<timestamp>` if `.bak` already exists) before creating the symlink.
 >
 > When `src` is a directory, intermediate destinations are always **real directories**.
 > Leftover directory symlinks under `target` are unwrapped (the link inode is
@@ -331,6 +359,7 @@ symlink:
   target: "/tmp/target"
   ignore: ["dist", "package-lock.json"]
   force: true
+  backup: true
 
 # Symlink to a protected path
 symlink:
@@ -350,6 +379,7 @@ This command executes a shell command.
 | -------- | --------------------- | :------: | ------- | ---------------------------- |
 | env      | environment variables |    -     |         |                              |
 | shell    | shell that is used    |    -     | "bash"  | "bash", "zsh", "powershell"  |
+| os       | only run on specified os | -     |         | "linux", "macos", "windows"  |
 
 By default, shell commands will only run during `install`.
 You can provide mode-specific commands using `install`, `update`, and `uninstall` instead of `commands`:
@@ -405,6 +435,7 @@ With this command it's possible to include other `machine_setup` configuration f
 | -------- | --------------------------------------- | :------: | ------------------------ |
 | config   | path to the other config file           |    Y     | "./my_other_config.yaml" |
 | task     | define a single task that should be run |    -     | "my_other_task"          |
+| os       | only run on specified os                |    -     | "linux" or ["linux", "macos"] |
 
 ##### example
 

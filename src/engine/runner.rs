@@ -30,6 +30,8 @@ pub struct TaskRunner {
     cancel: CancellationToken,
     /// Lazily built executors per task name — one `Arc<Executor>` per Command entry.
     executor_cache: Mutex<HashMap<String, Arc<[Arc<Executor>]>>>,
+    dry_run: bool,
+    backup: bool,
 }
 
 /// Running counts of task outcomes across all layers of a run.
@@ -52,6 +54,8 @@ impl TaskRunner {
             depth: 0,
             cancel: CancellationToken::new(),
             executor_cache: Mutex::new(HashMap::new()),
+            dry_run: false,
+            backup: false,
         }
     }
 
@@ -73,6 +77,16 @@ impl TaskRunner {
 
     pub fn with_cancel(mut self, cancel: CancellationToken) -> Self {
         self.cancel = cancel;
+        self
+    }
+
+    pub fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
+        self
+    }
+
+    pub fn with_backup(mut self, backup: bool) -> Self {
+        self.backup = backup;
         self
     }
 
@@ -138,9 +152,11 @@ impl TaskRunner {
             }
         }
 
-        // Save history
-        if let Err(e) = history.save(temp_dir.as_path()) {
-            tracing::warn!("Failed to save history: {e}");
+        // Save history (skip in dry-run)
+        if !self.dry_run {
+            if let Err(e) = history.save(temp_dir.as_path()) {
+                tracing::warn!("Failed to save history: {e}");
+            }
         }
 
         self.send(TaskEvent::AllDone {
@@ -270,10 +286,15 @@ impl TaskRunner {
             task_name: Arc::<str>::from(task_name),
             depth: self.depth,
             cancel: self.cancel.clone(),
+            dry_run: self.dry_run,
+            backup: self.backup,
         }
     }
 
     fn update_history(&self, history: &mut History, task_name: &str) {
+        if self.dry_run {
+            return;
+        }
         match self.mode {
             Mode::Install => history.mark_installed(task_name),
             Mode::Update => history.mark_updated(task_name),
@@ -384,8 +405,17 @@ async fn run_task(
             }
 
             let command_index = i + 1;
-            let executor = Arc::clone(&executors[i]);
             let desc = catalog::description(entry);
+            if !entry.os().matches_current() {
+                ctx.emit(TaskEvent::CommandCompleted {
+                    task_name: Arc::clone(&ctx.task_name),
+                    command_desc: Arc::<str>::from(format!("{} (skipped for OS)", desc)),
+                    command_index,
+                    command_total,
+                });
+                continue;
+            }
+            let executor = Arc::clone(&executors[i]);
             let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: Arc::clone(&ctx.task_name),
@@ -449,8 +479,17 @@ async fn run_task(
             }
 
             let command_index = i + 1;
-            let executor = &executors[i];
             let desc = catalog::description(entry);
+            if !entry.os().matches_current() {
+                ctx.emit(TaskEvent::CommandCompleted {
+                    task_name: Arc::clone(&ctx.task_name),
+                    command_desc: Arc::<str>::from(format!("{} (skipped for OS)", desc)),
+                    command_index,
+                    command_total,
+                });
+                continue;
+            }
+            let executor = &executors[i];
             let lane = catalog::exclusive_lane(entry, ctx.mode);
             ctx.emit(TaskEvent::CommandStarted {
                 task_name: Arc::clone(&ctx.task_name),
@@ -559,6 +598,7 @@ mod tests {
             shell: None,
             env: HashMap::new(),
             quiet: false,
+            os: Default::default(),
         })
     }
 
@@ -629,5 +669,32 @@ mod tests {
         runner.run_all(true).await.unwrap();
 
         assert_eq!(runner.executor_cache_len(), 2);
+    }
+
+    #[tokio::test]
+    async fn dry_run_does_not_touch_history_or_execute_commands() {
+        let dir = tempdir().unwrap();
+        let canary_file = dir.path().join("canary.txt");
+        let cmd = format!("touch {}", canary_file.display());
+
+        let mut tasks = IndexMap::new();
+        tasks.insert(
+            "dry_test".to_string(),
+            task_with(vec![run_entry(&cmd)], false),
+        );
+        let mut config = make_config(tasks);
+        let temp_dir_path = dir.path().join(".ms_temp");
+        config.temp_dir = temp_dir_path.to_string_lossy().to_string();
+
+        let runner = TaskRunner::new(config, Mode::Install, NullSink::shared())
+            .with_config_dir(dir.path().to_path_buf())
+            .with_dry_run(true);
+
+        runner.run_all(false).await.unwrap();
+
+        // Canary file must NOT exist (command did not execute)
+        assert!(!canary_file.exists());
+        // History file must NOT be written
+        assert!(!temp_dir_path.join("history.json").exists());
     }
 }
