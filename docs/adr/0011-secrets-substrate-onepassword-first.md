@@ -1,6 +1,6 @@
 # Secrets substrate; 1Password-first; SSH agent wedge before generic refs
 
-## Status (2026-09-11 — design accepted, not yet implemented)
+## Status (2026-09-11 — design accepted; Phase 0 implemented)
 
 Wipe/restore often blocks on **identity and secrets** (SSH keys via brittle
 side-channels such as synced folders). Authors can already shell out to `op`
@@ -11,10 +11,12 @@ We add a **Secrets substrate**: Config-declared provider + **Secret refs**,
 resolved just-in-time into `run` env (and later optional file materialization),
 with hard redaction on the **Task event sink**. Delivery is phased:
 
-1. **Phase 0 — SSH agent wedge:** 1Password SSH agent as the default private-git
-   identity path (keys stay in the vault; no `~/.ssh/id_*` copy).
-2. **Phase 1 — Secret refs:** `from_secret` on `run.env` values, OnePassword via
-   the `op` CLI, `validate` / `doctor` / `install` checks as below.
+1. **Phase 0 — SSH agent wedge (shipped):** 1Password SSH agent as the default
+   private-git identity path (keys stay in the vault; no `~/.ssh/id_*` copy).
+   Root `secrets:`, `secrets::preflight` on doctor/install, recipe
+   `onepassword-ssh`.
+2. **Phase 1 — Secret refs (not yet):** `from_secret` on `run.env` values,
+   OnePassword via the `op` CLI, sink redaction of resolved values.
 
 Sudo stays a **local privilege** concern (existing TUI `pre_authenticate_sudo`,
 unattended demotion). We do **not** fetch the OS login password from a vault or

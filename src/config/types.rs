@@ -31,7 +31,40 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub check_for_updates: bool,
 
+    /// Secrets substrate (ADR-0011). Omit when unused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secrets: Option<SecretsConfig>,
+
     pub tasks: IndexMap<String, Arc<TaskConfig>>,
+}
+
+/// Root `secrets:` block — vault provider + SSH agent opt-in (ADR-0011).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecretsConfig {
+    /// Vault backend (v1: `onepassword` only).
+    #[serde(default)]
+    pub default_provider: SecretsProvider,
+
+    /// When true, doctor/install require a usable 1Password SSH agent.
+    #[serde(default)]
+    pub ssh_agent: bool,
+}
+
+/// Closed set of Secrets providers (ADR-0011 / ADR-0006 spirit).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SecretsProvider {
+    #[default]
+    #[serde(rename = "onepassword")]
+    OnePassword,
+}
+
+impl std::fmt::Display for SecretsProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SecretsProvider::OnePassword => write!(f, "onepassword"),
+        }
+    }
 }
 
 fn default_temp_dir() -> String {
@@ -617,6 +650,19 @@ impl<'de> Deserialize<'de> for StringOrVec {
 }
 
 impl AppConfig {
+    /// Empty Config with defaults — useful in tests and authoring helpers.
+    pub fn blank() -> Self {
+        Self {
+            temp_dir: default_temp_dir(),
+            default_shell: default_shell(),
+            parallel: false,
+            num_threads: None,
+            check_for_updates: true,
+            secrets: None,
+            tasks: IndexMap::new(),
+        }
+    }
+
     /// Check if any commands in the selected tasks require sudo.
     pub fn requires_sudo(&self, task_names: &[String]) -> bool {
         crate::engine::commands::catalog::tasks_require_sudo(self, task_names)
@@ -639,6 +685,21 @@ tasks:
         let config: AppConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(config.tasks.len(), 1);
         assert!(config.tasks.contains_key("test_task"));
+        assert!(config.secrets.is_none());
+    }
+
+    #[test]
+    fn test_parse_secrets_onepassword_ssh_agent() {
+        let yaml = r#"
+secrets:
+  default_provider: onepassword
+  ssh_agent: true
+tasks: {}
+"#;
+        let config: AppConfig = serde_yaml::from_str(yaml).unwrap();
+        let secrets = config.secrets.expect("secrets");
+        assert_eq!(secrets.default_provider, SecretsProvider::OnePassword);
+        assert!(secrets.ssh_agent);
     }
 
     #[test]

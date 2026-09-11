@@ -46,6 +46,24 @@ pub fn generate() -> Value {
                 "type": "boolean",
                 "default": true,
                 "description": "When false, skip the post-command self update-check notice"
+            },
+            "secrets": {
+                "type": "object",
+                "description": "Secrets substrate (ADR-0011): vault provider and SSH agent opt-in",
+                "additionalProperties": false,
+                "properties": {
+                    "default_provider": {
+                        "type": "string",
+                        "enum": ["onepassword"],
+                        "default": "onepassword",
+                        "description": "Vault backend (v1: onepassword only)"
+                    },
+                    "ssh_agent": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "When true, doctor/install require a usable 1Password SSH agent"
+                    }
+                }
             }
         },
         "$defs": {

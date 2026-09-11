@@ -271,6 +271,23 @@ fn main() -> anyhow::Result<()> {
             }
         };
 
+    let secret_issues = machine_setup::secrets::preflight(app_config.secrets.as_ref());
+    if !secret_issues.is_empty() {
+        for issue in &secret_issues {
+            println!(
+                "[{}] {}: {}",
+                issue.severity, issue.task_name, issue.message
+            );
+        }
+        if secret_issues
+            .iter()
+            .any(|i| matches!(i.severity, config::validate::Severity::Error))
+        {
+            notice.emit(&cli.command);
+            anyhow::bail!("secrets preflight failed — unlock the vault / SSH agent, then retry");
+        }
+    }
+
     // Execution verbs only: boot a multi-thread runtime here, not for sync verbs above.
     // Cap workers near the ConcurrencyGate / Rayon FS pool size (+2 for I/O) so
     // default N Tokio + N Rayon threads do not oversubscribe under parallel trees.

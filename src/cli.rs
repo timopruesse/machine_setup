@@ -215,6 +215,12 @@ pub enum RecipeCommand {
         #[arg(long, default_value = "brew-bundle")]
         name: String,
     },
+    /// Wire `~/.ssh/config` IdentityAgent to the 1Password SSH agent (macOS/Linux)
+    OnePasswordSsh {
+        /// Task name
+        #[arg(long, default_value = "onepassword-ssh")]
+        name: String,
+    },
 }
 
 impl std::fmt::Display for Command {

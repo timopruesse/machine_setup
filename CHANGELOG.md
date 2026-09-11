@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- ADR-0011 Phase 0: root `secrets:` (`default_provider: onepassword`, `ssh_agent`) with `op` / SSH-agent preflight on `doctor` and install/update/uninstall
+- Authoring recipe `onepassword-ssh` — idempotent `IdentityAgent` wiring for the 1Password SSH agent (macOS/Linux)
+
 ## [2.12.0]
 
 ### Added

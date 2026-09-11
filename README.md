@@ -63,7 +63,7 @@ cargo install machine_setup
 | uninstall    | uninstall the defined tasks              | `machine_setup uninstall`            |
 | list         | list tasks with install status           | `machine_setup list`                 |
 | validate     | validate the config without executing    | `machine_setup validate`             |
-| doctor       | status + validate + History orphans      | `machine_setup doctor` / `doctor --fix` |
+| doctor       | status + validate + History orphans + secrets preflight | `machine_setup doctor` / `doctor --fix` |
 | init         | create a new empty Config document       | `machine_setup init`                 |
 | wizard       | interactive Config document setup (TTY)  | `machine_setup wizard`               |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
@@ -142,13 +142,14 @@ machine_setup add task tools
 machine_setup add recipe dotfiles --url git@github.com:user/.dotfiles.git
 machine_setup add recipe brew-bundle --file ./Brewfile
 machine_setup add recipe git-repo --url https://github.com/user/repo.git --target ~/projects/repo
+machine_setup add recipe onepassword-ssh
 # or interactively:
 machine_setup wizard
 # edit as needed, then:
 machine_setup validate
 ```
 
-Authoring recipes emit existing Command entry kinds only (`clone`, `symlink`, `run`) — not new kinds. Defaults: Task names `dotfiles` / `brew-bundle` / `git-repo` (override with `--name`); `dotfiles` clones into `.`, symlinks `./home` → `~` with `force` and ignores `.cursor`; `brew-bundle` is `os: [macos]` with install+update.
+Authoring recipes emit existing Command entry kinds only (`clone`, `symlink`, `run`) — not new kinds. Defaults: Task names `dotfiles` / `brew-bundle` / `git-repo` / `onepassword-ssh` (override with `--name`); `dotfiles` clones into `.`, symlinks `./home` → `~` with `force` and ignores `.cursor`; `brew-bundle` is `os: [macos]` with install+update; `onepassword-ssh` is `os: [macos, linux]` and appends a 1Password `IdentityAgent` line to `~/.ssh/config` (enable the SSH agent in 1Password Settings → Developer, then set root `secrets:` as below).
 
 Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing at the checked-in [schema/machine_setup.schema.json](schema/machine_setup.schema.json). Regenerate with `make schema` (CI fails if the artifact is stale). Semantic checks (`depends_on`, missing sources, …) stay in `machine_setup validate` — the schema is structural only.
 
@@ -159,6 +160,19 @@ Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing
 | temp_dir      | define where temporary files are stored              |                              | `~/.machine_setup`           |
 | parallel      | run all of the tasks in parallel                     | `true` or `false`            | `false`                      |
 | num_threads   | number of threads when run in parallel               | numeric > 1                  | physical processor count - 1 |
+| secrets       | vault / SSH agent opt-in (ADR-0011 Phase 0)          | see below                    | omitted                      |
+
+#### Secrets (Phase 0)
+
+Opt in explicitly — wipe/restore private git without copying key files when using the 1Password SSH agent:
+
+```yaml
+secrets:
+  default_provider: onepassword
+  ssh_agent: true
+```
+
+When `secrets:` is set, `doctor` and `install` / `update` / `uninstall` run a preflight: `op` on `PATH`, signed-in session, and (if `ssh_agent: true`) a reachable 1Password SSH agent. Failures name the unlock/agent fix. Secret refs (`from_secret` on `run.env`) are Phase 1 — not shipped yet.
 
 ### Task specific configuration
 
