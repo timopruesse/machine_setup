@@ -94,7 +94,7 @@ pub enum Command {
         #[command(subcommand)]
         action: ScheduleAction,
     },
-    /// Configure Secrets substrate auth (ADR-0011)
+    /// Configure vault / SSH agent auth (e.g. 1Password)
     Auth {
         #[command(subcommand)]
         action: AuthAction,

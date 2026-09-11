@@ -31,14 +31,14 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub check_for_updates: bool,
 
-    /// Secrets substrate (ADR-0011). Omit when unused.
+    /// Vault / SSH agent settings. Omit when unused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secrets: Option<SecretsConfig>,
 
     pub tasks: IndexMap<String, Arc<TaskConfig>>,
 }
 
-/// Root `secrets:` block — vault provider + SSH agent opt-in (ADR-0011).
+/// Root `secrets:` block — vault provider + SSH agent opt-in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SecretsConfig {
     /// Vault backend (v1: `onepassword` only).
@@ -50,7 +50,7 @@ pub struct SecretsConfig {
     pub ssh_agent: bool,
 }
 
-/// Closed set of Secrets providers (ADR-0011 / ADR-0006 spirit).
+/// Supported secrets providers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SecretsProvider {

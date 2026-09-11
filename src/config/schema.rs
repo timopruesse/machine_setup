@@ -49,7 +49,7 @@ pub fn generate() -> Value {
             },
             "secrets": {
                 "type": "object",
-                "description": "Secrets substrate (ADR-0011): vault provider and SSH agent opt-in",
+                "description": "Vault provider and SSH agent opt-in (e.g. 1Password)",
                 "additionalProperties": false,
                 "properties": {
                     "default_provider": {

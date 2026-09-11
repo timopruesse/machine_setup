@@ -161,9 +161,9 @@ Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing
 | temp_dir      | define where temporary files are stored              |                              | `~/.machine_setup`           |
 | parallel      | run all of the tasks in parallel                     | `true` or `false`            | `false`                      |
 | num_threads   | number of threads when run in parallel               | numeric > 1                  | physical processor count - 1 |
-| secrets       | vault / SSH agent opt-in (ADR-0011 Phase 0)          | see below                    | omitted                      |
+| secrets       | vault / SSH agent opt-in                             | see below                    | omitted                      |
 
-#### Secrets (Phase 0)
+#### Secrets
 
 One-shot setup (installs `op` if missing, enables SSH agent, wires `~/.ssh/config`):
 
@@ -181,7 +181,7 @@ secrets:
   ssh_agent: true
 ```
 
-When `secrets:` is set, `doctor` and `install` / `update` / `uninstall` run a preflight: `op` on `PATH`, vault access (via desktop app integration — Settings → Developer → Integrate with 1Password CLI), and (if `ssh_agent: true`) a reachable 1Password SSH agent. Do not run bare `op signin`; use the app integration, or `eval $(op signin)` only for a classic shell session. Secret refs (`from_secret` on `run.env`) are Phase 1 — not shipped yet. The `onepassword-ssh` recipe remains for declarative install-time wiring on a wiped machine.
+When `secrets:` is set, `doctor` and `install` / `update` / `uninstall` run a preflight: `op` on `PATH`, vault access (via desktop app integration — Settings → Developer → Integrate with 1Password CLI), and (if `ssh_agent: true`) a reachable 1Password SSH agent. Do not run bare `op signin`; use the app integration, or `eval $(op signin)` only for a classic shell session. The `onepassword-ssh` recipe remains for declarative install-time wiring on a wiped machine.
 
 ### Task specific configuration
 
