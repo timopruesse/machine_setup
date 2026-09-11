@@ -94,6 +94,11 @@ pub enum Command {
         #[command(subcommand)]
         action: ScheduleAction,
     },
+    /// Configure Secrets substrate auth (ADR-0011)
+    Auth {
+        #[command(subcommand)]
+        action: AuthAction,
+    },
     /// Print the Config schema (JSON Schema) to stdout
     Schema,
     /// Generate shell completions
@@ -175,6 +180,36 @@ pub enum AddTarget {
 }
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum AuthAction {
+    /// Enable a Secrets provider in the Config document
+    Enable {
+        #[command(subcommand)]
+        provider: AuthProvider,
+    },
+    /// Remove the root `secrets:` block from the Config document
+    Disable,
+    /// Show configured secrets provider and run preflight checks
+    Status,
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+pub enum AuthProvider {
+    /// 1Password (`op` CLI + SSH agent by default)
+    #[command(name = "onepassword")]
+    Onepassword {
+        /// Do not enable SSH agent preflight / IdentityAgent wiring (default: enabled)
+        #[arg(long)]
+        no_ssh_agent: bool,
+        /// Skip writing IdentityAgent into `~/.ssh/config`
+        #[arg(long)]
+        no_wire_ssh_config: bool,
+        /// Do not install the `op` CLI when missing (default: install via Homebrew/winget)
+        #[arg(long)]
+        no_install_cli: bool,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum RecipeCommand {
     /// Clone a dotfiles repo into `.` and symlink `src` → `target`
     Dotfiles {
@@ -238,6 +273,7 @@ impl std::fmt::Display for Command {
             Command::Remove { .. } => write!(f, "remove"),
             Command::Replace { .. } => write!(f, "replace"),
             Command::Schedule { .. } => write!(f, "schedule"),
+            Command::Auth { .. } => write!(f, "auth"),
             Command::Schema => write!(f, "schema"),
             Command::Completions { .. } => write!(f, "completions"),
         }

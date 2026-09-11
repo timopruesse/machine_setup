@@ -5,7 +5,9 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
-use cli::{AddTarget, Cli, Command, RemoveTarget, ReplaceTarget, ScheduleAction};
+use cli::{
+    AddTarget, AuthAction, AuthProvider, Cli, Command, RemoveTarget, ReplaceTarget, ScheduleAction,
+};
 use config::document_edit::ReplaceOutcome;
 use engine::mode::Mode;
 use engine::runner::TaskRunner;
@@ -91,6 +93,102 @@ fn main() -> anyhow::Result<()> {
 
     if cli.command == Command::Wizard {
         config::wizard::run(cli.config.as_deref(), &cwd)?;
+        notice.emit(&cli.command);
+        return Ok(());
+    }
+
+    if let Command::Auth { action } = &cli.command {
+        let path = resolve_existing_document(cli.config.as_deref(), &cwd)?;
+        match action {
+            AuthAction::Enable { provider } => match provider {
+                AuthProvider::Onepassword {
+                    no_ssh_agent,
+                    no_wire_ssh_config,
+                    no_install_cli,
+                } => {
+                    let ssh_agent = !*no_ssh_agent;
+                    let wire = ssh_agent && !*no_wire_ssh_config;
+                    let report = machine_setup::secrets::auth::enable_onepassword(
+                        &path,
+                        machine_setup::secrets::auth::EnableOptions {
+                            ssh_agent,
+                            wire_ssh_config: wire,
+                            install_cli: !*no_install_cli,
+                        },
+                    )?;
+                    match &report.op_cli {
+                        Some(machine_setup::secrets::op_cli::OpCliOutcome::AlreadyPresent) => {
+                            println!("1Password CLI (`op`) already on PATH");
+                        }
+                        Some(machine_setup::secrets::op_cli::OpCliOutcome::Installed {
+                            method,
+                        }) => {
+                            println!("Installed 1Password CLI (`op`) via {method}");
+                        }
+                        None => {
+                            println!("Skipped 1Password CLI install (--no-install-cli)");
+                        }
+                    }
+                    if report.secrets_changed {
+                        println!(
+                            "Enabled secrets provider `onepassword` (ssh_agent={}) in {}",
+                            report.ssh_agent,
+                            path.display()
+                        );
+                    } else {
+                        println!(
+                            "secrets: already set to onepassword (ssh_agent={}) in {}",
+                            report.ssh_agent,
+                            path.display()
+                        );
+                    }
+                    match report.wire {
+                        Some(machine_setup::secrets::ssh_config::WireOutcome::Added) => {
+                            println!("Wrote 1Password IdentityAgent to ~/.ssh/config");
+                        }
+                        Some(
+                            machine_setup::secrets::ssh_config::WireOutcome::AlreadyConfigured,
+                        ) => {
+                            println!("~/.ssh/config already has a 1Password IdentityAgent");
+                        }
+                        None if ssh_agent && *no_wire_ssh_config => {
+                            println!("Skipped ~/.ssh/config wiring (--no-wire-ssh-config)");
+                        }
+                        None => {}
+                    }
+                    if ssh_agent {
+                        println!(
+                            "Next: in the 1Password app, unlock it and turn on \
+                             Settings → Developer → Integrate with 1Password CLI \
+                             (and SSH agent). Then run `machine_setup auth status` or `doctor`."
+                        );
+                    } else {
+                        println!(
+                            "Next: unlock 1Password and enable Settings → Developer → \
+                             Integrate with 1Password CLI, then run `machine_setup auth status`."
+                        );
+                    }
+                }
+            },
+            AuthAction::Disable => {
+                if machine_setup::secrets::auth::disable(&path)? {
+                    println!("Removed secrets: from {}", path.display());
+                } else {
+                    println!("No secrets: block in {}", path.display());
+                }
+            }
+            AuthAction::Status => {
+                for line in machine_setup::secrets::auth::status_lines(&path)? {
+                    println!("{line}");
+                }
+            }
+        }
+        if matches!(action, AuthAction::Enable { .. } | AuthAction::Disable)
+            && config::document::validate_after_write(&path)?
+        {
+            notice.emit(&cli.command);
+            std::process::exit(1);
+        }
         notice.emit(&cli.command);
         return Ok(());
     }

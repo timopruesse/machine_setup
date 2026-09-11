@@ -263,11 +263,12 @@ else
   printf '\n# machine_setup onepassword-ssh\nHost *\n\tIdentityAgent "%s"\n' "$AGENT" >> "$CONFIG"
   echo "Added 1Password IdentityAgent to ~/.ssh/config"
 fi
-echo "Next: enable SSH agent in 1Password (Settings → Developer), unlock 1Password,"
-echo "and add to your Config document:"
+echo "Next: unlock 1Password, enable Settings → Developer → Integrate with 1Password CLI"
+echo "and SSH agent, then add to your Config document:"
 echo "  secrets:"
 echo "    default_provider: onepassword"
 echo "    ssh_agent: true"
+echo "Or run: machine_setup auth enable onepassword"
 "#;
     let task = TaskConfig {
         os: OsFilter::Multiple(vec![Os::Macos, Os::Linux]),

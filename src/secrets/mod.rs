@@ -3,6 +3,10 @@
 //! Runtime checks for Config `secrets:` — `op` CLI, vault session, and optional
 //! 1Password SSH agent reachability. Resolution of `from_secret` refs is Phase 1.
 
+pub mod auth;
+pub mod op_cli;
+pub mod ssh_config;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -11,6 +15,15 @@ use crate::config::validate::{Severity, ValidationIssue};
 use crate::utils::path::expand_path;
 
 const SECRETS_SCOPE: &str = "secrets";
+
+pub(crate) fn command_on_path(name: &str) -> bool {
+    Command::new(name)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
 
 /// Run Secrets preflight checks. Empty when `secrets` is absent.
 pub fn preflight(secrets: Option<&SecretsConfig>) -> Vec<ValidationIssue> {
@@ -28,7 +41,8 @@ fn preflight_onepassword(ssh_agent: bool) -> Vec<ValidationIssue> {
     if !command_on_path("op") {
         issues.push(issue(
             Severity::Error,
-            "1Password CLI (`op`) not found on PATH — install 1Password CLI, then unlock 1Password",
+            "1Password CLI (`op`) not found on PATH — run `machine_setup auth enable onepassword` \
+             (installs via Homebrew/winget) or install the CLI manually, then unlock 1Password",
         ));
         // Further op/agent checks are misleading without the CLI.
         if ssh_agent {
@@ -42,7 +56,9 @@ fn preflight_onepassword(ssh_agent: bool) -> Vec<ValidationIssue> {
         OpSession::LockedOrSignedOut => {
             issues.push(issue(
                 Severity::Error,
-                "1Password CLI is not signed in or the vault is locked — unlock 1Password (or run `op signin`)",
+                "1Password CLI cannot access your vault — unlock the 1Password app, enable \
+                 Settings → Developer → Integrate with 1Password CLI, then retry \
+                 (legacy shell session: eval $(op signin))",
             ));
         }
         OpSession::Failed(msg) => {
@@ -68,25 +84,17 @@ fn issue(severity: Severity, message: impl Into<String>) -> ValidationIssue {
     }
 }
 
-fn command_on_path(name: &str) -> bool {
-    Command::new(name)
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
-}
-
 enum OpSession {
     Ok,
     LockedOrSignedOut,
     Failed(String),
 }
 
-/// `op whoami` exits 0 when a session is available.
+/// Probe vault access. Prefer `op vault list` over `op whoami` — whoami requires
+/// a classic `OP_SESSION_*` and fails under desktop app / biometric integration.
 fn op_session_status() -> OpSession {
     match Command::new("op")
-        .arg("whoami")
+        .args(["vault", "list"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()

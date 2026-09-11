@@ -64,6 +64,7 @@ cargo install machine_setup
 | list         | list tasks with install status           | `machine_setup list`                 |
 | validate     | validate the config without executing    | `machine_setup validate`             |
 | doctor       | status + validate + History orphans + secrets preflight | `machine_setup doctor` / `doctor --fix` |
+| auth         | enable/disable/status for Secrets (`onepassword`) | `machine_setup auth enable onepassword` |
 | init         | create a new empty Config document       | `machine_setup init`                 |
 | wizard       | interactive Config document setup (TTY)  | `machine_setup wizard`               |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
@@ -164,7 +165,15 @@ Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing
 
 #### Secrets (Phase 0)
 
-Opt in explicitly — wipe/restore private git without copying key files when using the 1Password SSH agent:
+One-shot setup (installs `op` if missing, enables SSH agent, wires `~/.ssh/config`):
+
+```bash
+machine_setup auth enable onepassword
+machine_setup auth status
+# machine_setup auth disable
+```
+
+Defaults: install CLI via Homebrew (`brew install --cask 1password-cli`) or winget; `ssh_agent: true`; write IdentityAgent. Opt out with `--no-install-cli`, `--no-ssh-agent`, or `--no-wire-ssh-config`. Equivalent YAML:
 
 ```yaml
 secrets:
@@ -172,7 +181,7 @@ secrets:
   ssh_agent: true
 ```
 
-When `secrets:` is set, `doctor` and `install` / `update` / `uninstall` run a preflight: `op` on `PATH`, signed-in session, and (if `ssh_agent: true`) a reachable 1Password SSH agent. Failures name the unlock/agent fix. Secret refs (`from_secret` on `run.env`) are Phase 1 — not shipped yet.
+When `secrets:` is set, `doctor` and `install` / `update` / `uninstall` run a preflight: `op` on `PATH`, vault access (via desktop app integration — Settings → Developer → Integrate with 1Password CLI), and (if `ssh_agent: true`) a reachable 1Password SSH agent. Do not run bare `op signin`; use the app integration, or `eval $(op signin)` only for a classic shell session. Secret refs (`from_secret` on `run.env`) are Phase 1 — not shipped yet. The `onepassword-ssh` recipe remains for declarative install-time wiring on a wiped machine.
 
 ### Task specific configuration
 

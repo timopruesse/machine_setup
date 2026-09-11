@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - ADR-0011 Phase 0: root `secrets:` (`default_provider: onepassword`, `ssh_agent`) with `op` / SSH-agent preflight on `doctor` and install/update/uninstall
 - Authoring recipe `onepassword-ssh` — idempotent `IdentityAgent` wiring for the 1Password SSH agent (macOS/Linux)
+- `auth enable onepassword` — installs `op` via Homebrew/winget when missing, enables SSH agent + IdentityAgent by default (`--no-install-cli` / `--no-ssh-agent` / `--no-wire-ssh-config` to opt out); also `auth disable`, `auth status`
 
 ## [2.12.0]
 
