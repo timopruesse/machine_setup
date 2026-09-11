@@ -70,8 +70,12 @@ pub async fn run(
             if cancel.is_cancelled() {
                 anyhow::bail!("execution was cancelled");
             }
-            if final_state.failed > 0 {
-                anyhow::bail!("{} task(s) failed", final_state.failed);
+            if final_state.failed > 0 || final_state.cancelled > 0 {
+                anyhow::bail!(
+                    "{} failed, {} cancelled",
+                    final_state.failed,
+                    final_state.cancelled
+                );
             }
             Ok(())
         }
@@ -141,13 +145,16 @@ fn print_summary(state: &UiState) {
         .unwrap_or_default();
 
     println!(
-        "\nmachine_setup {}: {} succeeded, {} failed, {} skipped{elapsed}\n",
-        state.mode, state.succeeded, state.failed, state.skipped
+        "\nmachine_setup {}: {} succeeded, {} failed, {} skipped, {} cancelled{elapsed}\n",
+        state.mode, state.succeeded, state.failed, state.skipped, state.cancelled
     );
 
     for task in &state.tasks {
         if let TaskStatus::Failed(ref error) = task.status {
             println!("  FAILED: {} - {}", task.name, error);
+        }
+        if matches!(task.status, TaskStatus::Cancelled) {
+            println!("  CANCELLED: {}", task.name);
         }
     }
 }

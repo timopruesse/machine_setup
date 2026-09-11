@@ -53,6 +53,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &UiState, theme: &Theme) {
                         .add_modifier(Modifier::BOLD),
                 ),
                 TaskStatus::Skipped(_) => ("–", Style::default().fg(theme.muted)),
+                TaskStatus::Cancelled => ("⊘", Style::default().fg(theme.warning)),
             };
 
             let indicator = if i == state.selected { ">" } else { " " };

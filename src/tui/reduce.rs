@@ -143,6 +143,15 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             state.failed += 1;
             (name, SoftSelect::AnyRunning, running_before >= 2)
         }
+        TaskEvent::TaskCancelled { task_name: name } => {
+            let task = find_or_create_task(state, &name);
+            task.freeze_duration();
+            task.status = TaskStatus::Cancelled;
+            clear_command_progress(task);
+            task.push_log(OutputKind::TaskStatus, "Cancelled.".into());
+            state.cancelled += 1;
+            (name, SoftSelect::AnyRunning, false)
+        }
         TaskEvent::TaskRetry {
             task_name: name,
             attempt,
@@ -155,6 +164,10 @@ fn apply_engine(state: &mut UiState, event: TaskEvent) {
             task.push_log(OutputKind::TaskStatus, line);
             state.ensure_task_color(&name);
             (name.clone(), SoftSelect::Prefer(name), false)
+        }
+        TaskEvent::RunCancelling => {
+            state.cancelling = true;
+            return;
         }
         TaskEvent::AllDone { .. } => {
             state.done = true;
@@ -442,6 +455,7 @@ mod tests {
                 succeeded: 0,
                 failed: 0,
                 skipped: 0,
+                cancelled: 0,
             }),
         );
         assert!(state.done);
@@ -537,6 +551,7 @@ mod tests {
                 succeeded: 1,
                 failed: 1,
                 skipped: 0,
+                cancelled: 0,
             }),
         );
         assert_eq!(state.selected, 1);

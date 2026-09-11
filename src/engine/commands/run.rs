@@ -100,6 +100,7 @@ async fn execute_script_stdin(
     let shell_bin = shell::shell_binary(shell_type);
 
     let mut cmd = Command::new(shell_bin);
+    process::configure_command(&mut cmd);
     cmd.stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
@@ -129,6 +130,7 @@ async fn execute_script_file(
     let shell_bin = shell::shell_binary(shell_type);
 
     let mut cmd = Command::new(shell_bin);
+    process::configure_command(&mut cmd);
     cmd.arg("-File").arg(script_path);
 
     cmd.stdout(std::process::Stdio::piped())
@@ -146,9 +148,13 @@ async fn wait_with_output(
     ctx: &CommandContext,
     options: process::StreamOptions,
 ) -> Result<()> {
-    let status = process::stream_and_wait(child, ctx, options)
-        .await
-        .map_err(|e| Error::ShellFailed(format!("Failed to wait for shell: {e}")))?;
+    let status = match process::stream_and_wait(child, ctx, options).await {
+        Ok(s) => s,
+        Err(Error::Aborted) => return Err(Error::Aborted),
+        Err(e) => {
+            return Err(Error::ShellFailed(format!("Failed to wait for shell: {e}")));
+        }
+    };
 
     if !status.success() {
         return Err(Error::ShellFailed(format!(

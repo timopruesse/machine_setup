@@ -72,9 +72,12 @@ _Avoid_: action, command, operation.
 **Runner**:
 The component that orders tasks, applies skip rules, and drives each task's
 command entries to completion, emitting events as it goes (`TaskRunner`). Holds
-a `CancellationToken` shared with nested Sub-config Runners; cancel aborts
-in-flight Tokio tasks (OS subprocess teardown is a follow-up). Uses
-`tokio::task::JoinSet` for parallel layer and parallel Command admission.
+a `CancellationToken` shared with nested Sub-config Runners; cancel cooperatively
+stops work (executors observe the token), tears down OS process groups for
+spawned `run` / `clone` children (TERM → short grace → KILL), and polls Tree /
+File ops between files and PathBuf chunks. Emits `RunCancelling` /
+`TaskCancelled` distinct from failure. Uses `tokio::task::JoinSet` for parallel
+layer and parallel Command admission.
 _Avoid_: engine (too broad), executor (means something narrower here).
 
 **Command executor**:
@@ -217,7 +220,9 @@ Concurrency gate's shared Rayon pool (ADR-0004). Peak PathBuf memory is capped
 by **chunked apply**: a single walk accumulates paths until the PathBuf list
 estimate would exceed the `tree_measure` gate, then flushes/applies and
 continues (whole trees under the gate stay one chunk). Applies to all
-list-collecting Tree materialization paths (DirectFs and SudoFs).
+list-collecting Tree materialization paths (DirectFs and SudoFs). Optional
+cancel token is polled between files and between PathBuf chunks (current
+single-file op may finish).
 _Avoid_: file walker, copier.
 
 **Tree-op driver**:

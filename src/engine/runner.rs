@@ -40,6 +40,7 @@ struct Tally {
     succeeded: usize,
     failed: usize,
     skipped: usize,
+    cancelled: usize,
 }
 
 impl TaskRunner {
@@ -106,7 +107,16 @@ impl TaskRunner {
 
     /// Run specific tasks by name.
     pub async fn run_tasks(&self, task_names: &[String], force: bool) -> Result<()> {
+        let mut cancelling_emitted = false;
+
         if self.cancel.is_cancelled() {
+            self.send(TaskEvent::RunCancelling);
+            self.send(TaskEvent::AllDone {
+                succeeded: 0,
+                failed: 0,
+                skipped: 0,
+                cancelled: 0,
+            });
             return Err(Error::Aborted);
         }
 
@@ -137,6 +147,10 @@ impl TaskRunner {
         let mut tally = Tally::default();
         for layer in &layers {
             if self.cancel.is_cancelled() {
+                if !cancelling_emitted {
+                    self.send(TaskEvent::RunCancelling);
+                    cancelling_emitted = true;
+                }
                 break;
             }
             self.run_layer(
@@ -145,9 +159,14 @@ impl TaskRunner {
                 Arc::clone(&temp_dir),
                 &mut history,
                 &mut tally,
+                &mut cancelling_emitted,
             )
             .await;
             if self.cancel.is_cancelled() {
+                if !cancelling_emitted {
+                    self.send(TaskEvent::RunCancelling);
+                    cancelling_emitted = true;
+                }
                 break;
             }
         }
@@ -159,13 +178,17 @@ impl TaskRunner {
             }
         }
 
+        if self.cancel.is_cancelled() && !cancelling_emitted {
+            self.send(TaskEvent::RunCancelling);
+        }
         self.send(TaskEvent::AllDone {
             succeeded: tally.succeeded,
             failed: tally.failed,
             skipped: tally.skipped,
+            cancelled: tally.cancelled,
         });
 
-        if self.cancel.is_cancelled() {
+        if self.cancel.is_cancelled() || tally.cancelled > 0 {
             return Err(Error::Aborted);
         }
 
@@ -191,11 +214,16 @@ impl TaskRunner {
         temp_dir: Arc<PathBuf>,
         history: &mut History,
         tally: &mut Tally,
+        cancelling_emitted: &mut bool,
     ) {
         let mut join_set = JoinSet::new();
 
         for name in layer {
             if self.cancel.is_cancelled() {
+                if !*cancelling_emitted {
+                    self.send(TaskEvent::RunCancelling);
+                    *cancelling_emitted = true;
+                }
                 break;
             }
 
@@ -223,30 +251,29 @@ impl TaskRunner {
             let ctx = self.create_context(name, Arc::clone(&temp_dir));
             let name_arc = Arc::clone(&ctx.task_name);
             let executors = self.executors_for_task(name, task_config.as_ref());
-            let cancel = self.cancel.clone();
+            // Cooperative cancel: `stream_and_wait` / tree polls observe
+            // `ctx.cancel` and tear down OS children before returning Aborted.
+            // Do not race-abort the future ahead of that teardown.
             join_set.spawn(async move {
-                tokio::select! {
-                    result = run_task_with_retry(&task_config, &ctx, executors) => {
-                        (name_arc, result)
-                    }
-                    _ = cancel.cancelled() => {
-                        (name_arc, Err(Error::Aborted))
-                    }
-                }
+                let result = run_task_with_retry(&task_config, &ctx, executors).await;
+                (name_arc, result)
             });
         }
 
         while let Some(result) = join_set.join_next().await {
-            if self.cancel.is_cancelled() {
-                join_set.abort_all();
-                while join_set.join_next().await.is_some() {}
-                break;
+            if self.cancel.is_cancelled() && !*cancelling_emitted {
+                self.send(TaskEvent::RunCancelling);
+                *cancelling_emitted = true;
             }
 
             match result {
                 Ok((name, Ok(()))) => {
                     self.update_history(history, name.as_ref());
                     tally.succeeded += 1;
+                }
+                Ok((name, Err(Error::Aborted))) => {
+                    self.send(TaskEvent::TaskCancelled { task_name: name });
+                    tally.cancelled += 1;
                 }
                 Ok((name, Err(e))) => {
                     let error = e.to_string();
@@ -696,5 +723,67 @@ mod tests {
         assert!(!canary_file.exists());
         // History file must NOT be written
         assert!(!temp_dir_path.join("history.json").exists());
+    }
+
+    #[tokio::test]
+    async fn cancel_emits_run_cancelling_and_task_cancelled() {
+        use crate::engine::sink::ChannelSink;
+        use tokio_util::sync::CancellationToken;
+
+        let dir = tempdir().unwrap();
+        let mut tasks = IndexMap::new();
+        tasks.insert(
+            "slow".to_string(),
+            task_with(vec![run_entry("sleep 30")], false),
+        );
+        let mut config = make_config(tasks);
+        config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
+
+        let (sink, mut rx) = ChannelSink::channel();
+        let cancel = CancellationToken::new();
+        let runner = TaskRunner::new(config, Mode::Install, sink)
+            .with_config_dir(dir.path().to_path_buf())
+            .with_cancel(cancel.clone());
+
+        let run = tokio::spawn(async move { runner.run_all(true).await });
+
+        // Wait until the task has started, then cancel.
+        let mut saw_started = false;
+        while let Some(ev) = rx.recv().await {
+            if matches!(&ev, TaskEvent::TaskStarted { task_name, .. } if task_name.as_ref() == "slow")
+            {
+                saw_started = true;
+                cancel.cancel();
+                break;
+            }
+        }
+        assert!(saw_started, "expected TaskStarted");
+
+        let mut saw_cancelling = false;
+        let mut saw_cancelled = false;
+        let mut all_done_cancelled = None;
+        while let Some(ev) = rx.recv().await {
+            match ev {
+                TaskEvent::RunCancelling => saw_cancelling = true,
+                TaskEvent::TaskCancelled { task_name } => {
+                    assert_eq!(task_name.as_ref(), "slow");
+                    saw_cancelled = true;
+                }
+                TaskEvent::TaskFailed { .. } => {
+                    panic!("cancel must not emit TaskFailed");
+                }
+                TaskEvent::AllDone { cancelled, .. } => {
+                    all_done_cancelled = Some(cancelled);
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        let err = run.await.expect("join").expect_err("run must abort");
+        assert!(matches!(err, Error::Aborted));
+        assert!(saw_cancelling, "expected RunCancelling");
+        assert!(saw_cancelled, "expected TaskCancelled");
+        assert_eq!(all_done_cancelled, Some(1));
     }
 }

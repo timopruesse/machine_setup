@@ -125,7 +125,7 @@ When running in an interactive terminal, a TUI dashboard is shown with:
   - `j`/`k` or `Up`/`Down` — navigate tasks (or bands in the runner grid); inside search mode (`/`), `j` and `k` type normally, while `Up`/`Down` and `Ctrl+p`/`Ctrl+n` navigate
   - `/` — filter tasks by name (`Enter` to apply, `Esc` to cancel search or clear filter)
   - `PgUp`/`PgDn` — scroll logs; `Home`/`End` — jump to top/bottom of log (`End` also re-enables follow when auto-follow is off)
-  - While running: `q` or `Ctrl+C` — cancel; when done: `Esc` or `q` — quit
+  - While running: `q` or `Ctrl+C` — cancel (stops OS children from `run`/`clone` and further tree apply; TUI shows Cancelling / Cancelled); when done: `Esc` or `q` — quit
 
 The TUI is automatically disabled in non-interactive environments (piped output, CI). You can also explicitly disable it with `--no-tui`.
 

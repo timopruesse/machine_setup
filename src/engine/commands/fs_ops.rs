@@ -62,6 +62,7 @@ pub trait FileOps: Send + Sync {
 ///
 /// Delegates the walk to [`super::tree::install_tree_with_pool`]; callers supply
 /// `ensure_dir` and `on_file` for kind-specific directory and per-file work.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_tree_install<E, F>(
     ops: &dyn FileOps,
     src: &Path,
@@ -70,12 +71,13 @@ pub fn apply_tree_install<E, F>(
     pool: Option<&rayon::ThreadPool>,
     ensure_dir: E,
     on_file: F,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<()>
 where
     E: FnMut(&Path) -> Result<()>,
     F: Fn(&Path, &Path) -> Result<()> + Sync,
 {
-    super::tree::install_tree_with_pool(src, target, ignore, pool, ensure_dir, on_file)?;
+    super::tree::install_tree_with_pool(src, target, ignore, pool, ensure_dir, on_file, cancel)?;
     ops.flush()
 }
 
@@ -90,11 +92,12 @@ pub fn apply_tree_uninstall<F>(
     ignore: &[String],
     pool: Option<&rayon::ThreadPool>,
     on_dest: F,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<()>
 where
     F: Fn(&Path) -> Result<()> + Sync,
 {
-    super::tree::uninstall_tree_with_pool(src, target, ignore, pool, on_dest)?;
+    super::tree::uninstall_tree_with_pool(src, target, ignore, pool, on_dest, cancel)?;
     ops.flush()
 }
 

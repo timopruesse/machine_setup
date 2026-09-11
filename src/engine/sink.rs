@@ -117,6 +117,7 @@ mod tests {
             succeeded: 1,
             failed: 0,
             skipped: 0,
+            cancelled: 0,
         });
     }
 

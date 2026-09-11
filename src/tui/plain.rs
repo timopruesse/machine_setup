@@ -80,6 +80,9 @@ pub async fn run(mut event_rx: mpsc::Receiver<TaskEvent>) {
             TaskEvent::TaskFailed { task_name, error } => {
                 eprintln!("XX {task_name}: {error}");
             }
+            TaskEvent::TaskCancelled { task_name } => {
+                println!("xx Cancelled: {task_name}");
+            }
             TaskEvent::TaskRetry {
                 task_name,
                 attempt,
@@ -88,12 +91,18 @@ pub async fn run(mut event_rx: mpsc::Receiver<TaskEvent>) {
             } => {
                 println!("   [{task_name}]   Retry {attempt}/{max_attempts}: {error}");
             }
+            TaskEvent::RunCancelling => {
+                println!("!! Cancelling…");
+            }
             TaskEvent::AllDone {
                 succeeded,
                 failed,
                 skipped,
+                cancelled,
             } => {
-                println!("\n== Done: {succeeded} succeeded, {failed} failed, {skipped} skipped ==");
+                println!(
+                    "\n== Done: {succeeded} succeeded, {failed} failed, {skipped} skipped, {cancelled} cancelled =="
+                );
             }
         }
     }

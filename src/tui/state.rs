@@ -17,6 +17,7 @@ pub enum TaskStatus {
     Completed,
     Failed(String),
     Skipped(String),
+    Cancelled,
 }
 
 impl TaskStatus {
@@ -27,7 +28,10 @@ impl TaskStatus {
     pub fn is_done(&self) -> bool {
         matches!(
             self,
-            TaskStatus::Completed | TaskStatus::Failed(_) | TaskStatus::Skipped(_)
+            TaskStatus::Completed
+                | TaskStatus::Failed(_)
+                | TaskStatus::Skipped(_)
+                | TaskStatus::Cancelled
         )
     }
 
@@ -119,6 +123,9 @@ pub struct UiState {
     pub succeeded: usize,
     pub failed: usize,
     pub skipped: usize,
+    pub cancelled: usize,
+    /// True after `RunCancelling` until the run finishes.
+    pub cancelling: bool,
     /// Auto-follow: soft-track a running task when selection is idle
     pub auto_select_running: bool,
     pub search_mode: bool,
@@ -152,6 +159,8 @@ impl UiState {
             succeeded: 0,
             failed: 0,
             skipped: 0,
+            cancelled: 0,
+            cancelling: false,
             auto_select_running: true,
             search_mode: false,
             search_query: String::new(),
@@ -174,7 +183,7 @@ impl UiState {
     }
 
     pub fn completed_tasks(&self) -> usize {
-        self.succeeded + self.failed + self.skipped
+        self.succeeded + self.failed + self.skipped + self.cancelled
     }
 
     pub fn running_count(&self) -> usize {

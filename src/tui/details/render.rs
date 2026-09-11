@@ -275,6 +275,10 @@ fn status_spans(task: &crate::tui::state::TaskState, theme: &Theme) -> Vec<Span<
             format!("skipped: {r}"),
             Style::default().fg(theme.muted),
         )],
+        TaskStatus::Cancelled => vec![Span::styled(
+            "cancelled",
+            Style::default().fg(theme.warning),
+        )],
     };
 
     if let Some(label) = progress_label(task) {

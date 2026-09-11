@@ -136,6 +136,7 @@ async fn run_git_command(
     ctx: &CommandContext,
 ) -> Result<()> {
     let mut cmd = Command::new("git");
+    process::configure_command(&mut cmd);
     cmd.args(args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
@@ -148,9 +149,11 @@ async fn run_git_command(
         .spawn()
         .map_err(|e| Error::GitFailed(format!("Failed to spawn git: {e}")))?;
 
-    let status = process::stream_and_wait(child, ctx, process::StreamOptions::git())
-        .await
-        .map_err(|e| Error::GitFailed(format!("Failed to wait for git: {e}")))?;
+    let status = match process::stream_and_wait(child, ctx, process::StreamOptions::git()).await {
+        Ok(s) => s,
+        Err(Error::Aborted) => return Err(Error::Aborted),
+        Err(e) => return Err(Error::GitFailed(format!("Failed to wait for git: {e}"))),
+    };
 
     if !status.success() {
         return Err(Error::GitFailed(format!(

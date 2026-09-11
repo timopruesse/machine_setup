@@ -1,11 +1,17 @@
+use std::time::Duration;
+
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Child;
+use tokio::process::{Child, Command};
 
 use crate::engine::context::CommandContext;
 use crate::engine::output::{sanitize_subprocess_line, OutputKind};
+use crate::error::{Error, Result};
 
 /// Max sanitized lines per [`TaskEvent::CommandOutputBatch`] flush.
 pub const OUTPUT_BATCH_SIZE: usize = 32;
+
+/// Grace period after SIGTERM (or Windows tree terminate) before hard kill.
+pub const CANCEL_GRACE: Duration = Duration::from_secs(2);
 
 /// Buffers sanitized lines until capacity or EOF flush.
 #[derive(Debug, Default)]
@@ -83,13 +89,42 @@ impl StreamOptions {
     }
 }
 
+/// Put the child in its own process group / session so cancel can signal the
+/// whole tree (shell grandchildren included).
+pub fn configure_command(cmd: &mut Command) {
+    #[cfg(unix)]
+    {
+        // SAFETY: runs only in the child after fork, before exec.
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    let err = std::io::Error::last_os_error();
+                    if err.raw_os_error() != Some(libc::EPERM) {
+                        return Err(err);
+                    }
+                }
+                Ok(())
+            });
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    }
+}
+
 /// Stream a child process's stdout and stderr to the context's event
 /// channel, wait for the child to exit, and return its exit status.
+///
+/// When [`CommandContext::cancel`] fires, tears down the process group
+/// (TERM → grace → KILL) and returns [`Error::Aborted`].
 pub async fn stream_and_wait(
     mut child: Child,
     ctx: &CommandContext,
     options: StreamOptions,
-) -> std::io::Result<std::process::ExitStatus> {
+) -> Result<std::process::ExitStatus> {
     let stdout_handle = if options.quiet_stdout {
         None
     } else {
@@ -111,7 +146,13 @@ pub async fn stream_and_wait(
         })
     });
 
-    let status = child.wait().await?;
+    let outcome: Result<std::process::ExitStatus> = tokio::select! {
+        status = child.wait() => Ok(status?),
+        _ = ctx.cancel.cancelled() => {
+            teardown_child(&mut child).await?;
+            Err(Error::Aborted)
+        }
+    };
 
     if let Some(h) = stdout_handle {
         let _ = h.await;
@@ -120,7 +161,58 @@ pub async fn stream_and_wait(
         let _ = h.await;
     }
 
-    Ok(status)
+    outcome
+}
+
+async fn teardown_child(child: &mut Child) -> Result<()> {
+    let Some(pid) = child.id() else {
+        return Ok(());
+    };
+
+    #[cfg(unix)]
+    {
+        // After setsid(), pgid == pid. Negative pid signals the group.
+        let pgid = pid as i32;
+        // SAFETY: kill(-pgid) is the portable process-group signal API.
+        let _ = unsafe { libc::kill(-pgid, libc::SIGTERM) };
+        match tokio::time::timeout(CANCEL_GRACE, child.wait()).await {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => Err(Error::Io(e)),
+            Err(_elapsed) => {
+                let _ = unsafe { libc::kill(-pgid, libc::SIGKILL) };
+                match child.wait().await {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(Error::Io(e)),
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        // Best-effort process-tree terminate.
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status()
+            .await;
+        match tokio::time::timeout(CANCEL_GRACE, child.wait()).await {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => Err(Error::Io(e)),
+            Err(_elapsed) => {
+                let _ = child.start_kill();
+                match child.wait().await {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(Error::Io(e)),
+                }
+            }
+        }
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = child.start_kill();
+        child.wait().await.map(|_| ()).map_err(Error::Io)
+    }
 }
 
 async fn stream_lines<R>(reader: R, ctx: &CommandContext, kind: OutputKind)
@@ -150,6 +242,31 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use tokio_util::sync::CancellationToken;
+
+    use crate::engine::concurrency::ConcurrencyGate;
+    use crate::engine::mode::Mode;
+    use crate::engine::sink::ChannelSink;
+
+    fn test_ctx(cancel: CancellationToken) -> CommandContext {
+        let (events, _rx) = ChannelSink::channel();
+        CommandContext {
+            events,
+            gate: Arc::new(ConcurrencyGate::from_num_threads(Some(1))),
+            mode: Mode::Install,
+            config_dir: Arc::new(PathBuf::from(".")),
+            temp_dir: Arc::new(PathBuf::from(".")),
+            default_shell: crate::config::types::Shell::Bash,
+            task_name: Arc::<str>::from("t"),
+            depth: 0,
+            cancel,
+            dry_run: false,
+            backup: false,
+        }
+    }
 
     #[test]
     fn output_line_buffer_flushes_at_capacity() {
@@ -168,5 +285,40 @@ mod tests {
         let batch = buf.flush().expect("partial flush");
         assert_eq!(batch, vec!["only"]);
         assert!(buf.flush().is_none());
+    }
+
+    #[test]
+    fn configure_command_does_not_panic() {
+        let mut cmd = Command::new("true");
+        configure_command(&mut cmd);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancel_kills_shell_and_grandchild_sleep() {
+        let cancel = CancellationToken::new();
+        let ctx = test_ctx(cancel.clone());
+
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("sleep 300 & wait");
+        configure_command(&mut cmd);
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let child = cmd.spawn().expect("spawn");
+
+        let wait = tokio::spawn({
+            let ctx = ctx.clone();
+            async move { stream_and_wait(child, &ctx, StreamOptions::interactive()).await }
+        });
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        cancel.cancel();
+        let err = wait
+            .await
+            .expect("join")
+            .expect_err("cancel must abort wait");
+        assert!(
+            matches!(err, Error::Aborted),
+            "expected Aborted, got {err:?}"
+        );
     }
 }

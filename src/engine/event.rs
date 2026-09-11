@@ -75,6 +75,9 @@ pub enum TaskEvent {
     /// A task failed.
     TaskFailed { task_name: Arc<str>, error: String },
 
+    /// A task was stopped because the run was cancelled.
+    TaskCancelled { task_name: Arc<str> },
+
     /// A task is being retried after failure.
     TaskRetry {
         task_name: Arc<str>,
@@ -83,10 +86,14 @@ pub enum TaskEvent {
         error: String,
     },
 
+    /// The run cancellation token fired (header / plain "Cancelling…" cue).
+    RunCancelling,
+
     /// All tasks are done.
     AllDone {
         succeeded: usize,
         failed: usize,
         skipped: usize,
+        cancelled: usize,
     },
 }

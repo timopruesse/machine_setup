@@ -81,23 +81,25 @@ impl PathByteAvg {
     }
 }
 
-/// PathBuf estimate gate and optional flush counter (test instrumentation).
+/// PathBuf estimate gate, optional flush counter, and cancel poll.
 pub(crate) struct ChunkApplyConfig<'a> {
     gate_mib: f64,
     flush_count: Option<&'a std::sync::atomic::AtomicUsize>,
+    cancel: Option<&'a tokio_util::sync::CancellationToken>,
 }
 
 impl ChunkApplyConfig<'_> {
-    fn production() -> ChunkApplyConfig<'static> {
-        ChunkApplyConfig {
-            gate_mib: PATHBUF_ESTIMATE_GATE_MIB,
-            flush_count: None,
-        }
-    }
-
     fn note_flush(&self) {
         if let Some(counter) = self.flush_count {
             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    fn check_cancel(&self) -> Result<()> {
+        if self.cancel.is_some_and(|c| c.is_cancelled()) {
+            Err(Error::Aborted)
+        } else {
+            Ok(())
         }
     }
 }
@@ -161,7 +163,7 @@ where
     E: FnMut(&Path) -> Result<()>,
     F: Fn(&Path, &Path) -> Result<()> + Sync,
 {
-    install_tree_with_pool(src, target, ignore, None, ensure_dir, on_file)
+    install_tree_with_pool(src, target, ignore, None, ensure_dir, on_file, None)
 }
 
 /// Like [`install_tree`], applying files on `pool` when it has more than one
@@ -177,6 +179,9 @@ where
 /// Callers choose directory semantics: `copy` passes `|d| ops.mkdir_p(d)`;
 /// `symlink` passes [`ensure_real_dir`] so leftover directory symlinks cannot
 /// redirect leaf operations into the source tree.
+///
+/// When `cancel` is set, polls between files and between PathBuf chunks and
+/// returns [`Error::Aborted`] if the token has fired.
 pub fn install_tree_with_pool<F, E>(
     src: &Path,
     target: &Path,
@@ -184,6 +189,7 @@ pub fn install_tree_with_pool<F, E>(
     pool: Option<&ThreadPool>,
     ensure_dir: E,
     on_file: F,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<()>
 where
     E: FnMut(&Path) -> Result<()>,
@@ -196,7 +202,11 @@ where
         pool,
         ensure_dir,
         on_file,
-        ChunkApplyConfig::production(),
+        ChunkApplyConfig {
+            gate_mib: PATHBUF_ESTIMATE_GATE_MIB,
+            flush_count: None,
+            cancel,
+        },
     )
 }
 
@@ -215,6 +225,8 @@ where
     E: FnMut(&Path) -> Result<()>,
     F: Fn(&Path, &Path) -> Result<()> + Sync,
 {
+    chunk.check_cancel()?;
+
     if src.is_file() {
         let resolved = resolve_single_file_dest(src, target);
         if let Some(dir) = &resolved.dir_to_create {
@@ -231,6 +243,7 @@ where
             target,
             |relative| ignore::should_ignore(relative, ignore),
             |entry, dest| {
+                chunk.check_cancel()?;
                 if entry.file_type().is_dir() {
                     ensure_dir(dest)
                 } else {
@@ -247,6 +260,7 @@ where
         target,
         |relative| ignore::should_ignore(relative, ignore),
         |entry, dest| {
+            chunk.check_cancel()?;
             if entry.file_type().is_dir() {
                 ensure_dir(dest)
             } else {
@@ -258,7 +272,7 @@ where
                         chunk.gate_mib,
                     )
                 {
-                    apply_files(pool, &files, &on_file)?;
+                    apply_files(pool, &files, &on_file, chunk.cancel)?;
                     chunk.note_flush();
                     files.clear();
                     path_avg.clear();
@@ -271,7 +285,7 @@ where
     )?;
 
     if !files.is_empty() {
-        apply_files(pool, &files, &on_file)?;
+        apply_files(pool, &files, &on_file, chunk.cancel)?;
     }
     Ok(())
 }
@@ -303,7 +317,7 @@ pub fn uninstall_tree<F>(src: &Path, target: &Path, ignore: &[String], on_dest: 
 where
     F: Fn(&Path) -> Result<()> + Sync,
 {
-    uninstall_tree_with_pool(src, target, ignore, None, on_dest)
+    uninstall_tree_with_pool(src, target, ignore, None, on_dest, None)
 }
 
 /// Like [`uninstall_tree`], removing on `pool` when parallel apply is worth it.
@@ -313,6 +327,7 @@ pub fn uninstall_tree_with_pool<F>(
     ignore: &[String],
     pool: Option<&ThreadPool>,
     on_dest: F,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<()>
 where
     F: Fn(&Path) -> Result<()> + Sync,
@@ -323,7 +338,11 @@ where
         ignore,
         pool,
         on_dest,
-        ChunkApplyConfig::production(),
+        ChunkApplyConfig {
+            gate_mib: PATHBUF_ESTIMATE_GATE_MIB,
+            flush_count: None,
+            cancel,
+        },
     )
 }
 
@@ -340,6 +359,8 @@ pub(crate) fn uninstall_tree_with_pool_gated<F>(
 where
     F: Fn(&Path) -> Result<()> + Sync,
 {
+    chunk.check_cancel()?;
+
     if src.is_file() {
         let dest = resolve_single_file_dest(src, target).dest;
         return on_dest(&dest);
@@ -351,6 +372,7 @@ where
             target,
             |relative| ignore::should_ignore(relative, ignore),
             |entry, dest| {
+                chunk.check_cancel()?;
                 if entry.file_type().is_file() {
                     on_dest(dest)
                 } else {
@@ -367,6 +389,7 @@ where
         target,
         |relative| ignore::should_ignore(relative, ignore),
         |entry, dest| {
+            chunk.check_cancel()?;
             if entry.file_type().is_file() {
                 if !dests.is_empty()
                     && uninstall_chunk_would_exceed_gate(
@@ -375,7 +398,7 @@ where
                         chunk.gate_mib,
                     )
                 {
-                    apply_dests(pool, &dests, &on_dest)?;
+                    apply_dests(pool, &dests, &on_dest, chunk.cancel)?;
                     chunk.note_flush();
                     dests.clear();
                     path_avg.clear();
@@ -388,7 +411,7 @@ where
     )?;
 
     if !dests.is_empty() {
-        apply_dests(pool, &dests, &on_dest)?;
+        apply_dests(pool, &dests, &on_dest, chunk.cancel)?;
     }
     Ok(())
 }
@@ -397,6 +420,7 @@ fn apply_files<F>(
     pool: Option<&ThreadPool>,
     files: &[(PathBuf, PathBuf)],
     on_file: &F,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<()>
 where
     F: Fn(&Path, &Path) -> Result<()> + Sync,
@@ -406,34 +430,50 @@ where
             return pool.install(|| {
                 files
                     .par_iter()
-                    // Larger chunks cut Rayon scheduling overhead on cheap
-                    // per-file work (mtime skip / tiny clones).
                     .with_min_len(64)
-                    .try_for_each(|(src, dest)| on_file(src, dest))
+                    .try_for_each(|(src, dest)| {
+                        if cancel.is_some_and(|c| c.is_cancelled()) {
+                            return Err(Error::Aborted);
+                        }
+                        on_file(src, dest)
+                    })
             });
         }
     }
     for (src, dest) in files {
+        if cancel.is_some_and(|c| c.is_cancelled()) {
+            return Err(Error::Aborted);
+        }
         on_file(src, dest)?;
     }
     Ok(())
 }
 
-fn apply_dests<F>(pool: Option<&ThreadPool>, dests: &[PathBuf], on_dest: &F) -> Result<()>
+fn apply_dests<F>(
+    pool: Option<&ThreadPool>,
+    dests: &[PathBuf],
+    on_dest: &F,
+    cancel: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<()>
 where
     F: Fn(&Path) -> Result<()> + Sync,
 {
     if let Some(pool) = pool {
         if pool.current_num_threads() > 1 && dests.len() >= PARALLEL_FILE_THRESHOLD {
             return pool.install(|| {
-                dests
-                    .par_iter()
-                    .with_min_len(64)
-                    .try_for_each(|dest| on_dest(dest))
+                dests.par_iter().with_min_len(64).try_for_each(|dest| {
+                    if cancel.is_some_and(|c| c.is_cancelled()) {
+                        return Err(Error::Aborted);
+                    }
+                    on_dest(dest)
+                })
             });
         }
     }
     for dest in dests {
+        if cancel.is_some_and(|c| c.is_cancelled()) {
+            return Err(Error::Aborted);
+        }
         on_dest(dest)?;
     }
     Ok(())
@@ -604,6 +644,7 @@ mod tests {
                 *applied.lock().unwrap() += 1;
                 Ok(())
             },
+            None,
         )
         .unwrap();
 
@@ -688,6 +729,7 @@ mod tests {
             ChunkApplyConfig {
                 gate_mib: 0.0,
                 flush_count: Some(&flush_count),
+                cancel: None,
             },
         )
         .unwrap();
@@ -744,6 +786,7 @@ mod tests {
             ChunkApplyConfig {
                 gate_mib: 0.0,
                 flush_count: Some(&flush_count),
+                cancel: None,
             },
         )
         .unwrap();
@@ -796,5 +839,46 @@ mod tests {
         let ops = DirectFs;
         let err = ensure_real_dir(&ops, &file, |_| {}).unwrap_err();
         assert!(matches!(err, Error::PathError(_)));
+    }
+
+    #[test]
+    fn install_tree_stops_between_files_when_cancelled() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio_util::sync::CancellationToken;
+
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        for i in 0..20 {
+            std::fs::write(src.join(format!("f{i}.txt")), b"x").unwrap();
+        }
+        let target = dir.path().join("dst");
+        let cancel = CancellationToken::new();
+        let applied = AtomicUsize::new(0);
+
+        let result = install_tree_with_pool(
+            &src,
+            &target,
+            &[],
+            None,
+            |d| {
+                std::fs::create_dir_all(d)?;
+                Ok(())
+            },
+            |_s, d| {
+                std::fs::write(d, b"y")?;
+                let n = applied.fetch_add(1, Ordering::Relaxed) + 1;
+                if n == 1 {
+                    cancel.cancel();
+                }
+                Ok(())
+            },
+            Some(&cancel),
+        );
+
+        assert!(matches!(result, Err(Error::Aborted)));
+        let n = applied.load(Ordering::Relaxed);
+        assert!(n >= 1, "at least one file applied");
+        assert!(n < 20, "cancel must stop before all files, got {n}");
     }
 }

@@ -117,6 +117,7 @@ fn main() -> ExitCode {
         Some(&pool),
         |dir| ops.mkdir_p(dir),
         |file, d| ops.copy_file(file, d),
+        None,
     ) {
         eprintln!("install failed: {e}");
         return ExitCode::FAILURE;
@@ -131,12 +132,19 @@ fn main() -> ExitCode {
 
     if want_uninstall {
         let rss_u0 = peak_rss_mib();
-        if let Err(e) = uninstall_tree_with_pool(&src, &dest, &[], Some(&pool), |path| {
-            if path.exists() {
-                ops.remove_file(path)?;
-            }
-            Ok(())
-        }) {
+        if let Err(e) = uninstall_tree_with_pool(
+            &src,
+            &dest,
+            &[],
+            Some(&pool),
+            |path| {
+                if path.exists() {
+                    ops.remove_file(path)?;
+                }
+                Ok(())
+            },
+            None,
+        ) {
             eprintln!("uninstall failed: {e}");
             return ExitCode::FAILURE;
         }

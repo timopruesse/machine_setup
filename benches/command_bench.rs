@@ -156,6 +156,7 @@ fn copy_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
         Some(bench_pool()),
         |dir| ops.mkdir_p(dir),
         |file, dest| ops.copy_file(file, dest),
+        None,
     )
     .expect("install_tree copy");
 }
@@ -169,6 +170,7 @@ fn link_tree(ops: &dyn FileOps, src: &Path, dest: &Path) {
         None,
         |dir| tree::ensure_real_dir(ops, dir, |_| {}),
         |file, dest| ops.create_symlink(file, dest),
+        None,
     )
     .expect("install_tree symlink");
 }
@@ -241,6 +243,7 @@ fn bench_mtime_skip(c: &mut Criterion) {
                     }
                     ops.copy_file(src, dest)
                 },
+                None,
             )
             .expect("mtime skip walk");
         });
@@ -292,6 +295,7 @@ fn bench_uninstall_tree(c: &mut Criterion) {
                         }
                         Err(e) => Err(e),
                     },
+                    None,
                 )
                 .expect("uninstall_tree");
             },

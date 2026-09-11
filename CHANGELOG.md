@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Cancel tears down OS process groups for `run` / `clone` (SIGTERM → ~2s grace → SIGKILL; Windows best-effort process-tree terminate) and polls Tree apply between files/chunks
+- Distinct cancel UX: `RunCancelling` / `TaskCancelled`, TUI Cancelling… / cancelled badges, plain-mode lines, and `AllDone.cancelled`
+
+### Changed
+- Runner prefers cooperative cancel inside `stream_and_wait` over aborting task futures before OS teardown
+
 ## [2.11.0]
 
 ### Added
