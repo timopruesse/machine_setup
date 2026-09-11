@@ -485,6 +485,78 @@ fn bench_registry(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_tui_log(c: &mut Criterion) {
+    use machine_setup::engine::output::OutputKind;
+    use machine_setup::tui::state::{TaskState, LOG_CAP};
+
+    let mut group = c.benchmark_group("tui_log");
+    group.sample_size(50);
+    group.warm_up_time(Duration::from_millis(300));
+    group.measurement_time(Duration::from_secs(2));
+
+    group.bench_function("push_log_overflow", |b| {
+        b.iter(|| {
+            let mut task = TaskState::new("bench".into());
+            for i in 0..(LOG_CAP + 500) {
+                task.push_log(OutputKind::Subprocess, format!("line-{i}"));
+            }
+            std::hint::black_box(task.log_lines.len())
+        });
+    });
+
+    group.finish();
+}
+
+fn bench_conditions(c: &mut Criterion) {
+    use machine_setup::config::history::History;
+    use machine_setup::config::types::{Condition, Shell, TaskConfig};
+    use machine_setup::engine::conditions::evaluate_skip;
+    use machine_setup::engine::mode::Mode;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let marker = dir.path().join("marker");
+    fs::write(&marker, b"").expect("marker");
+    let path_str = marker.to_string_lossy().into_owned();
+
+    let task = TaskConfig {
+        commands: vec![],
+        os: Default::default(),
+        parallel: false,
+        only_if: vec![Condition::Path(path_str)].into(),
+        skip_if: Default::default(),
+        depends_on: vec![],
+        retry: 0,
+        retry_delay_secs: 1,
+        auto_update: None,
+    };
+    let history = History::default();
+    let shell = Shell::Bash;
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+
+    let mut group = c.benchmark_group("conditions");
+    group.sample_size(100);
+    group.warm_up_time(Duration::from_millis(300));
+    group.measurement_time(Duration::from_secs(2));
+
+    group.bench_function("path_exists_ok", |b| {
+        b.to_async(&rt).iter(|| async {
+            let skip = evaluate_skip(
+                std::hint::black_box(&task),
+                "t",
+                Mode::Install,
+                false,
+                &history,
+                dir.path(),
+                &shell,
+            )
+            .await;
+            std::hint::black_box(skip)
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_tree_install_direct,
@@ -495,5 +567,7 @@ criterion_group!(
     bench_runner_smoke,
     bench_startup,
     bench_registry,
+    bench_tui_log,
+    bench_conditions,
 );
 criterion_main!(benches);

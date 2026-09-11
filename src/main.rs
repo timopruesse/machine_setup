@@ -272,8 +272,14 @@ fn main() -> anyhow::Result<()> {
         };
 
     // Execution verbs only: boot a multi-thread runtime here, not for sync verbs above.
+    // Cap workers near the ConcurrencyGate / Rayon FS pool size (+2 for I/O) so
+    // default N Tokio + N Rayon threads do not oversubscribe under parallel trees.
     let command = cli.command.clone();
+    let worker_threads = engine::concurrency::resolve_limit(app_config.num_threads)
+        .saturating_add(2)
+        .max(2);
     let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(worker_threads)
         .enable_all()
         .build()?;
     let result = rt.block_on(run_execution(cli, app_config, config_source, task_names));

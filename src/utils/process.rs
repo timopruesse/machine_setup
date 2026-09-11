@@ -23,7 +23,7 @@ pub struct OutputLineBuffer {
 impl OutputLineBuffer {
     pub fn new(capacity: usize) -> Self {
         Self {
-            lines: Vec::new(),
+            lines: Vec::with_capacity(capacity),
             capacity,
         }
     }
@@ -32,7 +32,10 @@ impl OutputLineBuffer {
     pub fn push(&mut self, line: String) -> Option<Vec<String>> {
         self.lines.push(line);
         if self.lines.len() >= self.capacity {
-            Some(std::mem::take(&mut self.lines))
+            Some(std::mem::replace(
+                &mut self.lines,
+                Vec::with_capacity(self.capacity),
+            ))
         } else {
             None
         }
@@ -43,7 +46,10 @@ impl OutputLineBuffer {
         if self.lines.is_empty() {
             None
         } else {
-            Some(std::mem::take(&mut self.lines))
+            Some(std::mem::replace(
+                &mut self.lines,
+                Vec::with_capacity(self.capacity),
+            ))
         }
     }
 }

@@ -388,7 +388,7 @@ mod tests {
                 lane: crate::engine::concurrency::ExclusiveLane::Apt,
             }),
         );
-        let last = state.tasks[0].log_lines.last().expect("log");
+        let last = state.tasks[0].log_lines.back().expect("log");
         assert_eq!(last.kind, OutputKind::Info);
         assert!(last.text.contains("Waiting for apt"));
     }
@@ -491,10 +491,10 @@ mod tests {
             }),
         );
         assert_eq!(
-            state.tasks[0].log_lines.last().map(|l| l.text.as_str()),
+            state.tasks[0].log_lines.back().map(|l| l.text.as_str()),
             Some("zsh-users/zsh-autosuggestions:")
         );
-        let stored = &state.tasks[0].log_lines.last().unwrap().text;
+        let stored = &state.tasks[0].log_lines.back().unwrap().text;
         assert!(!stored.contains("[1m") && !stored.contains("[33m"));
     }
 

@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use crate::engine::mode::Mode;
@@ -52,7 +53,7 @@ pub struct LogLine {
 pub struct TaskState {
     pub name: String,
     pub status: TaskStatus,
-    pub log_lines: Vec<LogLine>,
+    pub log_lines: VecDeque<LogLine>,
     pub command_count: usize,
     pub current_command: Option<String>,
     pub command_index: Option<usize>,
@@ -72,7 +73,7 @@ impl TaskState {
         Self {
             name,
             status: TaskStatus::Pending,
-            log_lines: Vec::new(),
+            log_lines: VecDeque::new(),
             command_count: 0,
             current_command: None,
             command_index: None,
@@ -87,10 +88,9 @@ impl TaskState {
     /// Append a log line, enforcing [`LOG_CAP`].
     pub fn push_log(&mut self, kind: OutputKind, line: String) {
         let line = crate::tui::format::strip_ansi(&line);
-        self.log_lines.push(LogLine { kind, text: line });
-        if self.log_lines.len() > LOG_CAP {
-            let excess = self.log_lines.len() - LOG_CAP;
-            self.log_lines.drain(0..excess);
+        self.log_lines.push_back(LogLine { kind, text: line });
+        while self.log_lines.len() > LOG_CAP {
+            self.log_lines.pop_front();
         }
     }
 
