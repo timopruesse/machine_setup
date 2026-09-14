@@ -71,6 +71,14 @@ fn ensure_yaml_document(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// YAML-only gate for structural Config rewrites (shared with `secrets::auth`).
+pub(crate) fn ensure_yaml_for_auth(path: &Path) -> Result<()> {
+    if !path.is_file() {
+        return Err(Error::ConfigNotFound(path.to_path_buf()));
+    }
+    ensure_yaml_document(path)
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum ReplaceMode {
     /// Create always; if exists: Confirm on TTY, else overwrite.

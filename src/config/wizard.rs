@@ -190,6 +190,10 @@ fn add_recipe(path: &Path, key: &str) -> Result<()> {
                 }),
             )?
         }
+        "onepassword-ssh" => emit_by_key(
+            key,
+            RecipeEmitInput::OnePasswordSsh(super::recipes::OnePasswordSshParams { name: &name }),
+        )?,
         other => {
             return Err(Error::RecipeError(format!("unknown recipe key: {other}")));
         }

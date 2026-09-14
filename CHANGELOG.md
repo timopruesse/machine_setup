@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Root `secrets:` (`default_provider: onepassword`, `ssh_agent`) with `op` / SSH-agent preflight on `doctor` and install/update/uninstall
+- Authoring recipe `onepassword-ssh` — idempotent `IdentityAgent` wiring for the 1Password SSH agent (macOS/Linux)
+- `auth enable onepassword` — installs `op` via Homebrew/winget when missing, enables SSH agent + IdentityAgent by default (`--no-install-cli` / `--no-ssh-agent` / `--no-wire-ssh-config` to opt out); also `auth disable`, `auth status`
+
 ## [2.12.0]
 
 ### Added
@@ -36,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `replace task <name>` and `replace recipe …` — upsert a Task via Config rewrite (YAML-only); create path warns when the name was missing; overwrite prompts on a TTY or proceeds non-interactively; History unchanged
 - Authoring recipes and blank stubs emit typed `TaskConfig` (`EmittedTask { name, task }`); `add` still appends a serialized fragment and refuses duplicates
 - `remove task <name> [--fix-deps]` — delete a Task via Config rewrite; prompts (or `--fix-deps`) when dependents exist; prunes History
-- Command-bench tree size ladder (1k default / 10k via `MACHINE_SETUP_BENCH_TREE_SIZE`, opt-in 25k) and a report-only 100k tree memory harness for the ADR-0004 chunking gate
+- Command-bench tree size ladder (1k default / 10k via `MACHINE_SETUP_BENCH_TREE_SIZE`, opt-in 25k) and a report-only 100k tree memory harness for the chunking gate
 - Tree materialization chunks by PathBuf estimate gate; File ops `apply_tree` entry points; K=1 gate admission for tree apply
 
 ### Changed

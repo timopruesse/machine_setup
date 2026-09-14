@@ -46,11 +46,12 @@ pub struct BrewBundleParams<'a> {
 }
 
 /// Registered recipe keys in menu / CLI order.
-pub const RECIPE_KEYS: &[&str] = &["dotfiles", "git-repo", "brew-bundle"];
+pub const RECIPE_KEYS: &[&str] = &["dotfiles", "git-repo", "brew-bundle", "onepassword-ssh"];
 
 pub const DEFAULT_DOTFILES_NAME: &str = "dotfiles";
 pub const DEFAULT_GIT_REPO_NAME: &str = "git-repo";
 pub const DEFAULT_BREW_BUNDLE_NAME: &str = "brew-bundle";
+pub const DEFAULT_ONEPASSWORD_SSH_NAME: &str = "onepassword-ssh";
 pub const DEFAULT_DOTFILES_SRC: &str = "./home";
 pub const DEFAULT_DOTFILES_TARGET: &str = "~";
 pub const DEFAULT_DOTFILES_IGNORE: &str = ".cursor";
@@ -61,6 +62,7 @@ pub fn recipe_menu_labels() -> &'static [&'static str] {
         "Add recipe: dotfiles",
         "Add recipe: git-repo",
         "Add recipe: brew-bundle",
+        "Add recipe: onepassword-ssh",
     ]
 }
 
@@ -69,6 +71,13 @@ pub enum RecipeEmitInput<'a> {
     Dotfiles(DotfilesParams<'a>),
     GitRepo(GitRepoParams<'a>),
     BrewBundle(BrewBundleParams<'a>),
+    OnePasswordSsh(OnePasswordSshParams<'a>),
+}
+
+/// Parameters for the `onepassword-ssh` recipe.
+#[derive(Debug, Clone)]
+pub struct OnePasswordSshParams<'a> {
+    pub name: &'a str,
 }
 
 /// Default task name for a catalog recipe key.
@@ -77,6 +86,7 @@ pub fn default_name_for_key(key: &str) -> Option<&'static str> {
         "dotfiles" => Some(DEFAULT_DOTFILES_NAME),
         "git-repo" => Some(DEFAULT_GIT_REPO_NAME),
         "brew-bundle" => Some(DEFAULT_BREW_BUNDLE_NAME),
+        "onepassword-ssh" => Some(DEFAULT_ONEPASSWORD_SSH_NAME),
         _ => None,
     }
 }
@@ -108,6 +118,14 @@ pub fn emit_by_key(key: &str, input: RecipeEmitInput<'_>) -> Result<EmittedTask>
             };
             emit_brew_bundle(&p)
         }
+        "onepassword-ssh" => {
+            let RecipeEmitInput::OnePasswordSsh(p) = input else {
+                return Err(Error::RecipeError(format!(
+                    "recipe `{key}` expects onepassword-ssh params"
+                )));
+            };
+            emit_onepassword_ssh(&p)
+        }
         other => Err(Error::RecipeError(format!("unknown recipe key: {other}"))),
     }
 }
@@ -136,6 +154,9 @@ pub fn emit_from_cli(cmd: &RecipeCommand) -> Result<EmittedTask> {
         }
         RecipeCommand::BrewBundle { file, name } => {
             emit_brew_bundle(&BrewBundleParams { name, file })
+        }
+        RecipeCommand::OnePasswordSsh { name } => {
+            emit_onepassword_ssh(&OnePasswordSshParams { name })
         }
     }
 }
@@ -213,6 +234,62 @@ pub fn emit_brew_bundle(p: &BrewBundleParams<'_>) -> Result<EmittedTask> {
     })
 }
 
+/// Emit `run` that wires `~/.ssh/config` IdentityAgent to the 1Password SSH agent.
+///
+/// Does not rewrite the Config `secrets:` block (comment-preserving authoring).
+/// After install, add:
+/// ```yaml
+/// secrets:
+///   default_provider: onepassword
+///   ssh_agent: true
+/// ```
+pub fn emit_onepassword_ssh(p: &OnePasswordSshParams<'_>) -> Result<EmittedTask> {
+    crate::config::document::validate_task_name(p.name)?;
+    // macOS + Linux agent socket paths from 1Password docs; idempotent append.
+    let install = r#"set -e
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+CONFIG="$HOME/.ssh/config"
+touch "$CONFIG"
+chmod 600 "$CONFIG"
+if grep -Eq 'IdentityAgent.*(1password|2BUA8C4H2G)' "$CONFIG" 2>/dev/null; then
+  echo "1Password IdentityAgent already present in ~/.ssh/config"
+else
+  if [ "$(uname -s)" = "Darwin" ]; then
+    AGENT="$HOME/Library/Group Containers/2BUA8C4H2G.com.1password/t/agent.sock"
+  else
+    AGENT="$HOME/.1password/agent.sock"
+  fi
+  printf '\n# machine_setup onepassword-ssh\nHost *\n\tIdentityAgent "%s"\n' "$AGENT" >> "$CONFIG"
+  echo "Added 1Password IdentityAgent to ~/.ssh/config"
+fi
+echo "Next: unlock 1Password, enable Settings → Developer → Integrate with 1Password CLI"
+echo "and SSH agent, then add to your Config document:"
+echo "  secrets:"
+echo "    default_provider: onepassword"
+echo "    ssh_agent: true"
+echo "Or run: machine_setup auth enable onepassword"
+"#;
+    let task = TaskConfig {
+        os: OsFilter::Multiple(vec![Os::Macos, Os::Linux]),
+        commands: vec![CommandEntry::Run(RunArgs {
+            commands: Default::default(),
+            install: install.to_string().into(),
+            update: Default::default(),
+            uninstall: Default::default(),
+            shell: None,
+            env: Default::default(),
+            quiet: false,
+            os: OsFilter::All,
+        })],
+        ..blank_task_config()
+    };
+    Ok(EmittedTask {
+        name: p.name.to_string(),
+        task,
+    })
+}
+
 fn shell_single_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\"'\"'"))
 }
@@ -270,6 +347,31 @@ mod tests {
                 assert!(a.ignore.iter().any(|i| i == ".cursor"));
             }
             other => panic!("expected Symlink, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn emit_onepassword_ssh_is_typed_unix_run() {
+        use crate::config::os::{Os, OsFilter};
+        let emitted = emit_onepassword_ssh(&OnePasswordSshParams {
+            name: DEFAULT_ONEPASSWORD_SSH_NAME,
+        })
+        .unwrap();
+        assert_eq!(emitted.name, DEFAULT_ONEPASSWORD_SSH_NAME);
+        match &emitted.task.os {
+            OsFilter::Multiple(oses) => {
+                assert!(oses.contains(&Os::Macos));
+                assert!(oses.contains(&Os::Linux));
+            }
+            other => panic!("expected macos+linux filter, got {other:?}"),
+        }
+        match &emitted.task.commands[0] {
+            CommandEntry::Run(a) => {
+                let joined = a.install.as_slice().join("\n");
+                assert!(joined.contains("IdentityAgent"));
+                assert!(joined.contains("1password"));
+            }
+            other => panic!("expected Run, got {other:?}"),
         }
     }
 

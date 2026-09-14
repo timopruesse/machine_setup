@@ -117,6 +117,25 @@ The persisted record of which tasks are currently installed, used to skip
 already-installed tasks unless forced.
 _Avoid_: state, cache, ledger.
 
+**Secrets substrate** (ADR-0011; design accepted, not yet implemented):
+Config-declared vault integration: a **Secrets provider**, optional SSH agent
+wiring, and **Secret refs** resolved just-in-time into `run` env (file
+materialization deferred). Phase 0 is the 1Password SSH agent wedge; Phase 1
+adds `from_secret` on env values. Redaction is mandatory on the Task event sink
+path. OS login password for sudo is out of scope.
+_Avoid_: password manager, vault sync, credentials store.
+
+**Secret ref**:
+A Config value that names a vault item (e.g. `op://…`) via `from_secret` instead
+of a literal string. Resolved after unlock; never persisted in History or logs.
+_Avoid_: secret URI, op path (except when speaking of the `op` CLI).
+
+**Secrets provider**:
+In-tree backend that implements preflight + resolve for Secret refs (v1:
+OnePassword via `op`). Closed enum until a second provider ships — no plugin
+loader (same spirit as ADR-0006).
+_Avoid_: secrets plugin, vault adapter (unless a second provider justifies it).
+
 **Task status**:
 The join of a Task as defined in the Config document with History (and OS
 applicability): whether it is defined, installed, skipped for this OS, and
@@ -156,7 +175,8 @@ the multi-thread runtime → TUI/plain) and **NullSink**
 not a raw sender. Subprocess line readers may coalesce stdout/stderr into a
 **`CommandOutputBatch`** Task event before emit (single-line `CommandOutput`
 remains for sparse progress); batching is an engine policy, not a third sink
-adapter.
+adapter. When the **Secrets substrate** lands (ADR-0011), this path redacts
+resolved secret bytes (and best-effort scrub of child output).
 _Avoid_: logger, event bus, observer.
 
 **Concurrency gate**:
