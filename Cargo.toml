@@ -41,7 +41,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
-dirs = "6"
+dirs = "7"
 walkdir = "2"
 dialoguer = "0.12"
 async-trait = "0.1"
