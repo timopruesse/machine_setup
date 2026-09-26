@@ -63,7 +63,8 @@ cargo install machine_setup
 | uninstall    | uninstall the defined tasks              | `machine_setup uninstall`            |
 | list         | list tasks with install status           | `machine_setup list`                 |
 | validate     | validate the config without executing    | `machine_setup validate`             |
-| doctor       | status + validate + History orphans      | `machine_setup doctor` / `doctor --fix` |
+| doctor       | status + validate + History orphans + secrets preflight | `machine_setup doctor` / `doctor --fix` |
+| auth         | enable/disable/status for Secrets (`onepassword`) | `machine_setup auth enable onepassword` |
 | init         | create a new empty Config document       | `machine_setup init`                 |
 | wizard       | interactive Config document setup (TTY)  | `machine_setup wizard`               |
 | add task     | append a Task stub to the Config document| `machine_setup add task dotfiles`    |
@@ -142,13 +143,14 @@ machine_setup add task tools
 machine_setup add recipe dotfiles --url git@github.com:user/.dotfiles.git
 machine_setup add recipe brew-bundle --file ./Brewfile
 machine_setup add recipe git-repo --url https://github.com/user/repo.git --target ~/projects/repo
+machine_setup add recipe onepassword-ssh
 # or interactively:
 machine_setup wizard
 # edit as needed, then:
 machine_setup validate
 ```
 
-Authoring recipes emit existing Command entry kinds only (`clone`, `symlink`, `run`) — not new kinds. Defaults: Task names `dotfiles` / `brew-bundle` / `git-repo` (override with `--name`); `dotfiles` clones into `.`, symlinks `./home` → `~` with `force` and ignores `.cursor`; `brew-bundle` is `os: [macos]` with install+update.
+Authoring recipes emit existing Command entry kinds only (`clone`, `symlink`, `run`) — not new kinds. Defaults: Task names `dotfiles` / `brew-bundle` / `git-repo` / `onepassword-ssh` (override with `--name`); `dotfiles` clones into `.`, symlinks `./home` → `~` with `force` and ignores `.cursor`; `brew-bundle` is `os: [macos]` with install+update; `onepassword-ssh` is `os: [macos, linux]` and appends a 1Password `IdentityAgent` line to `~/.ssh/config` (enable the SSH agent in 1Password Settings → Developer, then set root `secrets:` as below).
 
 Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing at the checked-in [schema/machine_setup.schema.json](schema/machine_setup.schema.json). Regenerate with `make schema` (CI fails if the artifact is stale). Semantic checks (`depends_on`, missing sources, …) stay in `machine_setup validate` — the schema is structural only.
 
@@ -159,6 +161,27 @@ Editors: `init` writes a `# yaml-language-server: $schema=…` modeline pointing
 | temp_dir      | define where temporary files are stored              |                              | `~/.machine_setup`           |
 | parallel      | run all of the tasks in parallel                     | `true` or `false`            | `false`                      |
 | num_threads   | number of threads when run in parallel               | numeric > 1                  | physical processor count - 1 |
+| secrets       | vault / SSH agent opt-in                             | see below                    | omitted                      |
+
+#### Secrets
+
+One-shot setup (installs `op` if missing, enables SSH agent, wires `~/.ssh/config`):
+
+```bash
+machine_setup auth enable onepassword
+machine_setup auth status
+# machine_setup auth disable
+```
+
+Defaults: install CLI via Homebrew (`brew install --cask 1password-cli`) or winget; `ssh_agent: true`; write IdentityAgent. Opt out with `--no-install-cli`, `--no-ssh-agent`, or `--no-wire-ssh-config`. Equivalent YAML:
+
+```yaml
+secrets:
+  default_provider: onepassword
+  ssh_agent: true
+```
+
+When `secrets:` is set, `doctor` and `install` / `update` / `uninstall` run a preflight: `op` on `PATH`, vault access (via desktop app integration — Settings → Developer → Integrate with 1Password CLI), and (if `ssh_agent: true`) a reachable 1Password SSH agent. Do not run bare `op signin`; use the app integration, or `eval $(op signin)` only for a classic shell session. The `onepassword-ssh` recipe remains for declarative install-time wiring on a wiped machine.
 
 ### Task specific configuration
 

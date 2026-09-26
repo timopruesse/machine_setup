@@ -79,9 +79,11 @@ pub fn doctor<'a>(
     history: &'a History,
     config_dir: &Path,
 ) -> DoctorReport<'a> {
+    let mut issues = validate::validate_config(config, config_dir);
+    issues.extend(crate::secrets::preflight(config.secrets.as_ref()));
     DoctorReport {
         rows: rows(config, history),
-        issues: validate::validate_config(config, config_dir),
+        issues,
         orphans: orphan_history_names(config, history),
     }
 }
@@ -138,6 +140,7 @@ mod tests {
             parallel: false,
             num_threads: None,
             check_for_updates: true,
+            secrets: None,
         }
     }
 

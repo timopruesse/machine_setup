@@ -34,6 +34,7 @@ impl Mode {
             | Command::Remove { .. }
             | Command::Replace { .. }
             | Command::Schedule { .. }
+            | Command::Auth { .. }
             | Command::Schema
             | Command::Completions { .. } => None,
         }
