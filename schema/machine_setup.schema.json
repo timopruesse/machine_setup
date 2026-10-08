@@ -410,6 +410,26 @@
       "description": "Run all Tasks in parallel",
       "type": "boolean"
     },
+    "secrets": {
+      "additionalProperties": false,
+      "description": "Vault provider and SSH agent opt-in (e.g. 1Password)",
+      "properties": {
+        "default_provider": {
+          "default": "onepassword",
+          "description": "Vault backend (v1: onepassword only)",
+          "enum": [
+            "onepassword"
+          ],
+          "type": "string"
+        },
+        "ssh_agent": {
+          "default": false,
+          "description": "When true, doctor/install require a usable 1Password SSH agent",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "tasks": {
       "additionalProperties": {
         "$ref": "#/$defs/task"

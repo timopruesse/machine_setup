@@ -56,6 +56,9 @@ pub fn validate_config(config: &AppConfig, config_dir: &Path) -> Vec<ValidationI
     // Validate depends_on references and detect cycles
     validate_dependencies(config, &mut issues);
 
+    // Secrets block is structurally validated by serde (closed provider enum).
+    // Runtime unlock/agent checks live in `secrets::preflight` (doctor/install).
+
     for (name, task) in &config.tasks {
         validate_conditions(name, &task.only_if, "only_if", &mut issues);
         validate_conditions(name, &task.skip_if, "skip_if", &mut issues);
@@ -162,6 +165,7 @@ mod tests {
             parallel: false,
             num_threads: None,
             check_for_updates: true,
+            secrets: None,
         }
     }
 

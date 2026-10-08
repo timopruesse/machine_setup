@@ -3,6 +3,7 @@ pub mod config;
 pub mod engine;
 pub mod error;
 pub mod schedule;
+pub mod secrets;
 pub mod tui;
 pub mod update_check;
 pub mod utils;

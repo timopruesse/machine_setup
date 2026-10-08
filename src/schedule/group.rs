@@ -71,6 +71,7 @@ mod tests {
             parallel: false,
             num_threads: None,
             check_for_updates: true,
+            secrets: None,
         };
         let g = group_keys(&config).unwrap();
         assert_eq!(g.len(), 1);
