@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.13.0]
+
+### Changed
+- Tasks that previously reported success despite a failing command now fail. Check the output on the first run after upgrading.
+
 ### Fixed
 - `run` scripts for bash/zsh now fail fast per command (`set -o pipefail` plus each command entry wrapped in `{ ...; } || exit $?`, after profile sourcing; no `set -e`, which breaks zsh preexec hooks) so a failing command fails the task
 - Tasks whose `depends_on` dependency failed or was cancelled are skipped (transitively) instead of running; not applied in uninstall mode
