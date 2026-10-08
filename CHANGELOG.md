@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- `run` scripts for bash/zsh now fail fast per command (`set -o pipefail` plus each command entry wrapped in `{ ...; } || exit $?`, after profile sourcing; no `set -e`, which breaks zsh preexec hooks) so a failing command fails the task
+- Tasks whose `depends_on` dependency failed or was cancelled are skipped (transitively) instead of running; not applied in uninstall mode
+- Config rewrites (`replace`/`remove`) no longer serialize default values (`shell: null`, `env: {}`, `sudo: false`, ...)
+- Relative `src`/`target` paths drop `.` components (no more `/base/./home/.zshrc` link targets)
+
 ## [2.12.0]
 
 ### Added

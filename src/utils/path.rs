@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use walkdir::{DirEntry, WalkDir};
 
@@ -24,7 +24,11 @@ pub fn expand_path(path: &str, base_dir: Option<&Path>) -> PathBuf {
     // If path is relative and we have a base directory, resolve against it
     if expanded.is_relative() {
         if let Some(base) = base_dir {
-            return base.join(&expanded);
+            return base
+                .join(&expanded)
+                .components()
+                .filter(|c| !matches!(c, Component::CurDir))
+                .collect();
         }
     }
 
@@ -148,7 +152,17 @@ mod tests {
     fn test_expand_relative_with_base() {
         let base = Path::new("/home/user/configs");
         let expanded = expand_path("./files", Some(base));
-        assert_eq!(expanded, PathBuf::from("/home/user/configs/./files"));
+        assert_eq!(expanded, PathBuf::from("/home/user/configs/files"));
+    }
+
+    #[test]
+    fn test_expand_relative_drops_curdir_components() {
+        let base = Path::new("/home/x/.dotfiles");
+        let expanded = expand_path("./home/./.zshrc", Some(base));
+        assert_eq!(expanded, PathBuf::from("/home/x/.dotfiles/home/.zshrc"));
+        // `..` is preserved (lexical only)
+        let up = expand_path("../other", Some(base));
+        assert_eq!(up, PathBuf::from("/home/x/.dotfiles/../other"));
     }
 
     #[test]

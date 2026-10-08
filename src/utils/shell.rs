@@ -77,6 +77,14 @@ pub fn build_shell_command(
         }
     }
 
+    // Fail fast without errexit: `set -e` breaks under profiles that install
+    // preexec hooks returning non-zero (e.g. atuin in zsh). Instead each command
+    // entry is wrapped below and the script exits on its first non-zero status.
+    match shell {
+        Shell::Bash | Shell::Zsh => script.push_str("set -o pipefail\n"),
+        Shell::PowerShell => {}
+    }
+
     // Export environment variables into the script
     // Only expand ~ in values (home dir), don't prepend config_dir for relative paths
     for (key, value) in env {
@@ -103,8 +111,19 @@ pub fn build_shell_command(
     }
 
     for cmd in commands {
-        script.push_str(cmd);
-        script.push('\n');
+        match shell {
+            Shell::Bash | Shell::Zsh => {
+                // Newline before `}` keeps trailing comments/heredocs safe; the
+                // leading `:` keeps empty/comment-only entries a valid group.
+                script.push_str("{ :; ");
+                script.push_str(cmd);
+                script.push_str("\n} || exit $?\n");
+            }
+            Shell::PowerShell => {
+                script.push_str(cmd);
+                script.push('\n');
+            }
+        }
     }
 
     Ok(script)
@@ -222,6 +241,105 @@ mod tests {
             build_shell_command(&["echo $MY_VAR".to_string()], &Shell::Bash, &env).unwrap();
 
         assert!(script.contains("export MY_VAR='$(whoami)'"));
+    }
+
+    #[test]
+    fn test_build_shell_command_fails_fast_for_bash_and_zsh() {
+        let env = HashMap::new();
+        for shell in [Shell::Bash, Shell::Zsh] {
+            let script =
+                build_shell_command(&["false".to_string(), "echo hi".to_string()], &shell, &env)
+                    .unwrap();
+            assert!(!script.contains("set -e"));
+            let pipefail = script.find("set -o pipefail\n").expect("pipefail present");
+            let first_cmd = script
+                .find("{ :; false\n} || exit $?\n")
+                .expect("wrapped cmd");
+            assert!(script.contains("{ :; echo hi\n} || exit $?\n"));
+            assert!(pipefail < first_cmd);
+            if let Some(src) = script.find("source \"") {
+                assert!(src < pipefail, "profile must be sourced before pipefail");
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_shell_command_runs_fail_fast_with_preexec_hook() {
+        let env = HashMap::new();
+        let cmds = [
+            "preexec(){ false; }".to_string(),
+            "echo ok".to_string(),
+            "false".to_string(),
+            "echo never".to_string(),
+        ];
+        for (shell, bin) in [(Shell::Bash, "bash"), (Shell::Zsh, "zsh")] {
+            if std::process::Command::new("which")
+                .arg(bin)
+                .output()
+                .map(|o| !o.status.success())
+                .unwrap_or(true)
+            {
+                eprintln!("skipping {bin}: not installed");
+                continue;
+            }
+            let script = build_shell_command(&cmds, &shell, &env).unwrap();
+            // Pipe the script on stdin, like `execute_script_stdin` in run.rs:
+            // zsh fires preexec hooks there but not under `-c`.
+            let mut child = std::process::Command::new(bin)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            {
+                use std::io::Write;
+                let mut stdin = child.stdin.take().unwrap();
+                stdin.write_all(script.as_bytes()).unwrap();
+            }
+            let out = child.wait_with_output().unwrap();
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            assert!(stdout.contains("ok"), "{bin}: stdout={stdout}");
+            assert!(!stdout.contains("never"), "{bin}: stdout={stdout}");
+            assert!(!out.status.success(), "{bin}: expected non-zero exit");
+        }
+    }
+
+    #[test]
+    fn test_build_shell_command_tolerates_empty_and_comment_entries() {
+        let env = HashMap::new();
+        let cmds: Vec<String> = ["echo c1", "", "   ", "# note", "echo c2"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let script = build_shell_command(&cmds, &Shell::Bash, &env).unwrap();
+        let mut child = std::process::Command::new("bash")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        {
+            use std::io::Write;
+            let mut stdin = child.stdin.take().unwrap();
+            stdin.write_all(script.as_bytes()).unwrap();
+        }
+        let out = child.wait_with_output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "stderr={stderr}");
+        assert!(stdout.contains("c1"), "stdout={stdout}");
+        assert!(stdout.contains("c2"), "stdout={stdout}");
+    }
+
+    #[test]
+    fn test_build_shell_command_powershell_has_no_errexit() {
+        let script = build_shell_command(
+            &["echo hi".to_string()],
+            &Shell::PowerShell,
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert!(!script.contains("set -e"));
     }
 
     #[test]

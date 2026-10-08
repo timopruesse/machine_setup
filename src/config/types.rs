@@ -25,6 +25,7 @@ pub struct AppConfig {
     pub parallel: bool,
 
     /// Number of threads for parallel execution (default: num_cpus - 1)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub num_threads: Option<usize>,
 
     /// When false, skip the post-command self update-check notice (default true).
@@ -86,11 +87,11 @@ impl std::fmt::Display for Shell {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AutoUpdateConfig {
     /// Daily local clock time, e.g. `"07:30"`. Mutually exclusive with `cron`.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<String>,
 
     /// 5-field cron. v1 accepts daily forms only (`M H * * *`). Mutually exclusive with `at`.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cron: Option<String>,
 }
 
@@ -302,9 +303,9 @@ impl std::fmt::Display for MachineSetupArgs {
 pub struct CopyArgs {
     pub src: String,
     pub target: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignore: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub sudo: bool,
     #[serde(default, skip_serializing_if = "OsFilter::is_all")]
     pub os: OsFilter,
@@ -314,15 +315,15 @@ pub struct CopyArgs {
 pub struct SymlinkArgs {
     pub src: String,
     pub target: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignore: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub force: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub sudo: bool,
     #[serde(default, skip_serializing_if = "OsFilter::is_all")]
     pub os: OsFilter,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub backup: bool,
 }
 
@@ -338,30 +339,31 @@ pub struct CloneArgs {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunArgs {
     /// Commands to run (used for install mode, or all modes if mode-specific not set)
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "StringOrVec::is_empty")]
     pub commands: StringOrVec,
 
     /// Commands to run only during install
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "StringOrVec::is_empty")]
     pub install: StringOrVec,
 
     /// Commands to run only during update
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "StringOrVec::is_empty")]
     pub update: StringOrVec,
 
     /// Commands to run only during uninstall
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "StringOrVec::is_empty")]
     pub uninstall: StringOrVec,
 
     /// Shell override for this command
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell: Option<Shell>,
 
     /// Environment variables
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub env: HashMap<String, String>,
 
     /// When true, suppress subprocess stdout (stderr still logged; failures surface errors).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub quiet: bool,
 
     /// OS filter — omit to run on all OSes
@@ -416,13 +418,14 @@ impl RunArgs {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MachineSetupArgs {
     pub config: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<String>,
     /// Bypass History skip in the nested Runner (default false).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub force: bool,
     /// When `task` is set, expand transitive `depends_on` like CLI `--with-deps`
     /// (default false; no-op when `task` is omitted).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub with_deps: bool,
     #[serde(default, skip_serializing_if = "OsFilter::is_all")]
     pub os: OsFilter,
@@ -576,6 +579,10 @@ impl ModeConditionValue {
 pub struct StringOrVec(Vec<String>);
 
 impl StringOrVec {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn as_slice(&self) -> &[String] {
         &self.0
     }
@@ -626,6 +633,41 @@ impl AppConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_minimal_args_serialize_without_defaults() {
+        let run: RunArgs = serde_yaml::from_str("commands: echo hi").unwrap();
+        let yaml = serde_yaml::to_string(&run).unwrap();
+        for key in [
+            "shell",
+            "install",
+            "update",
+            "uninstall",
+            "env",
+            "quiet",
+            "os",
+        ] {
+            assert!(!yaml.contains(&format!("{key}:")), "{key} leaked:\n{yaml}");
+        }
+        assert!(yaml.contains("commands:"));
+
+        let copy: CopyArgs = serde_yaml::from_str("src: a\ntarget: b").unwrap();
+        let yaml = serde_yaml::to_string(&copy).unwrap();
+        assert_eq!(yaml.trim(), "src: a\ntarget: b");
+
+        let sym: SymlinkArgs = serde_yaml::from_str("src: a\ntarget: b").unwrap();
+        assert_eq!(
+            serde_yaml::to_string(&sym).unwrap().trim(),
+            "src: a\ntarget: b"
+        );
+
+        let ms: MachineSetupArgs = serde_yaml::from_str("config: c.yaml").unwrap();
+        assert_eq!(serde_yaml::to_string(&ms).unwrap().trim(), "config: c.yaml");
+
+        let reparsed: RunArgs =
+            serde_yaml::from_str(&serde_yaml::to_string(&run).unwrap()).unwrap();
+        assert_eq!(reparsed.commands.as_slice(), run.commands.as_slice());
+    }
 
     #[test]
     fn test_parse_minimal_config() {

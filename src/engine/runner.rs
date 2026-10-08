@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -41,6 +41,9 @@ struct Tally {
     failed: usize,
     skipped: usize,
     cancelled: usize,
+    /// Tasks that failed or were cancelled (or skipped because a dependency
+    /// was). Dependents of these must not run.
+    blocked: HashSet<String>,
 }
 
 impl TaskRunner {
@@ -145,6 +148,8 @@ impl TaskRunner {
         }
 
         let mut tally = Tally::default();
+        // Uninstall runs dependents first, so blocking (`tally.blocked`) does
+        // not apply there.
         for layer in &layers {
             if self.cancel.is_cancelled() {
                 if !cancelling_emitted {
@@ -229,6 +234,22 @@ impl TaskRunner {
 
             let task_config = Arc::clone(&self.config.tasks[name]);
 
+            if self.mode != Mode::Uninstall {
+                if let Some(dep) = task_config
+                    .depends_on
+                    .iter()
+                    .find(|dep| tally.blocked.contains(dep.as_str()))
+                {
+                    self.send(TaskEvent::TaskSkipped {
+                        task_name: Arc::<str>::from(name.as_str()),
+                        reason: format!("dependency '{dep}' failed"),
+                    });
+                    tally.skipped += 1;
+                    tally.blocked.insert(name.clone());
+                    continue;
+                }
+            }
+
             if let Some(reason) = evaluate_skip(
                 task_config.as_ref(),
                 name,
@@ -272,11 +293,13 @@ impl TaskRunner {
                     tally.succeeded += 1;
                 }
                 Ok((name, Err(Error::Aborted))) => {
+                    tally.blocked.insert(name.to_string());
                     self.send(TaskEvent::TaskCancelled { task_name: name });
                     tally.cancelled += 1;
                 }
                 Ok((name, Err(e))) => {
                     let error = e.to_string();
+                    tally.blocked.insert(name.to_string());
                     self.send(TaskEvent::TaskFailed {
                         task_name: name,
                         error,
@@ -785,5 +808,65 @@ mod tests {
         assert!(saw_cancelling, "expected RunCancelling");
         assert!(saw_cancelled, "expected TaskCancelled");
         assert_eq!(all_done_cancelled, Some(1));
+    }
+
+    async fn run_chain(
+        parallel: bool,
+        mode: Mode,
+    ) -> (Vec<String>, Vec<(String, String)>, Result<()>) {
+        use crate::engine::sink::ChannelSink;
+
+        let dir = tempdir().unwrap();
+        let mut tasks = IndexMap::new();
+        tasks.insert("a".to_string(), task_with(vec![run_entry("exit 3")], false));
+        let mut b = task_with(vec![run_entry("echo b")], false);
+        b.depends_on = vec!["a".to_string()];
+        tasks.insert("b".to_string(), b);
+        let mut c = task_with(vec![run_entry("echo c")], false);
+        c.depends_on = vec!["b".to_string()];
+        tasks.insert("c".to_string(), c);
+        let mut config = make_config(tasks);
+        config.parallel = parallel;
+        config.temp_dir = dir.path().join(".ms_temp").to_string_lossy().to_string();
+
+        let (sink, mut rx) = ChannelSink::channel();
+        let runner = TaskRunner::new(config, mode, sink).with_config_dir(dir.path().to_path_buf());
+        let result = runner.run_all(true).await;
+        drop(runner);
+
+        let mut started = Vec::new();
+        let mut skipped = Vec::new();
+        while let Some(ev) = rx.recv().await {
+            match ev {
+                TaskEvent::TaskStarted { task_name, .. } => started.push(task_name.to_string()),
+                TaskEvent::TaskSkipped { task_name, reason } => {
+                    skipped.push((task_name.to_string(), reason))
+                }
+                _ => {}
+            }
+        }
+        (started, skipped, result)
+    }
+
+    #[tokio::test]
+    async fn failed_dependency_skips_transitive_dependents() {
+        for parallel in [false, true] {
+            let (started, skipped, result) = run_chain(parallel, Mode::Install).await;
+            assert_eq!(started, vec!["a"], "parallel={parallel}");
+            assert_eq!(skipped.len(), 2, "parallel={parallel}");
+            assert_eq!(skipped[0].0, "b");
+            assert!(skipped[0].1.contains("'a'"), "{}", skipped[0].1);
+            assert_eq!(skipped[1].0, "c");
+            assert!(skipped[1].1.contains("'b'"), "{}", skipped[1].1);
+            assert!(matches!(result, Err(Error::TasksFailed(1))));
+        }
+    }
+
+    #[tokio::test]
+    async fn uninstall_does_not_block_dependents_on_failure() {
+        // Uninstall runs c, b, a: the failing task `a` runs last, so b and c run.
+        let (started, skipped, _) = run_chain(false, Mode::Uninstall).await;
+        assert_eq!(started, vec!["c", "b", "a"]);
+        assert!(skipped.is_empty());
     }
 }
