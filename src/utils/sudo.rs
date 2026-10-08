@@ -116,6 +116,63 @@ pub fn sudo_bash_script(script: &str) -> Result<()> {
     Ok(())
 }
 
+/// How often [`spawn_keepalive`] refreshes cached sudo credentials. Well under
+/// the default 15-minute `timestamp_timeout` (sudo and sudo-rs).
+pub const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Cache sudo credentials (`sudo -v`) so `run` commands that call `sudo` reuse
+/// them instead of prompting. Prompts only when stdin is a terminal.
+///
+/// Returns true when credentials are cached afterwards.
+pub fn pre_authenticate() -> bool {
+    use std::io::IsTerminal;
+
+    if sudo_cached() {
+        return true;
+    }
+    if !std::io::stdin().is_terminal() {
+        return false;
+    }
+
+    eprintln!("Some tasks require sudo. Please enter your password:");
+    Command::new("sudo")
+        .arg("-v")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+fn sudo_cached() -> bool {
+    Command::new("sudo")
+        .args(["-n", "-v"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Refresh cached sudo credentials every [`KEEPALIVE_INTERVAL`] so long runs
+/// do not outlive the sudo timestamp. Abort the handle when execution ends.
+pub fn spawn_keepalive() -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async {
+        let mut interval = tokio::time::interval(KEEPALIVE_INTERVAL);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let _ = tokio::process::Command::new("sudo")
+                .args(["-n", "-v"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+        }
+    })
+}
+
 fn run_sudo(args: &[&str]) -> Result<()> {
     let status = Command::new("sudo")
         .args(args)

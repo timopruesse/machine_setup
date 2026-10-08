@@ -318,9 +318,12 @@ async fn run_execution(
 
     let use_tui = !cli.no_tui && std::io::stdout().is_terminal();
 
-    if use_tui && !cli.dry_run && app_config.requires_sudo(&task_names) {
-        pre_authenticate_sudo();
-    }
+    // Cache sudo credentials for both TUI and plain mode: `run` children share
+    // this terminal session, so they reuse them instead of prompting.
+    let sudo_keepalive = (!cli.dry_run
+        && app_config.requires_sudo(&task_names)
+        && machine_setup::utils::sudo::pre_authenticate())
+    .then(machine_setup::utils::sudo::spawn_keepalive);
 
     #[expect(
         clippy::expect_used,
@@ -386,9 +389,15 @@ async fn run_execution(
         };
 
         let _ = consumer.await;
+        if let Some(h) = &sudo_keepalive {
+            h.abort();
+        }
         result?;
     }
 
+    if let Some(h) = sudo_keepalive {
+        h.abort();
+    }
     Ok(())
 }
 
@@ -580,31 +589,6 @@ fn run_doctor(
         anyhow::bail!("doctor found validation errors");
     }
     Ok(())
-}
-
-/// Run `sudo -v` to cache credentials before the TUI takes over stdin.
-fn pre_authenticate_sudo() {
-    #[cfg(unix)]
-    {
-        use std::process::Command as StdCommand;
-
-        if StdCommand::new("sudo")
-            .arg("-n")
-            .arg("true")
-            .status()
-            .is_ok_and(|s| s.success())
-        {
-            return;
-        }
-
-        eprintln!("Some tasks require sudo. Please enter your password:");
-        let _ = StdCommand::new("sudo")
-            .arg("-v")
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status();
-    }
 }
 
 fn select_tasks(config: &config::types::AppConfig, use_tui: bool) -> anyhow::Result<Vec<String>> {

@@ -95,20 +95,31 @@ impl StreamOptions {
     }
 }
 
-/// Put the child in its own process group / session so cancel can signal the
-/// whole tree (shell grandchildren included).
+/// Put the child in its own process group so cancel can signal the whole tree
+/// (shell grandchildren included).
+///
+/// The child stays in the caller's session (no `setsid`) so it keeps the
+/// controlling terminal: `sudo` keys cached credentials on tty + session, and a
+/// detached child could never reuse the ones from [`pre-authentication`].
+/// SIGTTIN/SIGTTOU are ignored so a background-group `sudo` that would need to
+/// prompt fails fast (EIO) instead of being stopped forever.
+///
+/// [`pre-authentication`]: crate::utils::sudo::pre_authenticate
 pub fn configure_command(cmd: &mut Command) {
     #[cfg(unix)]
     {
-        // SAFETY: runs only in the child after fork, before exec.
+        // SAFETY: runs only in the child after fork, before exec; setpgid and
+        // signal are async-signal-safe.
         unsafe {
             cmd.pre_exec(|| {
-                if libc::setsid() == -1 {
+                if libc::setpgid(0, 0) == -1 {
                     let err = std::io::Error::last_os_error();
                     if err.raw_os_error() != Some(libc::EPERM) {
                         return Err(err);
                     }
                 }
+                libc::signal(libc::SIGTTIN, libc::SIG_IGN);
+                libc::signal(libc::SIGTTOU, libc::SIG_IGN);
                 Ok(())
             });
         }
@@ -177,7 +188,7 @@ async fn teardown_child(child: &mut Child) -> Result<()> {
 
     #[cfg(unix)]
     {
-        // After setsid(), pgid == pid. Negative pid signals the group.
+        // After setpgid(0, 0), pgid == pid. Negative pid signals the group.
         let pgid = pid as i32;
         // SAFETY: kill(-pgid) is the portable process-group signal API.
         let _ = unsafe { libc::kill(-pgid, libc::SIGTERM) };
@@ -297,6 +308,29 @@ mod tests {
     fn configure_command_does_not_panic() {
         let mut cmd = Command::new("true");
         configure_command(&mut cmd);
+    }
+
+    /// Children must stay in the caller's session (sudo keys cached creds on
+    /// tty + session) while leading their own process group (cancel teardown).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn configure_command_keeps_session_and_leads_group() {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("ps -o sid= -o pgid= -p $$");
+        configure_command(&mut cmd);
+        let out = cmd.output().await.expect("spawn");
+        let fields: Vec<i32> = String::from_utf8_lossy(&out.stdout)
+            .split_whitespace()
+            .map(|f| f.parse().expect("numeric ps field"))
+            .collect();
+        // SAFETY: getsid(0) only queries the calling process.
+        let own_sid = unsafe { libc::getsid(0) };
+        assert_eq!(fields[0], own_sid, "child must not start a new session");
+        assert_ne!(
+            fields[1],
+            unsafe { libc::getpgid(0) },
+            "child must lead its own group"
+        );
     }
 
     #[cfg(unix)]
