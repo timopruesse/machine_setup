@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.13.1]
+
+### Fixed
+- `run` commands that call `sudo` no longer fail with `sudo: A terminal is required to authenticate`. Child processes stay in the terminal's session (own process group instead of a new session), so they reuse the sudo credentials cached at startup; a `sudo` that would still need to prompt fails immediately instead of hanging
+- sudo credentials are now cached up front in `--no-tui` mode too (whenever a terminal is attached), and refreshed every 60s during long runs
+
 ## [2.13.0]
 
 ### Changed
